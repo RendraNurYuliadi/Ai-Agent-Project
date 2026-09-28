@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
+import { getAIConfig } from "@/lib/ai";
 
 // GET /api/genai-route/config
 export async function GET(req: NextRequest) {
@@ -9,13 +10,18 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = await getDatabase();
-    const config = await db.collection("genaiConfig").findOne({ key: "lmstudio" });
+    const config = await getAIConfig(db);
+
+    // Mask the Gemini API Key slightly for security if needed, or return as is for admin editing
     return NextResponse.json({
       config: {
-        baseUrl: config?.baseUrl || "http://localhost:1234/v1",
-        model: config?.model || "local-model",
-        temperature: config?.temperature ?? 0.7,
-        maxTokens: config?.maxTokens ?? 1024,
+        provider: config.provider,
+        baseUrl: config.lmStudioUrl,
+        model: config.lmStudioModel,
+        geminiApiKey: config.geminiApiKey,
+        geminiModel: config.geminiModel,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
       },
     });
   } catch (err) {
@@ -30,14 +36,35 @@ export async function PUT(req: NextRequest) {
   if (session.role !== "admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
   try {
-    const { baseUrl, model, temperature, maxTokens } = await req.json();
+    const { provider, baseUrl, model, geminiApiKey, geminiModel, temperature, maxTokens } = await req.json();
     const db = await getDatabase();
-    await db.collection("genaiConfig").updateOne(
-      { key: "lmstudio" },
-      { $set: { baseUrl, model, temperature, maxTokens, updatedAt: new Date() } },
-      { upsert: true }
-    );
-    return NextResponse.json({ success: true });
+
+    const updatePayload = {
+      provider: provider === "gemini" ? "gemini" : "lmstudio",
+      baseUrl: baseUrl || "http://localhost:1234/v1",
+      model: model || "local-model",
+      geminiApiKey: geminiApiKey || "",
+      geminiModel: geminiModel || "gemini-1.5-flash",
+      temperature: typeof temperature === "number" ? temperature : 0.7,
+      maxTokens: typeof maxTokens === "number" ? maxTokens : 1024,
+      updatedAt: new Date(),
+    };
+
+    // Update both "active_config" and "lmstudio" keys for backward compatibility
+    await Promise.all([
+      db.collection("genaiConfig").updateOne(
+        { key: "active_config" },
+        { $set: updatePayload },
+        { upsert: true }
+      ),
+      db.collection("genaiConfig").updateOne(
+        { key: "lmstudio" },
+        { $set: updatePayload },
+        { upsert: true }
+      ),
+    ]);
+
+    return NextResponse.json({ success: true, config: updatePayload });
   } catch (err) {
     return NextResponse.json({ error: "Failed to update config" }, { status: 500 });
   }

@@ -3,6 +3,7 @@ import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import { smartSearchKB, ScoredArticle } from "@/lib/smart-search";
+import { getAIConfig, generateAICompletion } from "@/lib/ai";
 
 // POST /api/conversations/[id]/messages — add message & get AI reply
 export async function POST(
@@ -49,54 +50,38 @@ export async function POST(
         .replace(/\{name\}/g, session.name || "User")
         .replace(/\{email\}/g, session.email || "");
 
-    // Load dynamic LM Studio config from DB if available
-    const genaiDoc = await db.collection("genaiConfig").findOne({ key: "lmstudio" });
-    const lmStudioUrl = genaiDoc?.baseUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1";
-    const lmStudioModel = genaiDoc?.model || process.env.LM_STUDIO_MODEL || "local-model";
-    const configTemperature = genaiDoc?.temperature ?? 0.7;
-    const configMaxTokens = genaiDoc?.maxTokens ?? 1024;
+    // Load AI config (LM Studio local or Google AI Studio Gemini)
+    const aiConfig = await getAIConfig(db);
 
     // Get the route prompt
     const routePromptDoc = await db.collection("prompts").findOne({ type: "route", isActive: true });
     const routePromptTemplate = routePromptDoc?.content ||
       `Klasifikasikan pertanyaan user berikut ke dalam salah satu kategori:\n- SMALL_TALK: sapaan, basa-basi\n- FAQ: pertanyaan tentang sistem\n\nPertanyaan: "{question}"\n\nJawab HANYA dengan satu kata: SMALL_TALK atau FAQ`;
 
-    let lmStudioAvailable = true;
+    let aiAvailable = true;
 
     try {
-      const routeRes = await fetch(`${lmStudioUrl}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: lmStudioModel,
-          messages: [
-            {
-              role: "user",
-              content: applyPlaceholders(routePromptTemplate)
-                .replace("{question}", message.trim()),
-            },
-          ],
-          temperature: 0.1,
-          max_tokens: 20,
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(8000),
+      const routeText = await generateAICompletion({
+        config: aiConfig,
+        messages: [
+          {
+            role: "user",
+            content: applyPlaceholders(routePromptTemplate).replace("{question}", message.trim()),
+          },
+        ],
+        temperature: 0.1,
+        maxTokens: 20,
+        timeoutMs: 10000,
       });
 
-      if (routeRes.ok) {
-        const routeData = await routeRes.json();
-        const routeText: string = routeData.choices?.[0]?.message?.content || "";
-        if (routeText.toUpperCase().includes("FAQ")) {
-          messageType = "FAQ";
-        }
-      } else {
-        lmStudioAvailable = false;
+      if (routeText.toUpperCase().includes("FAQ")) {
+        messageType = "FAQ";
       }
     } catch {
-      lmStudioAvailable = false;
+      aiAvailable = false;
     }
 
-    if (!lmStudioAvailable) {
+    if (!aiAvailable) {
       // Fallback: Simple keyword detection
       const lower = message.toLowerCase();
       const faqKeywords = ["bagaimana", "apa", "cara", "jelaskan", "kenapa", "mengapa", "fungsi", "gunakan", "help", "tolong", "info", "sebutkan", "berapa"];
@@ -119,18 +104,6 @@ export async function POST(
     }
 
     if (messageType === "FAQ") {
-      // Format prompt sesuai instruksi:
-      // SYSTEM:
-      // Jawab berdasarkan knowledge context yang diberikan.
-      // Jika informasi tidak terdapat dalam context, katakan informasi tidak ditemukan.
-      // Jangan mengarang informasi.
-      //
-      // KNOWLEDGE CONTEXT:
-      // [Artikel 1]
-      // ...
-      // USER:
-      // query
-      // Get FAQ system prompt from DB (with {fullName} support)
       const faqPromptDoc = await db.collection("prompts").findOne({ type: "faq", isActive: true });
       const defaultFaqSystemPrompt = `Jawab berdasarkan knowledge context yang diberikan.
 Jika informasi tidak terdapat dalam context, katakan informasi tidak ditemukan.
@@ -145,33 +118,16 @@ KNOWLEDGE CONTEXT:
         faqPromptTemplate.replace("{context}", formattedContext)
       );
 
-      if (lmStudioAvailable) {
+      if (aiAvailable) {
         try {
-          const faqRes = await fetch(`${lmStudioUrl}/chat/completions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: lmStudioModel,
-              messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: message.trim() },
-              ],
-              temperature: configTemperature,
-              max_tokens: configMaxTokens,
-              stream: false,
-            }),
-            signal: AbortSignal.timeout(30000),
+          assistantContent = await generateAICompletion({
+            config: aiConfig,
+            messages: [{ role: "user", content: message.trim() }],
+            systemInstruction: systemPrompt,
+            temperature: aiConfig.temperature,
+            maxTokens: aiConfig.maxTokens,
+            timeoutMs: 30000,
           });
-
-          if (faqRes.ok) {
-            const faqData = await faqRes.json();
-            assistantContent = faqData.choices?.[0]?.message?.content || "Informasi tidak ditemukan.";
-          } else {
-            assistantContent = topArticles.length > 0
-              ? `📚 *Hasil Knowledge Base (Top ${topArticles.length}):*\n\n` +
-                topArticles.map((a, i) => `**${i + 1}. ${a.title}** (Skor: ${a.score})\n${a.summary || a.content}`).join("\n\n")
-              : "Informasi tidak ditemukan dalam Knowledge Base.";
-          }
         } catch {
           assistantContent = topArticles.length > 0
             ? `📚 *Hasil Knowledge Base (Top ${topArticles.length}):*\n\n` +
@@ -194,27 +150,15 @@ KNOWLEDGE CONTEXT:
       const smallTalkPrompt = applyPlaceholders(smallTalkTemplate)
         .replace("{message}", message.trim());
 
-      if (lmStudioAvailable) {
+      if (aiAvailable) {
         try {
-          const stRes = await fetch(`${lmStudioUrl}/chat/completions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: lmStudioModel,
-              messages: [{ role: "user", content: smallTalkPrompt }],
-              temperature: 0.9,
-              max_tokens: 256,
-              stream: false,
-            }),
-            signal: AbortSignal.timeout(30000),
+          assistantContent = await generateAICompletion({
+            config: aiConfig,
+            messages: [{ role: "user", content: smallTalkPrompt }],
+            temperature: 0.9,
+            maxTokens: 256,
+            timeoutMs: 30000,
           });
-
-          if (stRes.ok) {
-            const stData = await stRes.json();
-            assistantContent = stData.choices?.[0]?.message?.content || "Halo! Ada yang bisa saya bantu?";
-          } else {
-            assistantContent = "Halo! Ada yang bisa saya bantu? 😊";
-          }
         } catch {
           assistantContent = "Halo! Ada yang bisa saya bantu? 😊";
         }
@@ -240,7 +184,8 @@ KNOWLEDGE CONTEXT:
       role: "assistant" as const,
       content: assistantContent,
       messageType,
-      lmStudioAvailable,
+      lmStudioAvailable: aiAvailable,
+      aiProvider: aiConfig.provider,
       topArticles: topArticles.map((a) => ({
         id: a.id,
         title: a.title,
@@ -275,7 +220,8 @@ KNOWLEDGE CONTEXT:
       userMessage,
       assistantMessage,
       messageType,
-      lmStudioAvailable,
+      lmStudioAvailable: aiAvailable,
+      aiProvider: aiConfig.provider,
       topArticles: topArticles.map((a) => ({
         id: a.id,
         title: a.title,

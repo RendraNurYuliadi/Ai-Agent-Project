@@ -271,7 +271,9 @@ export default async function DashboardPage() {
 
           <div className="mt-4 pt-3 border-t border-neutral-900 flex items-center justify-between text-xs text-neutral-500">
             <span className="text-neutral-300 truncate max-w-[120px]">
-              {genaiConfigDoc?.model || "LM Studio"}
+              {genaiConfigDoc?.provider === "gemini"
+                ? (genaiConfigDoc?.geminiModel || "Google Gemini")
+                : (genaiConfigDoc?.model || "LM Studio")}
             </span>
 
             <Link
