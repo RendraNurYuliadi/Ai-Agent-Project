@@ -66,7 +66,7 @@ export async function getAIConfig(db?: Db | null): Promise<AIConfig> {
     provider,
     lmStudioUrl: doc?.baseUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1",
     lmStudioModel: doc?.model || process.env.LM_STUDIO_MODEL || "local-model",
-    openRouterApiKey: doc?.openRouterApiKey || process.env.OPENROUTER_API_KEY || "",
+    openRouterApiKey: process.env.OPENROUTER_API_KEY || doc?.openRouterApiKey || "",
     openRouterModel:
       isOpenRouterFreeModel(doc?.openRouterModel || "")
         ? doc.openRouterModel
@@ -224,6 +224,33 @@ export async function testLMStudioConnection(baseUrl: string) {
 }
 
 /**
+ * Return available free OpenRouter models without making a chat request.
+ */
+export async function getOpenRouterFreeModels(apiKey: string): Promise<string[]> {
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error(
+      "API Key OpenRouter tidak boleh kosong. Dapatkan gratis di https://openrouter.ai/keys"
+    );
+  }
+
+  const modelsRes = await fetch("https://openrouter.ai/api/v1/models", {
+    headers: { Authorization: `Bearer ${apiKey.trim()}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!modelsRes.ok) {
+    throw new Error(`Gagal mengambil model OpenRouter (HTTP ${modelsRes.status}).`);
+  }
+
+  const modelsData = await modelsRes.json();
+  const freeModels = (modelsData.data as Array<{ id: string; pricing?: { prompt: string } }>)
+    ?.filter((item) => item.id.endsWith(":free"))
+    ?.map((item) => item.id)
+    ?.slice(0, 100) || [];
+
+  return [OPENROUTER_FREE_MODEL, ...freeModels.filter((id) => id !== OPENROUTER_FREE_MODEL)];
+}
+
+/**
  * Test connectivity to OpenRouter and return available free models
  */
 export async function testOpenRouterConnection(apiKey: string, model: string) {
@@ -260,26 +287,9 @@ export async function testOpenRouterConnection(apiKey: string, model: string) {
     throw new Error(`Koneksi OpenRouter gagal: ${msg}`);
   }
 
-  // Fetch the current free model list directly from OpenRouter
   let availableModels: string[] = [];
   try {
-    const modelsRes = await fetch("https://openrouter.ai/api/v1/models", {
-      headers: { Authorization: `Bearer ${apiKey.trim()}` },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (modelsRes.ok) {
-      const modelsData = await modelsRes.json();
-      const freeFetched = (modelsData.data as Array<{ id: string; pricing?: { prompt: string } }>)
-        ?.filter((m) => m.id.endsWith(":free") || m.pricing?.prompt === "0")
-        ?.map((m) => m.id)
-        ?.slice(0, 100);
-      if (freeFetched && freeFetched.length > 0) {
-        availableModels = [
-          OPENROUTER_FREE_MODEL,
-          ...freeFetched.filter((id) => id !== OPENROUTER_FREE_MODEL),
-        ];
-      }
-    }
+    availableModels = await getOpenRouterFreeModels(apiKey);
   } catch {
     // The connection result remains valid even if the model catalog is unavailable.
   }

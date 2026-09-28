@@ -50,12 +50,20 @@ export async function PATCH(
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
   try {
-    const { displayName, description } = await req.json();
+    const { displayName, description, isActive } = await req.json();
     const db = await getDatabase();
-    await db.collection("knowledgeBases").updateOne(
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (typeof displayName === "string") updates.displayName = displayName.trim();
+    if (typeof description === "string") updates.description = description.trim();
+    if (typeof isActive === "boolean") updates.isActive = isActive;
+
+    const result = await db.collection("knowledgeBases").updateOne(
       { _id: new ObjectId(id) },
-      { $set: { displayName, description, updatedAt: new Date() } }
+      { $set: updates }
     );
+    if (!result.matchedCount) {
+      return NextResponse.json({ error: "Knowledge Base tidak ditemukan" }, { status: 404 });
+    }
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("PATCH knowledge-base error:", err);

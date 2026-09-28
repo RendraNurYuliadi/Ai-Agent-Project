@@ -3,6 +3,7 @@ import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import {
   getAIConfig,
+  getOpenRouterFreeModels,
   testLMStudioConnection,
   testOpenRouterConnection,
   OPENROUTER_FREE_MODEL,
@@ -14,12 +15,20 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { provider = "lmstudio", baseUrl, model, apiKey } = await req.json();
+    const { provider = "lmstudio", baseUrl, model, apiKey, listModelsOnly } = await req.json();
 
     if (provider === "openrouter") {
       const db = await getDatabase();
       const storedConfig = await getAIConfig(db);
       const key = apiKey?.trim() || storedConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY || "";
+      if (listModelsOnly) {
+        const models = await getOpenRouterFreeModels(key);
+        return NextResponse.json({
+          success: true,
+          message: "Daftar model OpenRouter berhasil dimuat.",
+          models,
+        });
+      }
       const targetModel = model || OPENROUTER_FREE_MODEL;
       const result = await testOpenRouterConnection(key, targetModel);
       return NextResponse.json(result);

@@ -19,6 +19,7 @@ import {
   TestTube,
   Globe,
   HardDrive,
+  RefreshCw,
 } from "lucide-react";
 import { OPENROUTER_FREE_MODEL } from "@/lib/ai";
 
@@ -50,7 +51,13 @@ export default function GenAIRoutePage() {
     message?: string;
     error?: string;
     models?: string[];
+    provider?: "lmstudio" | "openrouter";
   } | null>(null);
+  const [availableModels, setAvailableModels] = useState<Record<Config["provider"], string[]>>({
+    lmstudio: [],
+    openrouter: [],
+  });
+  const [loadingModels, setLoadingModels] = useState(false);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
@@ -120,17 +127,50 @@ export default function GenAIRoutePage() {
         }),
       });
       const data = await res.json();
-      setTestResult(data);
+      setTestResult({ ...data, provider: config.provider });
+      if (data.success && Array.isArray(data.models)) {
+        setAvailableModels((previous) => ({ ...previous, [config.provider]: data.models }));
+      }
     } catch {
       setTestResult({
         success: false,
         error: "Tidak dapat menghubungi endpoint testing.",
+        provider: config.provider,
       });
     }
     setTesting(false);
   };
 
+  const loadAvailableModels = async () => {
+    const provider = config.provider;
+    setLoadingModels(true);
+    try {
+      const res = await fetch("/api/genai-route/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider,
+          baseUrl: config.baseUrl,
+          apiKey: config.openRouterApiKey,
+          listModelsOnly: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal memuat daftar model.");
+      }
+      const models = Array.isArray(data.models) ? data.models : [];
+      setAvailableModels((previous) => ({ ...previous, [provider]: models }));
+      notify("success", `${models.length} model tersedia.`);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal memuat daftar model.");
+    }
+    setLoadingModels(false);
+  };
+
   const isOpenRouter = config.provider === "openrouter";
+  const currentModel = isOpenRouter ? config.openRouterModel : config.model;
+  const currentProviderModels = availableModels[config.provider];
 
   return (
     <div className="space-y-6">
@@ -173,7 +213,10 @@ export default function GenAIRoutePage() {
           {/* LM Studio */}
           <button
             type="button"
-            onClick={() => setConfig({ ...config, provider: "lmstudio" })}
+            onClick={() => {
+              setConfig({ ...config, provider: "lmstudio" });
+              setTestResult(null);
+            }}
             className={`p-4 rounded-xl border text-left flex items-start gap-3.5 transition-all cursor-pointer ${
               !isOpenRouter
                 ? "bg-white/10 border-white text-white shadow-md ring-1 ring-white/20"
@@ -203,13 +246,14 @@ export default function GenAIRoutePage() {
           {/* OpenRouter */}
           <button
             type="button"
-            onClick={() =>
+            onClick={() => {
               setConfig({
                 ...config,
                 provider: "openrouter",
                 openRouterModel: config.openRouterModel || OPENROUTER_FREE_MODEL,
-              })
-            }
+              });
+              setTestResult(null);
+            }}
             className={`p-4 rounded-xl border text-left flex items-start gap-3.5 transition-all cursor-pointer ${
               isOpenRouter
                 ? "bg-white/10 border-white text-white shadow-md ring-1 ring-white/20"
@@ -297,7 +341,11 @@ export default function GenAIRoutePage() {
                   <input
                     type="text"
                     value={config.baseUrl}
-                    onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
+                    onChange={(e) => {
+                      setConfig({ ...config, baseUrl: e.target.value });
+                      setAvailableModels((previous) => ({ ...previous, lmstudio: [] }));
+                      setTestResult(null);
+                    }}
                     placeholder="http://localhost:1234/v1"
                     className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
                   />
@@ -307,17 +355,38 @@ export default function GenAIRoutePage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                    Nama Model
+                    Model LM Studio
                   </label>
-                  <input
-                    type="text"
-                    value={config.model}
-                    onChange={(e) => setConfig({ ...config, model: e.target.value })}
-                    placeholder="local-model"
-                    className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={config.model}
+                      onChange={(e) => setConfig({ ...config, model: e.target.value })}
+                      className="min-w-0 flex-1 px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-neutral-600"
+                    >
+                      {!currentProviderModels.includes(config.model) && (
+                        <option value={config.model}>{config.model} (belum dimuat)</option>
+                      )}
+                      {currentProviderModels.map((model) => (
+                        <option key={model} value={model}>{model}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={loadAvailableModels}
+                      disabled={loadingModels}
+                      className="inline-flex w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-800 bg-black text-neutral-300 hover:bg-neutral-900 disabled:opacity-50"
+                      title="Muat model LM Studio"
+                      aria-label="Muat model LM Studio"
+                    >
+                      {loadingModels
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <RefreshCw className="h-4 w-4" />}
+                    </button>
+                  </div>
                   <p className="text-[11px] text-neutral-500 mt-1">
-                    Nama model yang sedang di-load di LM Studio
+                    {currentProviderModels.length
+                      ? `${currentProviderModels.length} model terdeteksi dari LM Studio.`
+                      : "Muat daftar untuk melihat model yang tersedia."}
                   </p>
                 </div>
               </div>
@@ -329,15 +398,39 @@ export default function GenAIRoutePage() {
                     <label className="block text-xs font-medium text-neutral-300 mb-1.5">
                       Model OpenRouter
                     </label>
-                    <input
-                      type="text"
-                      value={config.openRouterModel}
-                      onChange={(e) =>
-                        setConfig({ ...config, openRouterModel: e.target.value })
-                      }
-                      placeholder={OPENROUTER_FREE_MODEL}
-                      className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
-                    />
+                    <div className="flex gap-2">
+                      <select
+                        value={config.openRouterModel}
+                        onChange={(e) =>
+                          setConfig({ ...config, openRouterModel: e.target.value })
+                        }
+                        className="min-w-0 flex-1 px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-neutral-600"
+                      >
+                        {!currentProviderModels.includes(currentModel) && (
+                          <option value={currentModel}>{currentModel} (tersimpan)</option>
+                        )}
+                        {currentProviderModels.map((model) => (
+                          <option key={model} value={model}>{model}</option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={loadAvailableModels}
+                        disabled={loadingModels}
+                        className="inline-flex w-10 shrink-0 items-center justify-center rounded-xl border border-neutral-800 bg-black text-neutral-300 hover:bg-neutral-900 disabled:opacity-50"
+                        title="Muat model OpenRouter"
+                        aria-label="Muat model OpenRouter"
+                      >
+                        {loadingModels
+                          ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <RefreshCw className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-neutral-500 mt-1">
+                      {currentProviderModels.length
+                        ? `${currentProviderModels.length} model gratis tersedia.`
+                        : "Muat daftar model tanpa mengirim request chat."}
+                    </p>
                   </div>
                 </div>
 
@@ -415,7 +508,7 @@ export default function GenAIRoutePage() {
       </div>
 
       {/* Test Results */}
-      {testResult && (
+      {testResult && testResult.provider === config.provider && (
         <div
           className={`border rounded-2xl p-5 ${
             testResult.success
@@ -438,62 +531,33 @@ export default function GenAIRoutePage() {
             {testResult.message || testResult.error}
           </p>
 
-          {testResult.models && testResult.models.length > 0 && (
-            <div>
-              <p className="text-[11px] font-medium text-neutral-400 mb-1.5">
-                Model yang tersedia (klik untuk pilih):
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {testResult.models.slice(0, 20).map((m) => {
-                  const current = isOpenRouter ? config.openRouterModel : config.model;
-                  return (
-                    <button
-                      key={m}
-                      onClick={() =>
-                        isOpenRouter
-                          ? setConfig({ ...config, openRouterModel: m })
-                          : setConfig({ ...config, model: m })
-                      }
-                      className={`text-xs px-3 py-1.5 rounded-lg border cursor-pointer transition-all ${
-                        current === m
-                          ? "bg-white text-black border-white"
-                          : "bg-neutral-900 text-neutral-300 border-neutral-700 hover:bg-neutral-800 hover:text-white"
-                      }`}
-                    >
-                      {m}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
       {/* Info / Guide */}
       <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl p-5">
         <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">
-          Panduan Penggunaan Environment
+          Variabel Environment
         </h3>
         <ul className="space-y-2.5 text-xs text-neutral-400">
           <li className="flex items-start gap-2">
             <span className="text-neutral-500 mt-0.5">•</span>
             <span>
-              <strong className="text-white">Local Mode (LM Studio):</strong> Tambahkan{" "}
+              <strong className="text-white">LM Studio (Local / Offline):</strong> Mode ini memakai{" "}
               <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">LM_STUDIO_URL</code>{" "}
               dan{" "}
               <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">LM_STUDIO_MODEL</code>{" "}
-              di file <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">.env.local</code>.
+              dari <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">.env.local</code> pada development lokal.
             </span>
           </li>
           <li className="flex items-start gap-2">
             <span className="text-neutral-500 mt-0.5">•</span>
             <span>
-              <strong className="text-white">Public / Cloud Mode (OpenRouter):</strong> Tambahkan{" "}
+              <strong className="text-white">OpenRouter (Public / Cloud):</strong> Mode ini memakai{" "}
               <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">OPENROUTER_API_KEY</code>{" "}
               dan{" "}
               <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">OPENROUTER_MODEL</code>{" "}
-              di environment variable hosting (Vercel, Railway, dsb).
+              . Saat development, atur di <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">.env.local</code>; di Vercel, atur di Project Settings → Environment Variables.
             </span>
           </li>
           <li className="flex items-start gap-2">
@@ -506,7 +570,7 @@ export default function GenAIRoutePage() {
           <li className="flex items-start gap-2">
             <span className="text-neutral-500 mt-0.5">•</span>
             <span>
-              Konfigurasi yang disimpan melalui halaman ini akan langsung aktif tanpa perlu restart server.
+              Pilihan provider di halaman ini disimpan sebagai konfigurasi aktif. Perubahan env lokal perlu restart server; perubahan env Vercel perlu redeploy.
             </span>
           </li>
         </ul>

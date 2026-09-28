@@ -3,7 +3,7 @@ import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import { smartSearchKB, ScoredArticle } from "@/lib/smart-search";
-import { getAIConfig, generateAICompletion } from "@/lib/ai";
+import { getAIConfig, generateAICompletion, isOpenRouterFreeModel } from "@/lib/ai";
 
 // POST /api/conversations/[id]/messages — add message & get AI reply
 export async function POST(
@@ -17,8 +17,15 @@ export async function POST(
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
   try {
-    const { message, kbCollections } = await req.json();
-    if (!message?.trim()) return NextResponse.json({ error: "Message is required" }, { status: 400 });
+    const body = await req.json();
+    const { editUserMessageId, regenerateAssistantId } = body;
+    let message = typeof body.message === "string" ? body.message : "";
+    if (editUserMessageId && regenerateAssistantId) {
+      return NextResponse.json({ error: "Choose edit or regenerate, not both" }, { status: 400 });
+    }
+    if (!regenerateAssistantId && !message.trim()) {
+      return NextResponse.json({ error: "Message is required" }, { status: 400 });
+    }
 
     const db = await getDatabase();
 
@@ -29,12 +36,71 @@ export async function POST(
     });
     if (!conversation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
 
-    const userMessage = {
-      id: new ObjectId().toString(),
-      role: "user" as const,
-      content: message.trim(),
-      timestamp: new Date(),
+    type ConversationMessage = {
+      id: string;
+      role: "user" | "assistant";
+      content: string;
+      timestamp: Date | string;
+      [key: string]: unknown;
     };
+    const existingMessages: ConversationMessage[] = Array.isArray(conversation.messages)
+      ? conversation.messages
+      : [];
+    let userMessage: ConversationMessage;
+    let replacementAssistantId: string | null = null;
+    let editedUserMessageIndex = -1;
+
+    if (regenerateAssistantId) {
+      const assistantIndex = existingMessages.findIndex(
+        (item) => item.id === regenerateAssistantId && item.role === "assistant"
+      );
+      if (assistantIndex < 0) {
+        return NextResponse.json({ error: "Assistant message not found" }, { status: 404 });
+      }
+      let userMessageIndex = assistantIndex - 1;
+      while (userMessageIndex >= 0 && existingMessages[userMessageIndex].role !== "user") {
+        userMessageIndex -= 1;
+      }
+      if (userMessageIndex < 0) {
+        return NextResponse.json({ error: "Original user message not found" }, { status: 400 });
+      }
+      userMessage = existingMessages[userMessageIndex];
+      message = userMessage.content;
+      replacementAssistantId = existingMessages[assistantIndex].id;
+    } else if (editUserMessageId) {
+      const userMessageIndex = existingMessages.findIndex(
+        (item) => item.id === editUserMessageId && item.role === "user"
+      );
+      if (userMessageIndex < 0) {
+        return NextResponse.json({ error: "User message not found" }, { status: 404 });
+      }
+      let assistantIndex = userMessageIndex + 1;
+      while (
+        assistantIndex < existingMessages.length &&
+        existingMessages[assistantIndex].role !== "assistant" &&
+        existingMessages[assistantIndex].role !== "user"
+      ) {
+        assistantIndex += 1;
+      }
+      if (assistantIndex >= existingMessages.length || existingMessages[assistantIndex].role !== "assistant") {
+        return NextResponse.json({ error: "Assistant response not found" }, { status: 404 });
+      }
+      userMessage = {
+        ...existingMessages[userMessageIndex],
+        content: message.trim(),
+        timestamp: new Date(),
+      };
+      editedUserMessageIndex = userMessageIndex;
+      replacementAssistantId = existingMessages[assistantIndex].id;
+    } else {
+      userMessage = {
+        id: new ObjectId().toString(),
+        role: "user",
+        content: message.trim(),
+        timestamp: new Date(),
+      };
+    }
+    const generationStartedAt = Date.now();
 
     // 1. Classify the user message via GenAI Route
     let messageType: "SMALL_TALK" | "FAQ" = "SMALL_TALK";
@@ -52,6 +118,12 @@ export async function POST(
 
     // Load AI config (LM Studio local or Google AI Studio Gemini)
     const aiConfig = await getAIConfig(db);
+    const requestedModel = typeof body.model === "string" ? body.model.trim() : "";
+    if (requestedModel && aiConfig.provider === "lmstudio") {
+      aiConfig.lmStudioModel = requestedModel;
+    } else if (requestedModel && isOpenRouterFreeModel(requestedModel)) {
+      aiConfig.openRouterModel = requestedModel;
+    }
 
     // Get the route prompt
     const routePromptDoc = await db.collection("prompts").findOne({ type: "route", isActive: true });
@@ -95,13 +167,53 @@ export async function POST(
     let topArticles: ScoredArticle[] = [];
     let formattedContext = "";
 
-    const searchResult = await smartSearchKB(db, message.trim(), kbCollections, 5);
+    const activeKnowledgeBases = await db.collection("knowledgeBases")
+      .find({ isActive: { $ne: false } }, { projection: { collectionName: 1 } })
+      .toArray();
+    const activeCollections = activeKnowledgeBases.map((kb) => kb.collectionName);
+    const searchResult = await smartSearchKB(db, message.trim(), activeCollections, 5);
     topArticles = searchResult.articles;
     formattedContext = searchResult.formattedContext;
 
     // Jika terdapat kecocokan artikel dengan skor tinggi, pastikan dialihkan ke mode FAQ/Knowledge
     if (topArticles.length > 0 && topArticles[0].score >= 8) {
       messageType = "FAQ";
+    }
+
+    let uiComponents: Array<Record<string, unknown>> = [];
+    const triggerArticle = topArticles[0];
+    if (messageType === "FAQ" && triggerArticle) {
+        const activeComponents = await db.collection("components")
+          .find({ isActive: true })
+          .sort({ updatedAt: -1 })
+          .toArray();
+        const matchingComponents = activeComponents
+          .map((template) => {
+            const matchesTopArticle = Array.isArray(template.articleRefs) && template.articleRefs.some((reference: {
+                collectionName: string;
+                articleId: string;
+              }) => reference.collectionName === triggerArticle.collectionName && reference.articleId === triggerArticle.id);
+            return matchesTopArticle ? template : null;
+          })
+          .filter((template) => template !== null);
+
+        const selectedComponent = matchingComponents[0];
+        if (selectedComponent) {
+          uiComponents = [{
+            id: selectedComponent._id.toString(),
+            name: selectedComponent.name,
+            type: selectedComponent.type,
+            buttons: selectedComponent.buttons || [],
+            card: selectedComponent.card || null,
+            cards: selectedComponent.cards || [],
+            triggeredBy: [{
+              collectionName: triggerArticle.collectionName,
+              articleId: triggerArticle.id,
+              title: triggerArticle.title,
+              score: triggerArticle.score,
+            }],
+          }];
+        }
     }
 
     if (messageType === "FAQ") {
@@ -181,14 +293,18 @@ KNOWLEDGE CONTEXT:
       .trim();
 
     const assistantMessage = {
-      id: new ObjectId().toString(),
+      id: replacementAssistantId || new ObjectId().toString(),
       role: "assistant" as const,
       content: assistantContent,
       messageType,
       lmStudioAvailable: aiAvailable,
       aiProvider: aiConfig.provider,
+      aiModel: aiConfig.provider === "openrouter" ? aiConfig.openRouterModel : aiConfig.lmStudioModel,
+      generationDurationMs: Date.now() - generationStartedAt,
+      uiComponents,
       topArticles: topArticles.map((a) => ({
         id: a.id,
+        collectionName: a.collectionName,
         title: a.title,
         category: a.category,
         score: a.score,
@@ -199,22 +315,55 @@ KNOWLEDGE CONTEXT:
 
     // 3. Update conversation in MongoDB
     const isFirstMessage = (conversation.messageCount || 0) === 0;
-    const updateOps: Record<string, unknown> = {
-      $push: { messages: { $each: [userMessage, assistantMessage] } },
-      $set: { updatedAt: new Date() },
-      $inc: { messageCount: 2 },
-    };
+    const updatedAt = new Date();
+    if (editUserMessageId && replacementAssistantId) {
+      const setFields: Record<string, unknown> = {
+        "messages.$[user].content": message.trim(),
+        "messages.$[user].timestamp": userMessage.timestamp,
+        "messages.$[assistant]": assistantMessage,
+        updatedAt,
+      };
+      if (editedUserMessageIndex === 0) {
+        setFields.title = message.trim().slice(0, 60) + (message.trim().length > 60 ? "..." : "");
+      }
+      await db.collection("conversations").updateOne(
+        { _id: new ObjectId(id) },
+        { $set: setFields },
+        {
+          arrayFilters: [
+            { "user.id": editUserMessageId },
+            { "assistant.id": replacementAssistantId },
+          ],
+        }
+      );
+    } else if (regenerateAssistantId && replacementAssistantId) {
+      await db.collection("conversations").updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            "messages.$[assistant]": assistantMessage,
+            updatedAt,
+          },
+        },
+        { arrayFilters: [{ "assistant.id": replacementAssistantId }] }
+      );
+    } else {
+      const updateOps: Record<string, unknown> = {
+        $push: { messages: { $each: [userMessage, assistantMessage] } },
+        $set: { updatedAt },
+        $inc: { messageCount: 2 },
+      };
 
-    if (isFirstMessage) {
-      // Auto-title from first message
-      const autoTitle = message.trim().slice(0, 60) + (message.trim().length > 60 ? "..." : "");
-      (updateOps.$set as Record<string, unknown>).title = autoTitle;
+      if (isFirstMessage) {
+        const autoTitle = message.trim().slice(0, 60) + (message.trim().length > 60 ? "..." : "");
+        (updateOps.$set as Record<string, unknown>).title = autoTitle;
+      }
+
+      await db.collection("conversations").updateOne(
+        { _id: new ObjectId(id) },
+        updateOps
+      );
     }
-
-    await db.collection("conversations").updateOne(
-      { _id: new ObjectId(id) },
-      updateOps
-    );
 
     return NextResponse.json({
       success: true,
@@ -225,12 +374,14 @@ KNOWLEDGE CONTEXT:
       aiProvider: aiConfig.provider,
       topArticles: topArticles.map((a) => ({
         id: a.id,
+        collectionName: a.collectionName,
         title: a.title,
         category: a.category,
         score: a.score,
         matchedKeywords: a.matchedKeywords,
       })),
       contextSent: formattedContext,
+      uiComponents,
     });
   } catch (err) {
     console.error("POST messages error:", err);

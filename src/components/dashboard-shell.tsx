@@ -19,6 +19,7 @@ import {
   Zap,
   Route,
   ChevronRight,
+  Blocks,
 } from "lucide-react";
 import { UserSession } from "@/lib/auth";
 
@@ -77,6 +78,13 @@ export default function DashboardShell({
       href: "/dashboard/knowledge-base",
       icon: Database,
       current: pathname.startsWith("/dashboard/knowledge-base"),
+      roles: ["admin", "manager"],
+    },
+    {
+      name: "Components",
+      href: "/dashboard/components",
+      icon: Blocks,
+      current: pathname.startsWith("/dashboard/components"),
       roles: ["admin", "manager"],
     },
     {
@@ -149,7 +157,7 @@ export default function DashboardShell({
   );
 
   const contentNav = visibleNav.filter((n) =>
-    ["Knowledge Base", "Prompts"].includes(n.name)
+    ["Knowledge Base", "Components", "Prompts"].includes(n.name)
   );
 
   return (

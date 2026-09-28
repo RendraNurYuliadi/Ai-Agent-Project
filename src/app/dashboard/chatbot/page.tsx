@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import Image from "next/image";
 import {
   Bot,
   Send,
@@ -10,11 +11,16 @@ import {
   Sparkles,
   Cpu,
   Loader2,
-  Database,
   ChevronLeft,
   Mic,
   MicOff,
   X,
+  Copy,
+  Check,
+  Pencil,
+  RotateCw,
+  ExternalLink,
+  ChevronRight,
 } from "lucide-react";
 import { FormattedMessage } from "@/components/formatted-message";
 
@@ -55,7 +61,51 @@ interface Message {
   content: string;
   messageType?: string;
   lmStudioAvailable?: boolean;
+  generationDurationMs?: number;
+  topArticles?: Array<{
+    id: string;
+    collectionName?: string;
+    title: string;
+    category: string;
+    score: number;
+    matchedKeywords: string[];
+  }>;
+  uiComponents?: AssistantComponent[];
   timestamp: string;
+}
+
+interface ComponentActionButton {
+  label: string;
+  action: "reply" | "link";
+  value: string;
+}
+
+interface ComponentCard {
+  imageUrl: string;
+  imageHeight?: number;
+  title: string;
+  subtitle: string;
+  buttons: ComponentActionButton[];
+}
+
+interface AssistantComponent {
+  id: string;
+  name: string;
+  type: "reply_buttons" | "link_buttons" | "card" | "carousel";
+  buttons: ComponentActionButton[];
+  card: ComponentCard | null;
+  cards: ComponentCard[];
+  triggeredBy?: Array<{
+    collectionName: string;
+    articleId: string;
+    title: string;
+    score: number;
+  }>;
+}
+
+interface MessageSubmissionOptions {
+  editUserMessageId?: string;
+  regenerateAssistantId?: string;
 }
 
 interface Conversation {
@@ -66,11 +116,6 @@ interface Conversation {
   updatedAt: string;
 }
 
-interface KBItem {
-  collectionName: string;
-  displayName: string;
-}
-
 interface UserProfile {
   name: string;
   fullName: string;
@@ -78,11 +123,186 @@ interface UserProfile {
   role: string;
 }
 
+function ComponentButtons({
+  buttons,
+  onReply,
+  disabled,
+  buttonMode,
+}: {
+  buttons: ComponentActionButton[];
+  onReply: (value: string) => void;
+  disabled: boolean;
+  buttonMode?: "reply" | "link";
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {buttons.map((button, index) => (buttonMode || button.action) === "reply" ? (
+        <button
+          key={`${button.label}-${index}`}
+          type="button"
+          onClick={() => onReply(button.value)}
+          disabled={disabled}
+          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-40"
+        >
+          {button.label}
+        </button>
+      ) : (
+        <a
+          key={`${button.label}-${index}`}
+          href={button.value}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800"
+        >
+          {button.label}<ExternalLink className="h-3 w-3" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function ComponentCardView({
+  card,
+  onReply,
+  disabled,
+}: {
+  card: ComponentCard;
+  onReply: (value: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <article className="w-full min-w-0 overflow-hidden rounded-xl border border-neutral-800 bg-[#101010]">
+      {card.imageUrl && (
+        <Image
+          src={card.imageUrl}
+          alt={card.title}
+          width={520}
+          height={card.imageHeight ?? 128}
+          unoptimized
+          style={{ height: `${card.imageHeight ?? 128}px` }}
+          className="w-full object-cover"
+        />
+      )}
+      <div className="space-y-2.5 p-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white">{card.title}</h3>
+          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">{card.subtitle}</p>
+        </div>
+        <ComponentButtons buttons={card.buttons} onReply={onReply} disabled={disabled} />
+      </div>
+    </article>
+  );
+}
+
+function AssistantComponents({
+  component,
+  onReply,
+  disabled,
+}: {
+  component: AssistantComponent;
+  onReply: (value: string) => void;
+  disabled: boolean;
+}) {
+  if (component.type === "reply_buttons" || component.type === "link_buttons") {
+    return (
+      <ComponentButtons
+        buttons={component.buttons}
+        onReply={onReply}
+        disabled={disabled}
+        buttonMode={component.type === "link_buttons" ? "link" : "reply"}
+      />
+    );
+  }
+  if (component.type === "card" && component.card) {
+    return (
+      <div className="w-full max-w-[260px]">
+        <ComponentCardView card={component.card} onReply={onReply} disabled={disabled} />
+      </div>
+    );
+  }
+  if (component.type === "carousel") {
+    return <ComponentCarousel component={component} onReply={onReply} disabled={disabled} />;
+  }
+  return null;
+}
+
+function ComponentCarousel({
+  component,
+  onReply,
+  disabled,
+}: {
+  component: AssistantComponent;
+  onReply: (value: string) => void;
+  disabled: boolean;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const cardCount = component.cards.length;
+
+  useEffect(() => {
+    if (cardCount <= 1) return;
+    const intervalId = window.setInterval(() => {
+      setCurrentIndex((index) => (index + 1) % cardCount);
+    }, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [cardCount]);
+
+  if (cardCount === 0) return null;
+
+  const showPrevious = () => setCurrentIndex((index) => (index - 1 + cardCount) % cardCount);
+  const showNext = () => setCurrentIndex((index) => (index + 1) % cardCount);
+
+  return (
+    <div className="w-full max-w-[260px]" aria-roledescription="carousel">
+      <div className="overflow-hidden">
+        <div
+          className="flex transition-transform duration-500 ease-out motion-reduce:transition-none"
+          style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+        >
+          {component.cards.map((card, index) => (
+            <div key={`${component.id}-${index}`} className="w-full shrink-0">
+              <ComponentCardView card={card} onReply={onReply} disabled={disabled} />
+            </div>
+          ))}
+        </div>
+      </div>
+      {cardCount > 1 && (
+        <div className="mt-2 flex items-center justify-between px-1">
+          <button
+            type="button"
+            onClick={showPrevious}
+            aria-label="Card sebelumnya"
+            title="Card sebelumnya"
+            className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-[10px] tabular-nums text-neutral-500">
+            {currentIndex + 1} / {cardCount}
+          </span>
+          <button
+            type="button"
+            onClick={showNext}
+            aria-label="Card berikutnya"
+            title="Card berikutnya"
+            className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatTime(ts: string): string {
   if (!ts) return "";
   const d = new Date(ts);
   if (isNaN(d.getTime())) return "";
   return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatDuration(ms: number): string {
+  return `${(ms / 1000).toFixed(1)} dtk`;
 }
 
 function getInitials(fullName: string, name: string): string {
@@ -105,16 +325,56 @@ function getAvatarGradient(role: string): string {
   }
 }
 
+interface GatewayModelOptions {
+  provider: "lmstudio" | "openrouter";
+  model: string;
+  models: string[];
+}
+
+async function loadGatewayModelOptions(): Promise<GatewayModelOptions> {
+  const configResponse = await fetch("/api/genai-route/config");
+  if (!configResponse.ok) throw new Error("Gagal memuat konfigurasi model.");
+  const configData = await configResponse.json();
+  const provider = configData.config.provider === "openrouter" ? "openrouter" : "lmstudio";
+  const model = provider === "openrouter"
+    ? configData.config.openRouterModel
+    : configData.config.model;
+
+  let models: string[] = [];
+  try {
+    const modelsResponse = await fetch("/api/genai-route/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider,
+        baseUrl: configData.config.baseUrl,
+        listModelsOnly: true,
+      }),
+    });
+    const modelsData = await modelsResponse.json();
+    if (modelsResponse.ok && modelsData.success && Array.isArray(modelsData.models)) {
+      models = modelsData.models;
+    }
+  } catch {}
+
+  return { provider, model, models };
+}
+
 export default function ChatbotPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [chatModelProvider, setChatModelProvider] = useState<"lmstudio" | "openrouter">("lmstudio");
+  const [chatModel, setChatModel] = useState("local-model");
+  const [availableChatModels, setAvailableChatModels] = useState<string[]>([]);
+  const [loadingChatModels, setLoadingChatModels] = useState(true);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
-  const [kbList, setKbList] = useState<KBItem[]>([]);
-  const [selectedKbs, setSelectedKbs] = useState<string[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [speechLanguage, setSpeechLanguage] = useState("id-ID");
@@ -148,8 +408,15 @@ export default function ChatbotPage() {
 
   useEffect(() => {
     fetchConversations();
-    fetchKBList();
     fetchUserProfile();
+    loadGatewayModelOptions()
+      .then(({ provider, model, models }) => {
+        setChatModelProvider(provider);
+        setChatModel(model || (provider === "openrouter" ? "openrouter/free" : "local-model"));
+        setAvailableChatModels(models);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingChatModels(false));
 
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -190,23 +457,6 @@ export default function ChatbotPage() {
     } finally {
       setLoadingConvs(false);
     }
-  };
-
-  const fetchKBList = async () => {
-    try {
-      const res = await fetch("/api/knowledge-bases");
-      if (res.ok) {
-        const data = await res.json();
-        const kbs = (data.knowledgeBases || []).map(
-          (kb: { collectionName: string; displayName: string }) => ({
-            collectionName: kb.collectionName,
-            displayName: kb.displayName,
-          })
-        );
-        setKbList(kbs);
-        setSelectedKbs(kbs.map((k: KBItem) => k.collectionName));
-      }
-    } catch { }
   };
 
   const loadConversation = async (convId: string) => {
@@ -324,11 +574,17 @@ export default function ChatbotPage() {
     }
   };
 
-  const submitMessage = async (message: string) => {
-    if (!message.trim() || sending) return;
+  const submitMessage = async (
+    message: string,
+    options: MessageSubmissionOptions = {}
+  ) => {
+    const isRegenerate = Boolean(options.regenerateAssistantId);
+    const isReplacement = isRegenerate || Boolean(options.editUserMessageId);
+    if ((!message.trim() && !isRegenerate) || sending) return;
 
     let convId = activeConvId;
     if (!convId) {
+      if (isReplacement) return;
       try {
         const res = await fetch("/api/conversations", {
           method: "POST",
@@ -357,15 +613,19 @@ export default function ChatbotPage() {
 
     if (!convId) return;
 
-    const userMsg: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: message.trim(),
-      timestamp: new Date().toISOString(),
-    };
+    const userMsg: Message | null = isReplacement
+      ? null
+      : {
+        id: Date.now().toString(),
+        role: "user",
+        content: message.trim(),
+        timestamp: new Date().toISOString(),
+      };
 
-    setMessages((prev) => [...prev, userMsg]);
-    setInput("");
+    if (userMsg) {
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
+    }
     setSending(true);
 
     try {
@@ -373,20 +633,40 @@ export default function ChatbotPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: userMsg.content,
-          kbCollections: selectedKbs,
+          message: message.trim(),
+          model: chatModel,
+          ...options,
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setMessages((prev) => [...prev, data.assistantMessage]);
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal memproses pesan.");
+      }
+
+      if (options.editUserMessageId) {
+        setMessages((prev) => prev.map((item) => {
+          if (item.id === options.editUserMessageId) return data.userMessage;
+          if (item.id === data.assistantMessage.id) return data.assistantMessage;
+          return item;
+        }));
+        setEditingMessageId(null);
+        setEditingText("");
+      } else if (options.regenerateAssistantId) {
+        setMessages((prev) => prev.map((item) =>
+          item.id === options.regenerateAssistantId ? data.assistantMessage : item
+        ));
+      } else {
+        setMessages((prev) => [
+          ...prev.map((item) => item.id === userMsg!.id ? data.userMessage : item),
+          data.assistantMessage,
+        ]);
         setConversations((prev) =>
           prev.map((c) =>
             c.id === convId
               ? {
                 ...c,
-                title: userMsg.content.slice(0, 60),
+                title: userMsg!.content.slice(0, 60),
                 messageCount: c.messageCount + 2,
                 updatedAt: new Date().toISOString(),
               }
@@ -407,17 +687,21 @@ export default function ChatbotPage() {
     }
   };
 
+  const copyMessage = async (message: Message) => {
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopiedMessageId(message.id);
+      window.setTimeout(() => {
+        setCopiedMessageId((current) => current === message.id ? null : current);
+      }, 1500);
+    } catch {
+      setCopiedMessageId(null);
+    }
+  };
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     await submitMessage(input);
-  };
-
-  const toggleKb = (collName: string) => {
-    setSelectedKbs((prev) =>
-      prev.includes(collName)
-        ? prev.filter((k) => k !== collName)
-        : [...prev, collName]
-    );
   };
 
   const userInitials = userProfile
@@ -509,29 +793,6 @@ export default function ChatbotPage() {
           )}
         </div>
 
-        <div className="p-3 border-t border-neutral-900 shrink-0">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-neutral-600 mb-2 flex items-center gap-1">
-            <Database className="w-3 h-3 text-white" />
-            Knowledge Base Aktif
-          </p>
-
-          <div className="space-y-1 max-h-24 overflow-y-auto">
-            {kbList.map((kb) => (
-              <label
-                key={kb.collectionName}
-                className="flex items-center gap-2 text-[11px] text-neutral-500 cursor-pointer hover:text-white"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedKbs.includes(kb.collectionName)}
-                  onChange={() => toggleKb(kb.collectionName)}
-                  className="w-3 h-3 rounded border-neutral-700 bg-black text-white focus:ring-neutral-500 cursor-pointer accent-white"
-                />
-                <span className="truncate">{kb.displayName}</span>
-              </label>
-            ))}
-          </div>
-        </div>
       </div>
 
       {speechModalOpen && (
@@ -621,7 +882,7 @@ export default function ChatbotPage() {
 
                 <p className="text-[10px] text-neutral-500 flex items-center gap-1">
                   <Cpu className="w-2.5 h-2.5" />
-                  LM Studio • {selectedKbs.length} KB terhubung
+                  {chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • {chatModel}
                 </p>
               </div>
             </div>
@@ -692,8 +953,13 @@ export default function ChatbotPage() {
             </div>
           ) : (
             <>
-              {messages.map((msg) => {
+              {messages.map((msg, messageIndex) => {
                 const isUser = msg.role === "user";
+                const relatedUserMessage =
+                  !isUser && messageIndex > 0 && messages[messageIndex - 1].role === "user"
+                    ? messages[messageIndex - 1]
+                    : null;
+                const isEditing = editingMessageId === msg.id;
 
                 return (
                   <div
@@ -753,13 +1019,152 @@ export default function ChatbotPage() {
                           : "bg-[#111111] text-neutral-300 border border-neutral-800 rounded-tl-sm shadow-md"
                           }`}
                       >
-                        <FormattedMessage content={msg.content} isUser={isUser} />
+                        {isEditing ? (
+                          <form
+                            className="w-full min-w-48 space-y-2"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              void submitMessage(editingText, { editUserMessageId: msg.id });
+                            }}
+                          >
+                            <textarea
+                              autoFocus
+                              value={editingText}
+                              onChange={(event) => setEditingText(event.target.value)}
+                              rows={Math.min(6, Math.max(2, editingText.split("\n").length))}
+                              className="w-full resize-y bg-transparent text-sm text-black outline-none placeholder:text-neutral-500"
+                              aria-label="Edit pesan user"
+                            />
+                            <div className="flex justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingMessageId(null);
+                                  setEditingText("");
+                                }}
+                                disabled={sending}
+                                className="rounded p-1 text-neutral-600 hover:bg-neutral-100 hover:text-black disabled:opacity-40"
+                                title="Batal edit"
+                                aria-label="Batal edit"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={sending || !editingText.trim()}
+                                className="rounded p-1 text-neutral-600 hover:bg-neutral-100 hover:text-black disabled:opacity-40"
+                                title="Kirim ulang"
+                                aria-label="Kirim ulang pesan yang diedit"
+                              >
+                                <Send className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </form>
+                        ) : (
+                          <FormattedMessage content={msg.content} isUser={isUser} />
+                        )}
                       </div>
 
-                      {/* Timestamp */}
-                      <span className="text-[10px] text-neutral-600 px-1 select-none">
-                        {formatTime(msg.timestamp)}
-                      </span>
+                      {!isUser && msg.uiComponents?.map((component) => (
+                        <div key={component.id} className="w-full pl-1">
+                          <AssistantComponents
+                            component={component}
+                            onReply={(value) => void submitMessage(value)}
+                            disabled={sending}
+                          />
+                        </div>
+                      ))}
+
+                      {/* Timestamp and FAQ retrieval debug */}
+                      <div className="flex flex-wrap items-center gap-2 px-1">
+                        <span className="text-[10px] text-neutral-600 select-none">
+                          {formatTime(msg.timestamp)}
+                        </span>
+                        {!isUser && typeof msg.generationDurationMs === "number" && (
+                          <span className="text-[10px] text-neutral-600" title="Waktu proses respons">
+                            {formatDuration(msg.generationDurationMs)}
+                          </span>
+                        )}
+                        {!isUser && msg.messageType === "FAQ" && (
+                          <details className="relative text-[10px] text-neutral-500">
+                            <summary className="cursor-pointer list-none select-none hover:text-neutral-300">
+                              Debug retrieval ({msg.topArticles?.length ?? 0})
+                            </summary>
+                            <div className="absolute left-0 top-full z-20 mt-2 w-72 max-w-[calc(100vw-5rem)] rounded-lg border border-neutral-700 bg-[#0a0a0a] p-3 shadow-xl">
+                              <p className="mb-2 font-medium text-neutral-300">
+                                Artikel yang diambil
+                              </p>
+                              {msg.topArticles?.length ? (
+                                <ul className="space-y-2">
+                                  {msg.topArticles.map((article) => (
+                                    <li key={article.id} className="border-t border-neutral-800 pt-2 first:border-0 first:pt-0">
+                                      <p className="text-neutral-200">{article.title}</p>
+                                      <p className="mt-0.5 text-neutral-500">
+                                        {article.collectionName || article.category || "Tanpa kategori"} · Skor {article.score}
+                                      </p>
+                                      {article.matchedKeywords.length > 0 && (
+                                        <p className="mt-0.5 break-words text-neutral-500">
+                                          Keyword: {article.matchedKeywords.join(", ")}
+                                        </p>
+                                      )}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="text-neutral-500">Tidak ada artikel yang cocok.</p>
+                              )}
+                              {msg.uiComponents?.map((component) => (
+                                <div key={component.id} className="mt-3 border-t border-neutral-800 pt-2">
+                                  <p className="font-medium text-neutral-300">Komponen dipicu: {component.name}</p>
+                                  {component.triggeredBy?.map((article) => (
+                                    <p key={`${component.id}-${article.collectionName}-${article.articleId}`} className="mt-1 text-neutral-500">
+                                      {article.title} · Skor {article.score}
+                                    </p>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => void copyMessage(msg)}
+                          className="rounded p-1 text-neutral-600 transition-colors hover:bg-neutral-800 hover:text-neutral-200"
+                          title={copiedMessageId === msg.id ? "Tersalin" : "Salin pesan"}
+                          aria-label={copiedMessageId === msg.id ? "Pesan tersalin" : "Salin pesan"}
+                        >
+                          {copiedMessageId === msg.id
+                            ? <Check className="h-3.5 w-3.5" />
+                            : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                        {isUser && !isEditing && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingMessageId(msg.id);
+                              setEditingText(msg.content);
+                            }}
+                            disabled={sending}
+                            className="rounded p-1 text-neutral-600 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-40"
+                            title="Edit pesan"
+                            aria-label="Edit pesan"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {!isUser && relatedUserMessage && (
+                          <button
+                            type="button"
+                            onClick={() => void submitMessage(relatedUserMessage.content, { regenerateAssistantId: msg.id })}
+                            disabled={sending}
+                            className="rounded p-1 text-neutral-600 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-40"
+                            title="Buat ulang respons"
+                            aria-label="Buat ulang respons AI"
+                          >
+                            <RotateCw className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -804,6 +1209,22 @@ export default function ChatbotPage() {
               disabled={sending}
               className="flex-1 px-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-sm text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:border-neutral-600 disabled:opacity-50"
             />
+
+            <select
+              value={chatModel}
+              onChange={(event) => setChatModel(event.target.value)}
+              disabled={loadingChatModels || availableChatModels.length === 0}
+              aria-label={`Model ${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"}`}
+              title={`${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"}: ${chatModel}`}
+              className="h-10 w-28 shrink-0 truncate rounded-xl border border-neutral-800 bg-black px-2 text-[11px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50 sm:w-48"
+            >
+              {chatModel && !availableChatModels.includes(chatModel) && (
+                <option value={chatModel}>{chatModel} (aktif)</option>
+              )}
+              {availableChatModels.map((model) => (
+                <option key={model} value={model}>{model}</option>
+              ))}
+            </select>
 
             <select
               value={speechLanguage}
