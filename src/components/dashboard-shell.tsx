@@ -142,7 +142,7 @@ export default function DashboardShell({
   const RoleIcon = roleInfo.icon;
 
   const mainNav = visibleNav.filter((n) =>
-    ["Dashboard", "Chatbot", "Chat History"].includes(n.name)
+    ["Dashboard", "Chatbot", "Chat History", "GenAI Route"].includes(n.name)
   );
 
   const adminNav = visibleNav.filter((n) =>
@@ -150,9 +150,7 @@ export default function DashboardShell({
   );
 
   const contentNav = visibleNav.filter((n) =>
-    ["Knowledge Base", "Prompts", "Flow Dialog", "GenAI Route"].includes(
-      n.name
-    )
+    ["Knowledge Base", "Prompts"].includes(n.name)
   );
 
   return (
