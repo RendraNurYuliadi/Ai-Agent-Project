@@ -58,7 +58,8 @@ export async function POST(
     const routePromptTemplate = routePromptDoc?.content ||
       `Klasifikasikan pertanyaan user berikut ke dalam salah satu kategori:\n- SMALL_TALK: sapaan, basa-basi\n- FAQ: pertanyaan tentang sistem\n\nPertanyaan: "{question}"\n\nJawab HANYA dengan satu kata: SMALL_TALK atau FAQ`;
 
-    let aiAvailable = true;
+    const aiAvailable = true;
+    let routeAvailable = true;
 
     try {
       const routeText = await generateAICompletion({
@@ -78,10 +79,10 @@ export async function POST(
         messageType = "FAQ";
       }
     } catch {
-      aiAvailable = false;
+      routeAvailable = false;
     }
 
-    if (!aiAvailable) {
+    if (!routeAvailable) {
       // Fallback: Simple keyword detection
       const lower = message.toLowerCase();
       const faqKeywords = ["bagaimana", "apa", "cara", "jelaskan", "kenapa", "mengapa", "fungsi", "gunakan", "help", "tolong", "info", "sebutkan", "berapa"];

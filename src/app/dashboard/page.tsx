@@ -18,7 +18,7 @@ import {
 export default async function DashboardPage() {
   const session = await getSession();
   if (session?.role === "public_user") {
-    redirect("/dashboard/chatbot");
+    redirect("/dashboard/public");
   }
 
   const db = await getDatabase();

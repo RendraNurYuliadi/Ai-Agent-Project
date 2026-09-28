@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
-import { testLMStudioConnection, testOpenRouterConnection } from "@/lib/ai";
+import {
+  getAIConfig,
+  testLMStudioConnection,
+  testOpenRouterConnection,
+  OPENROUTER_FREE_MODEL,
+} from "@/lib/ai";
 
 // POST /api/genai-route/test — test AI connectivity (LM Studio or OpenRouter)
 export async function POST(req: NextRequest) {
@@ -11,8 +17,10 @@ export async function POST(req: NextRequest) {
     const { provider = "lmstudio", baseUrl, model, apiKey } = await req.json();
 
     if (provider === "openrouter") {
-      const key = apiKey || process.env.OPENROUTER_API_KEY || "";
-      const targetModel = model || process.env.OPENROUTER_MODEL || "meta-llama/llama-3.3-70b-instruct:free";
+      const db = await getDatabase();
+      const storedConfig = await getAIConfig(db);
+      const key = apiKey?.trim() || storedConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY || "";
+      const targetModel = model || OPENROUTER_FREE_MODEL;
       const result = await testOpenRouterConnection(key, targetModel);
       return NextResponse.json(result);
     } else {

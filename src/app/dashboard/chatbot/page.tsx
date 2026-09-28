@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import {
   Bot,
   Send,
@@ -12,8 +12,42 @@ import {
   Loader2,
   Database,
   ChevronLeft,
+  Mic,
+  MicOff,
+  X,
 } from "lucide-react";
 import { FormattedMessage } from "@/components/formatted-message";
+
+interface SpeechRecognitionResultEventLike {
+  resultIndex: number;
+  results: ArrayLike<{
+    isFinal: boolean;
+    0: { transcript: string };
+  }>;
+}
+
+interface SpeechRecognitionInstance {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognitionInstance;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
 
 interface Message {
   id: string;
@@ -83,7 +117,19 @@ export default function ChatbotPage() {
   const [selectedKbs, setSelectedKbs] = useState<string[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [speechLanguage, setSpeechLanguage] = useState("id-ID");
+  const [isListening, setIsListening] = useState(false);
+  const [speechModalOpen, setSpeechModalOpen] = useState(false);
+  const [speechTranscript, setSpeechTranscript] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const speechRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const speechTranscriptRef = useRef("");
+  const speechModalOpenRef = useRef(false);
+  const speechSupported = useSyncExternalStore(
+    () => () => {},
+    () => Boolean(window.SpeechRecognition || window.webkitSpeechRecognition),
+    () => false
+  );
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -92,6 +138,13 @@ export default function ChatbotPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      speechModalOpenRef.current = false;
+      speechRecognitionRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     fetchConversations();
@@ -213,9 +266,66 @@ export default function ChatbotPage() {
     }
   };
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || sending) return;
+  const startSpeechInput = () => {
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) return;
+
+    const recognition = new Recognition();
+    recognition.lang = speechLanguage;
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    recognition.onresult = (event) => {
+      let transcript = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        if (event.results[index].isFinal) {
+          transcript += event.results[index][0].transcript;
+        }
+      }
+
+      if (transcript.trim()) {
+        speechTranscriptRef.current = `${speechTranscriptRef.current} ${transcript.trim()}`.trim();
+        setSpeechTranscript(speechTranscriptRef.current);
+      }
+    };
+    recognition.onend = () => {
+      if (speechModalOpenRef.current && speechRecognitionRef.current === recognition) {
+        try {
+          recognition.start();
+          setIsListening(true);
+          return;
+        } catch { }
+      }
+      setIsListening(false);
+    };
+    recognition.onerror = () => {
+      setIsListening(false);
+    };
+
+    speechRecognitionRef.current = recognition;
+    speechModalOpenRef.current = true;
+    setSpeechTranscript("");
+    speechTranscriptRef.current = "";
+    setSpeechModalOpen(true);
+    setIsListening(true);
+    recognition.start();
+  };
+
+  const closeSpeechInput = () => {
+    speechModalOpenRef.current = false;
+    speechRecognitionRef.current?.stop();
+    speechRecognitionRef.current = null;
+    setIsListening(false);
+    setSpeechModalOpen(false);
+
+    const transcript = speechTranscriptRef.current.trim();
+    if (transcript) {
+      setInput(transcript);
+      void submitMessage(transcript);
+    }
+  };
+
+  const submitMessage = async (message: string) => {
+    if (!message.trim() || sending) return;
 
     let convId = activeConvId;
     if (!convId) {
@@ -250,7 +360,7 @@ export default function ChatbotPage() {
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input.trim(),
+      content: message.trim(),
       timestamp: new Date().toISOString(),
     };
 
@@ -295,6 +405,11 @@ export default function ChatbotPage() {
     } finally {
       setSending(false);
     }
+  };
+
+  const sendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitMessage(input);
   };
 
   const toggleKb = (collName: string) => {
@@ -418,6 +533,60 @@ export default function ChatbotPage() {
           </div>
         </div>
       </div>
+
+      {speechModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="speech-dialog-title"
+            className="w-full max-w-sm rounded-2xl border border-neutral-800 bg-[#0b0b0b] p-6 text-center shadow-2xl"
+          >
+            <div className="mb-5 flex justify-end">
+              <button
+                type="button"
+                onClick={closeSpeechInput}
+                aria-label="Tutup input suara dan kirim"
+                title="Tutup input suara dan kirim"
+                className="rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-900 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="relative mx-auto mb-5 flex h-24 w-24 items-center justify-center">
+              {isListening && (
+                <>
+                  <span className="absolute inset-0 animate-ping rounded-full border border-white/20" />
+                  <span className="absolute inset-2 animate-pulse rounded-full bg-white/10" />
+                </>
+              )}
+              <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                {isListening ? <Mic className="h-7 w-7" /> : <MicOff className="h-7 w-7" />}
+              </div>
+            </div>
+
+            <h2 id="speech-dialog-title" className="text-base font-semibold text-white">
+              {isListening ? "Mendengarkan..." : "Siap mendengarkan"}
+            </h2>
+            <p className="mt-1 text-xs text-neutral-500">
+              {speechLanguage === "id-ID" ? "Bahasa Indonesia" : "English"}
+            </p>
+
+            <div className="mt-5 min-h-20 rounded-xl border border-neutral-800 bg-black/60 p-3 text-left text-sm text-neutral-300">
+              {speechTranscript || "Silakan bicara. Tutup modal untuk mengirim ke AI."}
+            </div>
+
+            <button
+              type="button"
+              onClick={closeSpeechInput}
+              className="mt-5 w-full rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-neutral-200"
+            >
+              {speechTranscript ? "Tutup & Kirim" : "Tutup"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-black">
@@ -635,6 +804,37 @@ export default function ChatbotPage() {
               disabled={sending}
               className="flex-1 px-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-sm text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:border-neutral-600 disabled:opacity-50"
             />
+
+            <select
+              value={speechLanguage}
+              onChange={(e) => setSpeechLanguage(e.target.value)}
+              disabled={sending || isListening}
+              aria-label="Bahasa input suara"
+              className="h-10 bg-black border border-neutral-800 rounded-xl px-2 text-[11px] text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50"
+            >
+              <option value="id-ID">ID</option>
+              <option value="en-US">EN</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={startSpeechInput}
+              disabled={sending || !speechSupported || speechModalOpen}
+              aria-label={isListening ? "Berhenti merekam" : "Input suara"}
+              title={
+                speechSupported
+                  ? isListening
+                    ? "Berhenti merekam"
+                    : "Input suara"
+                  : "Input suara tidak didukung browser ini"
+              }
+              className={`p-2.5 rounded-xl border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${isListening
+                ? "bg-red-500/15 border-red-400/50 text-red-300"
+                : "bg-neutral-900 border-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-800"
+                }`}
+            >
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
 
             <button
               type="submit"

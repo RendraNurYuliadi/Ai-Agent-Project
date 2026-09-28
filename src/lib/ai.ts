@@ -20,9 +20,15 @@ export interface ChatMessage {
   content: string;
 }
 
+export const OPENROUTER_FREE_MODEL = "openrouter/free";
+
+export function isOpenRouterFreeModel(model: string): boolean {
+  return model === OPENROUTER_FREE_MODEL || model.endsWith(":free");
+}
+
 // Daftar model OpenRouter gratis yang populer dan stabil
 export const OPENROUTER_FREE_MODELS = [
-  { id: "openrouter/auto", label: "Auto (Pilih Terbaik)", desc: "OpenRouter pilih otomatis" },
+  { id: OPENROUTER_FREE_MODEL, label: "OpenRouter Free", desc: "Hanya model gratis" },
   { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B Instruct", desc: "Meta · Gratis" },
   { id: "meta-llama/llama-3.1-8b-instruct:free", label: "Llama 3.1 8B Instruct", desc: "Meta · Gratis · Cepat" },
   { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash", desc: "Google · Gratis" },
@@ -62,9 +68,11 @@ export async function getAIConfig(db?: Db | null): Promise<AIConfig> {
     lmStudioModel: doc?.model || process.env.LM_STUDIO_MODEL || "local-model",
     openRouterApiKey: doc?.openRouterApiKey || process.env.OPENROUTER_API_KEY || "",
     openRouterModel:
-      doc?.openRouterModel ||
-      process.env.OPENROUTER_MODEL ||
-      "meta-llama/llama-3.3-70b-instruct:free",
+      isOpenRouterFreeModel(doc?.openRouterModel || "")
+        ? doc.openRouterModel
+        : isOpenRouterFreeModel(process.env.OPENROUTER_MODEL || "")
+          ? process.env.OPENROUTER_MODEL
+          : OPENROUTER_FREE_MODEL,
     temperature: doc?.temperature ?? 0.7,
     maxTokens: doc?.maxTokens ?? 1024,
   };
@@ -219,13 +227,14 @@ export async function testLMStudioConnection(baseUrl: string) {
  * Test connectivity to OpenRouter and return available free models
  */
 export async function testOpenRouterConnection(apiKey: string, model: string) {
+  void model;
   if (!apiKey || !apiKey.trim()) {
     throw new Error(
       "API Key OpenRouter tidak boleh kosong. Dapatkan gratis di https://openrouter.ai/keys"
     );
   }
 
-  const targetModel = model?.trim() || "meta-llama/llama-3.3-70b-instruct:free";
+  const targetModel = isOpenRouterFreeModel(model) ? model : OPENROUTER_FREE_MODEL;
 
   // Quick ping test with minimal tokens
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -251,8 +260,8 @@ export async function testOpenRouterConnection(apiKey: string, model: string) {
     throw new Error(`Koneksi OpenRouter gagal: ${msg}`);
   }
 
-  // Fetch list of free models from OpenRouter
-  let availableModels: string[] = OPENROUTER_FREE_MODELS.map((m) => m.id);
+  // Fetch the current free model list directly from OpenRouter
+  let availableModels: string[] = [];
   try {
     const modelsRes = await fetch("https://openrouter.ai/api/v1/models", {
       headers: { Authorization: `Bearer ${apiKey.trim()}` },
@@ -263,13 +272,16 @@ export async function testOpenRouterConnection(apiKey: string, model: string) {
       const freeFetched = (modelsData.data as Array<{ id: string; pricing?: { prompt: string } }>)
         ?.filter((m) => m.id.endsWith(":free") || m.pricing?.prompt === "0")
         ?.map((m) => m.id)
-        ?.slice(0, 20);
+        ?.slice(0, 100);
       if (freeFetched && freeFetched.length > 0) {
-        availableModels = freeFetched;
+        availableModels = [
+          OPENROUTER_FREE_MODEL,
+          ...freeFetched.filter((id) => id !== OPENROUTER_FREE_MODEL),
+        ];
       }
     }
   } catch {
-    // Ignore models list error — fallback to curated list
+    // The connection result remains valid even if the model catalog is unavailable.
   }
 
   return {

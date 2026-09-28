@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
-import { getAIConfig } from "@/lib/ai";
+import { getAIConfig, isOpenRouterFreeModel, OPENROUTER_FREE_MODEL } from "@/lib/ai";
 
 // GET /api/genai-route/config
 export async function GET(req: NextRequest) {
@@ -19,7 +19,6 @@ export async function GET(req: NextRequest) {
         baseUrl: config.lmStudioUrl,
         model: config.lmStudioModel,
         // OpenRouter
-        openRouterApiKey: config.openRouterApiKey,
         openRouterModel: config.openRouterModel,
         // Common
         temperature: config.temperature,
@@ -49,6 +48,12 @@ export async function PUT(req: NextRequest) {
     } = await req.json();
 
     const db = await getDatabase();
+    const currentConfig = await getAIConfig(db);
+
+    const selectedOpenRouterModel =
+      typeof openRouterModel === "string" && isOpenRouterFreeModel(openRouterModel)
+        ? openRouterModel
+        : OPENROUTER_FREE_MODEL;
 
     const updatePayload = {
       provider: provider === "openrouter" ? "openrouter" : "lmstudio",
@@ -56,8 +61,8 @@ export async function PUT(req: NextRequest) {
       baseUrl: baseUrl || "http://localhost:1234/v1",
       model: model || "local-model",
       // OpenRouter fields
-      openRouterApiKey: openRouterApiKey || "",
-      openRouterModel: openRouterModel || "meta-llama/llama-3.3-70b-instruct:free",
+      openRouterApiKey: openRouterApiKey?.trim() || currentConfig.openRouterApiKey,
+      openRouterModel: selectedOpenRouterModel,
       // Common
       temperature: typeof temperature === "number" ? temperature : 0.7,
       maxTokens: typeof maxTokens === "number" ? maxTokens : 1024,

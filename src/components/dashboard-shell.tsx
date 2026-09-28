@@ -52,7 +52,6 @@ export default function DashboardShell({
       href: "/dashboard",
       icon: LayoutDashboard,
       current: pathname === "/dashboard",
-      roles: ["admin", "manager"],
     },
     {
       name: "Users",
@@ -88,7 +87,7 @@ export default function DashboardShell({
       roles: ["admin"],
     },
     {
-      name: "GenAI Route",
+      name: "LLM Gateway",
       href: "/dashboard/genai-route",
       icon: Route,
       current: pathname.startsWith("/dashboard/genai-route"),
@@ -142,7 +141,7 @@ export default function DashboardShell({
   const RoleIcon = roleInfo.icon;
 
   const mainNav = visibleNav.filter((n) =>
-    ["Dashboard", "Chatbot", "Chat History", "GenAI Route"].includes(n.name)
+    ["Dashboard", "Chatbot", "Chat History", "LLM Gateway"].includes(n.name)
   );
 
   const adminNav = visibleNav.filter((n) =>

@@ -19,10 +19,8 @@ import {
   TestTube,
   Globe,
   HardDrive,
-  Key,
-  ExternalLink,
 } from "lucide-react";
-import { OPENROUTER_FREE_MODELS } from "@/lib/ai";
+import { OPENROUTER_FREE_MODEL } from "@/lib/ai";
 
 interface Config {
   provider: "lmstudio" | "openrouter";
@@ -40,7 +38,7 @@ export default function GenAIRoutePage() {
     baseUrl: "http://localhost:1234/v1",
     model: "local-model",
     openRouterApiKey: "",
-    openRouterModel: "meta-llama/llama-3.3-70b-instruct:free",
+    openRouterModel: OPENROUTER_FREE_MODEL,
     temperature: 0.7,
     maxTokens: 1024,
   });
@@ -205,7 +203,13 @@ export default function GenAIRoutePage() {
           {/* OpenRouter */}
           <button
             type="button"
-            onClick={() => setConfig({ ...config, provider: "openrouter" })}
+            onClick={() =>
+              setConfig({
+                ...config,
+                provider: "openrouter",
+                openRouterModel: config.openRouterModel || OPENROUTER_FREE_MODEL,
+              })
+            }
             className={`p-4 rounded-xl border text-left flex items-start gap-3.5 transition-all cursor-pointer ${
               isOpenRouter
                 ? "bg-white/10 border-white text-white shadow-md ring-1 ring-white/20"
@@ -320,35 +324,7 @@ export default function GenAIRoutePage() {
             ) : (
               /* OpenRouter Fields */
               <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-neutral-300 mb-1.5 flex items-center gap-1.5">
-                      <Key className="w-3.5 h-3.5 text-neutral-400" />
-                      OpenRouter API Key
-                    </label>
-                    <input
-                      type="password"
-                      value={config.openRouterApiKey}
-                      onChange={(e) =>
-                        setConfig({ ...config, openRouterApiKey: e.target.value })
-                      }
-                      placeholder="sk-or-v1-..."
-                      className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
-                    />
-                    <p className="text-[11px] text-neutral-500 mt-1 flex items-center gap-1">
-                      Gratis di{" "}
-                      <a
-                        href="https://openrouter.ai/keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-white underline hover:text-neutral-300 flex items-center gap-0.5"
-                      >
-                        openrouter.ai/keys
-                        <ExternalLink className="w-2.5 h-2.5" />
-                      </a>
-                    </p>
-                  </div>
-
+                <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-medium text-neutral-300 mb-1.5">
                       Model OpenRouter
@@ -359,35 +335,12 @@ export default function GenAIRoutePage() {
                       onChange={(e) =>
                         setConfig({ ...config, openRouterModel: e.target.value })
                       }
-                      placeholder="meta-llama/llama-3.3-70b-instruct:free"
+                      placeholder={OPENROUTER_FREE_MODEL}
                       className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
                     />
                   </div>
                 </div>
 
-                {/* Free Models Quick Select */}
-                <div>
-                  <p className="text-[11px] font-medium text-neutral-400 mb-2">
-                    🆓 Model Gratis yang Tersedia — Klik untuk Pilih:
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {OPENROUTER_FREE_MODELS.map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setConfig({ ...config, openRouterModel: m.id })}
-                        title={`${m.label} — ${m.desc}`}
-                        className={`text-[10px] px-2.5 py-1 rounded-lg border cursor-pointer transition-all ${
-                          config.openRouterModel === m.id
-                            ? "bg-white text-black border-white"
-                            : "bg-neutral-900 text-neutral-400 border-neutral-700 hover:text-white hover:border-neutral-500"
-                        }`}
-                      >
-                        {m.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
               </div>
             )}
 
