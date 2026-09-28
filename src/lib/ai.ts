@@ -1,15 +1,15 @@
 import { Db } from "mongodb";
 
-export type AIProvider = "lmstudio" | "gemini";
+export type AIProvider = "lmstudio" | "openrouter";
 
 export interface AIConfig {
   provider: AIProvider;
-  // LM Studio Config
+  // LM Studio Config (Local)
   lmStudioUrl: string;
   lmStudioModel: string;
-  // Google AI Studio (Gemini) Config
-  geminiApiKey: string;
-  geminiModel: string;
+  // OpenRouter Config (Public / Cloud)
+  openRouterApiKey: string;
+  openRouterModel: string;
   // Common Settings
   temperature: number;
   maxTokens: number;
@@ -19,6 +19,21 @@ export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
+
+// Daftar model OpenRouter gratis yang populer dan stabil
+export const OPENROUTER_FREE_MODELS = [
+  { id: "openrouter/auto", label: "Auto (Pilih Terbaik)", desc: "OpenRouter pilih otomatis" },
+  { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B Instruct", desc: "Meta · Gratis" },
+  { id: "meta-llama/llama-3.1-8b-instruct:free", label: "Llama 3.1 8B Instruct", desc: "Meta · Gratis · Cepat" },
+  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash", desc: "Google · Gratis" },
+  { id: "google/gemma-3-27b-it:free", label: "Gemma 3 27B IT", desc: "Google · Gratis" },
+  { id: "google/gemma-3-12b-it:free", label: "Gemma 3 12B IT", desc: "Google · Gratis" },
+  { id: "microsoft/phi-4:free", label: "Phi-4", desc: "Microsoft · Gratis" },
+  { id: "mistralai/mistral-7b-instruct:free", label: "Mistral 7B Instruct", desc: "Mistral · Gratis · Cepat" },
+  { id: "qwen/qwen3-8b:free", label: "Qwen3 8B", desc: "Alibaba · Gratis" },
+  { id: "deepseek/deepseek-r1:free", label: "DeepSeek R1", desc: "DeepSeek · Gratis · Reasoning" },
+  { id: "nvidia/llama-3.1-nemotron-70b-instruct:free", label: "Nemotron 70B", desc: "NVIDIA · Gratis" },
+];
 
 /**
  * Retrieve active AI configuration, merging DB preferences with Environment Variables.
@@ -34,17 +49,22 @@ export async function getAIConfig(db?: Db | null): Promise<AIConfig> {
     }
   }
 
-  const defaultProvider: AIProvider = (process.env.AI_PROVIDER as AIProvider) === "gemini" ? "gemini" : "lmstudio";
-  const provider: AIProvider = (doc?.provider === "gemini" || doc?.provider === "lmstudio")
-    ? doc.provider
-    : defaultProvider;
+  const defaultProvider: AIProvider =
+    (process.env.AI_PROVIDER as AIProvider) === "openrouter" ? "openrouter" : "lmstudio";
+  const provider: AIProvider =
+    doc?.provider === "openrouter" || doc?.provider === "lmstudio"
+      ? doc.provider
+      : defaultProvider;
 
   return {
     provider,
     lmStudioUrl: doc?.baseUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1",
     lmStudioModel: doc?.model || process.env.LM_STUDIO_MODEL || "local-model",
-    geminiApiKey: doc?.geminiApiKey || process.env.GEMINI_API_KEY || "",
-    geminiModel: doc?.geminiModel || process.env.GEMINI_MODEL || "gemini-1.5-flash",
+    openRouterApiKey: doc?.openRouterApiKey || process.env.OPENROUTER_API_KEY || "",
+    openRouterModel:
+      doc?.openRouterModel ||
+      process.env.OPENROUTER_MODEL ||
+      "meta-llama/llama-3.3-70b-instruct:free",
     temperature: doc?.temperature ?? 0.7,
     maxTokens: doc?.maxTokens ?? 1024,
   };
@@ -94,9 +114,10 @@ async function callLMStudio(
 }
 
 /**
- * Call Google AI Studio (Gemini REST API)
+ * Call OpenRouter (OpenAI-compatible cloud API with free models)
+ * Docs: https://openrouter.ai/docs
  */
-async function callGoogleGemini(
+async function callOpenRouter(
   config: AIConfig,
   messages: ChatMessage[],
   systemInstruction?: string,
@@ -104,58 +125,52 @@ async function callGoogleGemini(
   maxTokens?: number,
   timeoutMs: number = 30000
 ): Promise<string> {
-  if (!config.geminiApiKey) {
-    throw new Error("GEMINI_API_KEY belum dikonfigurasi. Silakan isi di .env atau pengaturan GenAI Route.");
+  if (!config.openRouterApiKey) {
+    throw new Error(
+      "OPENROUTER_API_KEY belum dikonfigurasi. Dapatkan API key gratis di https://openrouter.ai/keys"
+    );
   }
 
-  const model = config.geminiModel || "gemini-1.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${config.geminiApiKey}`;
-
-  // Format messages into Gemini contents format
-  const contents = messages
-    .filter((m) => m.role !== "system")
-    .map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    }));
-
-  const payload: any = {
-    contents,
-    generationConfig: {
-      temperature: temperature ?? config.temperature,
-      maxOutputTokens: maxTokens ?? config.maxTokens,
-    },
-  };
-
+  const formattedMessages: ChatMessage[] = [];
   if (systemInstruction) {
-    payload.systemInstruction = {
-      parts: [{ text: systemInstruction }],
-    };
+    formattedMessages.push({ role: "system", content: systemInstruction });
   }
+  formattedMessages.push(...messages);
 
-  const res = await fetch(url, {
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${config.openRouterApiKey}`,
+      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
+      "X-Title": process.env.NEXT_PUBLIC_APP_NAME || "GenAI Chatbot",
+    },
+    body: JSON.stringify({
+      model: config.openRouterModel,
+      messages: formattedMessages,
+      temperature: temperature ?? config.temperature,
+      max_tokens: maxTokens ?? config.maxTokens,
+    }),
     signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => null);
-    const message = errorData?.error?.message || `HTTP ${res.status} (${res.statusText})`;
-    throw new Error(`Google AI Studio error: ${message}`);
+    const message =
+      errorData?.error?.message || `HTTP ${res.status} (${res.statusText})`;
+    throw new Error(`OpenRouter error: ${message}`);
   }
 
   const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) {
-    throw new Error("Google AI Studio tidak mengembalikan teks jawaban.");
+  const answer = data.choices?.[0]?.message?.content;
+  if (typeof answer !== "string") {
+    throw new Error("Format respons OpenRouter tidak valid");
   }
-  return text;
+  return answer;
 }
 
 /**
- * Main completion function: automatically dispatches to LM Studio or Google Gemini
+ * Main completion function: automatically dispatches to LM Studio or OpenRouter
  */
 export async function generateAICompletion(options: {
   config: AIConfig;
@@ -167,8 +182,8 @@ export async function generateAICompletion(options: {
 }): Promise<string> {
   const { config, messages, systemInstruction, temperature, maxTokens, timeoutMs } = options;
 
-  if (config.provider === "gemini") {
-    return await callGoogleGemini(config, messages, systemInstruction, temperature, maxTokens, timeoutMs);
+  if (config.provider === "openrouter") {
+    return await callOpenRouter(config, messages, systemInstruction, temperature, maxTokens, timeoutMs);
   } else {
     return await callLMStudio(config, messages, systemInstruction, temperature, maxTokens, timeoutMs);
   }
@@ -186,7 +201,9 @@ export async function testLMStudioConnection(baseUrl: string) {
   });
 
   if (!res.ok) {
-    throw new Error(`LM Studio tidak merespons (Status: ${res.status}). Pastikan server sudah berjalan di ${testUrl}`);
+    throw new Error(
+      `LM Studio tidak merespons (Status: ${res.status}). Pastikan server sudah berjalan di ${testUrl}`
+    );
   }
 
   const data = await res.json();
@@ -199,54 +216,65 @@ export async function testLMStudioConnection(baseUrl: string) {
 }
 
 /**
- * Test connectivity to Google AI Studio (Gemini)
+ * Test connectivity to OpenRouter and return available free models
  */
-export async function testGeminiConnection(apiKey: string, model: string = "gemini-1.5-flash") {
+export async function testOpenRouterConnection(apiKey: string, model: string) {
   if (!apiKey || !apiKey.trim()) {
-    throw new Error("API Key Google AI Studio tidak boleh kosong.");
+    throw new Error(
+      "API Key OpenRouter tidak boleh kosong. Dapatkan gratis di https://openrouter.ai/keys"
+    );
   }
 
-  const targetModel = model.trim() || "gemini-1.5-flash";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(targetModel)}:generateContent?key=${apiKey.trim()}`;
+  const targetModel = model?.trim() || "meta-llama/llama-3.3-70b-instruct:free";
 
-  const res = await fetch(url, {
+  // Quick ping test with minimal tokens
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey.trim()}`,
+      "HTTP-Referer": "http://localhost:3000",
+      "X-Title": "GenAI Chatbot",
+    },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: "Ping test" }] }],
-      generationConfig: { maxOutputTokens: 5 },
+      model: targetModel,
+      messages: [{ role: "user", content: "Hi" }],
+      max_tokens: 5,
     }),
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(15000),
   });
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => null);
-    const msg = errorData?.error?.message || `HTTP ${res.status} (${res.statusText})`;
-    throw new Error(`Koneksi Google AI Studio gagal: ${msg}`);
+    const msg =
+      errorData?.error?.message || `HTTP ${res.status} (${res.statusText})`;
+    throw new Error(`Koneksi OpenRouter gagal: ${msg}`);
   }
 
-  // Also fetch available models list if possible
-  let availableModels: string[] = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"];
+  // Fetch list of free models from OpenRouter
+  let availableModels: string[] = OPENROUTER_FREE_MODELS.map((m) => m.id);
   try {
-    const modelsRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey.trim()}`, {
-      signal: AbortSignal.timeout(5000),
+    const modelsRes = await fetch("https://openrouter.ai/api/v1/models", {
+      headers: { Authorization: `Bearer ${apiKey.trim()}` },
+      signal: AbortSignal.timeout(8000),
     });
     if (modelsRes.ok) {
       const modelsData = await modelsRes.json();
-      const fetched = modelsData.models
-        ?.filter((m: any) => m.supportedGenerationMethods?.includes("generateContent"))
-        ?.map((m: any) => m.name.replace("models/", ""));
-      if (fetched && fetched.length > 0) {
-        availableModels = fetched;
+      const freeFetched = (modelsData.data as Array<{ id: string; pricing?: { prompt: string } }>)
+        ?.filter((m) => m.id.endsWith(":free") || m.pricing?.prompt === "0")
+        ?.map((m) => m.id)
+        ?.slice(0, 20);
+      if (freeFetched && freeFetched.length > 0) {
+        availableModels = freeFetched;
       }
     }
   } catch {
-    // Ignore models list error and fallback to default list
+    // Ignore models list error — fallback to curated list
   }
 
   return {
     success: true,
-    message: `Google AI Studio terhubung! Model '${targetModel}' siap digunakan.`,
+    message: `OpenRouter terhubung! Model '${targetModel}' siap digunakan.`,
     models: availableModels,
   };
 }

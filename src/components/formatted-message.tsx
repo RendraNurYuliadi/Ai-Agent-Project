@@ -59,10 +59,9 @@ function parseInline(text: string, isUser: boolean = false): React.ReactNode[] {
             px-1.5 py-0.5
             font-mono
             text-xs
-            ${
-              isUser
-                ? "border border-neutral-300 bg-neutral-100 text-black"
-                : "border border-neutral-800 bg-[#0a0a0a] text-neutral-300"
+            ${isUser
+              ? "border border-neutral-300 bg-neutral-100 text-black"
+              : "border border-neutral-800 bg-[#0a0a0a] text-neutral-300"
             }
           `}
         >
@@ -140,10 +139,9 @@ export function FormattedMessage({
             p-3
             font-mono
             text-xs
-            ${
-              isUser
-                ? "border-neutral-300 bg-neutral-100 text-black"
-                : "border-neutral-800 bg-[#050505] text-neutral-300"
+            ${isUser
+              ? "border-neutral-300 bg-neutral-100 text-black"
+              : "border-neutral-800 bg-[#050505] text-neutral-300"
             }
           `}
         >

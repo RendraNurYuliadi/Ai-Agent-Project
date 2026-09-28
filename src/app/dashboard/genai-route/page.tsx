@@ -20,14 +20,16 @@ import {
   Globe,
   HardDrive,
   Key,
+  ExternalLink,
 } from "lucide-react";
+import { OPENROUTER_FREE_MODELS } from "@/lib/ai";
 
 interface Config {
-  provider: "lmstudio" | "gemini";
+  provider: "lmstudio" | "openrouter";
   baseUrl: string;
   model: string;
-  geminiApiKey: string;
-  geminiModel: string;
+  openRouterApiKey: string;
+  openRouterModel: string;
   temperature: number;
   maxTokens: number;
 }
@@ -37,16 +39,24 @@ export default function GenAIRoutePage() {
     provider: "lmstudio",
     baseUrl: "http://localhost:1234/v1",
     model: "local-model",
-    geminiApiKey: "",
-    geminiModel: "gemini-1.5-flash",
+    openRouterApiKey: "",
+    openRouterModel: "meta-llama/llama-3.3-70b-instruct:free",
     temperature: 0.7,
     maxTokens: 1024,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string; models?: string[]; error?: string } | null>(null);
-  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    models?: string[];
+  } | null>(null);
+  const [notification, setNotification] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const notify = (type: "success" | "error", message: string) => {
     setNotification({ type, message });
@@ -54,11 +64,15 @@ export default function GenAIRoutePage() {
   };
 
   useEffect(() => {
-    fetch("/api/auth/me").then((r) => r.json()).then((d) => {
-      if (d.user && d.user.role !== "admin") {
-        window.location.href = d.user.role === "manager" ? "/dashboard" : "/dashboard/chatbot";
-      }
-    }).catch(() => { });
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.user && d.user.role !== "admin") {
+          window.location.href =
+            d.user.role === "manager" ? "/dashboard" : "/dashboard/chatbot";
+        }
+      })
+      .catch(() => {});
     fetchConfig();
   }, []);
 
@@ -68,12 +82,9 @@ export default function GenAIRoutePage() {
       const res = await fetch("/api/genai-route/config");
       if (res.ok) {
         const data = await res.json();
-        setConfig((prev) => ({
-          ...prev,
-          ...data.config,
-        }));
+        setConfig((prev) => ({ ...prev, ...data.config }));
       }
-    } catch { }
+    } catch {}
     setLoading(false);
   };
 
@@ -86,7 +97,7 @@ export default function GenAIRoutePage() {
         body: JSON.stringify(config),
       });
       if (res.ok) {
-        notify("success", "Konfigurasi GenAI berhasil disimpan!");
+        notify("success", "Konfigurasi LLM Gateway berhasil disimpan!");
       } else {
         throw new Error("Gagal menyimpan");
       }
@@ -106,22 +117,26 @@ export default function GenAIRoutePage() {
         body: JSON.stringify({
           provider: config.provider,
           baseUrl: config.baseUrl,
-          model: config.provider === "gemini" ? config.geminiModel : config.model,
-          apiKey: config.geminiApiKey,
+          model: isOpenRouter ? config.openRouterModel : config.model,
+          apiKey: config.openRouterApiKey,
         }),
       });
       const data = await res.json();
       setTestResult(data);
     } catch {
-      setTestResult({ success: false, message: "Tidak dapat menghubungi endpoint testing." });
+      setTestResult({
+        success: false,
+        error: "Tidak dapat menghubungi endpoint testing.",
+      });
     }
     setTesting(false);
   };
 
-  const isGemini = config.provider === "gemini";
+  const isOpenRouter = config.provider === "openrouter";
 
   return (
     <div className="space-y-6">
+      {/* Notification Toast */}
       {notification && (
         <div
           className={`fixed bottom-6 right-6 z-50 p-4 rounded-xl shadow-2xl border flex items-center gap-3 ${
@@ -139,32 +154,39 @@ export default function GenAIRoutePage() {
         </div>
       )}
 
+      {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
           <Route className="w-6 h-6 text-white" />
-          GenAI Route
+          LLM Gateway
         </h1>
         <p className="text-neutral-400 text-sm mt-1">
-          Pilih dan konfigurasikan AI Provider: Local (LM Studio) atau Public/Cloud (Google AI Studio).
+          Pilih AI Provider: <strong className="text-white">Local</strong> (LM Studio) atau{" "}
+          <strong className="text-white">Public / Cloud</strong> (OpenRouter — model gratis tersedia).
         </p>
       </div>
 
-      {/* Provider Switch Tabs */}
+      {/* Provider Switch */}
       <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl p-4">
         <label className="block text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">
           Pilih Mode AI Provider Aktif
         </label>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* LM Studio */}
           <button
             type="button"
             onClick={() => setConfig({ ...config, provider: "lmstudio" })}
             className={`p-4 rounded-xl border text-left flex items-start gap-3.5 transition-all cursor-pointer ${
-              !isGemini
+              !isOpenRouter
                 ? "bg-white/10 border-white text-white shadow-md ring-1 ring-white/20"
                 : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
             }`}
           >
-            <div className={`p-2.5 rounded-lg shrink-0 ${!isGemini ? "bg-white text-black" : "bg-neutral-900 text-neutral-400"}`}>
+            <div
+              className={`p-2.5 rounded-lg shrink-0 ${
+                !isOpenRouter ? "bg-white text-black" : "bg-neutral-900 text-neutral-400"
+              }`}
+            >
               <HardDrive className="w-5 h-5" />
             </div>
             <div>
@@ -175,32 +197,37 @@ export default function GenAIRoutePage() {
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-1">
-                Jalankan LLM di komputer lokal tanpa kuota internet atau batasan API.
+                Jalankan LLM di komputer lokal. Bebas biaya & tanpa internet.
               </p>
             </div>
           </button>
 
+          {/* OpenRouter */}
           <button
             type="button"
-            onClick={() => setConfig({ ...config, provider: "gemini" })}
+            onClick={() => setConfig({ ...config, provider: "openrouter" })}
             className={`p-4 rounded-xl border text-left flex items-start gap-3.5 transition-all cursor-pointer ${
-              isGemini
+              isOpenRouter
                 ? "bg-white/10 border-white text-white shadow-md ring-1 ring-white/20"
                 : "bg-neutral-950 border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
             }`}
           >
-            <div className={`p-2.5 rounded-lg shrink-0 ${isGemini ? "bg-white text-black" : "bg-neutral-900 text-neutral-400"}`}>
+            <div
+              className={`p-2.5 rounded-lg shrink-0 ${
+                isOpenRouter ? "bg-white text-black" : "bg-neutral-900 text-neutral-400"
+              }`}
+            >
               <Globe className="w-5 h-5" />
             </div>
             <div>
               <div className="font-semibold text-sm flex items-center gap-2">
-                Google AI Studio
+                OpenRouter
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white border border-white/30">
                   Public / Cloud
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-1">
-                Gunakan API Gemini (1.5 Flash / 2.0 Flash) untuk respon super cepat di cloud.
+                Akses Llama 3.3, Gemini Flash, Mistral, DeepSeek & lebih banyak model gratis via cloud.
               </p>
             </div>
           </button>
@@ -211,52 +238,43 @@ export default function GenAIRoutePage() {
       <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl p-6">
         <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-white" />
-          Alur Routing GenAI ({isGemini ? "Google AI Studio" : "LM Studio Local"})
+          Alur Routing ({isOpenRouter ? "OpenRouter Cloud" : "LM Studio Local"})
         </h2>
-
         <div className="flex flex-col items-center gap-2 py-4">
           <div className="px-5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white text-xs font-medium flex items-center gap-2">
             <MessageSquare className="w-4 h-4" />
             User mengirim pesan
           </div>
-
           <ArrowDown className="w-4 h-4 text-neutral-600" />
-
           <div className="px-5 py-2.5 rounded-xl bg-neutral-500/10 border border-neutral-500/20 text-neutral-300 text-xs font-medium flex items-center gap-2">
             <Cpu className="w-4 h-4" />
-            {isGemini ? "Gemini" : "LM Studio"}: Route Prompt → Klasifikasi (SMALL_TALK / FAQ)
+            {isOpenRouter ? "OpenRouter" : "LM Studio"}: Route Prompt → Klasifikasi (SMALL_TALK / FAQ)
           </div>
-
           <ArrowDown className="w-4 h-4 text-neutral-600" />
-
           <div className="flex items-center gap-4">
             <div className="px-4 py-2 rounded-xl bg-neutral-700/30 border border-neutral-700/50 text-neutral-200 text-xs font-medium flex items-center gap-2">
               <Bot className="w-3.5 h-3.5" />
               SMALL_TALK
             </div>
-
             <span className="text-xs text-neutral-600">atau</span>
-
             <div className="px-4 py-2 rounded-xl bg-neutral-500/10 border border-neutral-500/20 text-neutral-300 text-xs font-medium flex items-center gap-2">
               <Bot className="w-3.5 h-3.5" />
-              FAQ (+ Smart Search KB Context)
+              FAQ (+ Smart Search KB)
             </div>
           </div>
-
           <ArrowDown className="w-4 h-4 text-neutral-600" />
-
           <div className="px-5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white text-xs font-medium flex items-center gap-2">
             <Zap className="w-4 h-4" />
-            {isGemini ? "Google AI Studio" : "LM Studio"}: Generate Jawaban AI
+            {isOpenRouter ? "OpenRouter" : "LM Studio"}: Generate Jawaban AI
           </div>
         </div>
       </div>
 
-      {/* Provider Details Configuration */}
+      {/* Configuration Form */}
       <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl p-6">
         <h2 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
           <Settings className="w-4 h-4 text-white" />
-          Konfigurasi {isGemini ? "Google AI Studio (Gemini)" : "LM Studio (Local)"}
+          Konfigurasi {isOpenRouter ? "OpenRouter (Public / Cloud)" : "LM Studio (Local)"}
         </h2>
 
         {loading ? (
@@ -265,8 +283,8 @@ export default function GenAIRoutePage() {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* If LM Studio is selected */}
-            {!isGemini ? (
+            {!isOpenRouter ? (
+              /* LM Studio Fields */
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-neutral-300 mb-1.5">
@@ -280,13 +298,12 @@ export default function GenAIRoutePage() {
                     className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
                   />
                   <p className="text-[11px] text-neutral-500 mt-1">
-                    URL endpoint API LM Studio (OpenAI-compatible)
+                    URL endpoint OpenAI-compatible dari LM Studio
                   </p>
                 </div>
-
                 <div>
                   <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                    Model LM Studio
+                    Nama Model
                   </label>
                   <input
                     type="text"
@@ -296,62 +313,77 @@ export default function GenAIRoutePage() {
                     className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
                   />
                   <p className="text-[11px] text-neutral-500 mt-1">
-                    Nama model yang di-load di LM Studio
+                    Nama model yang sedang di-load di LM Studio
                   </p>
                 </div>
               </div>
             ) : (
-              /* If Google AI Studio is selected */
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-neutral-300 mb-1.5 flex items-center gap-1.5">
-                    <Key className="w-3.5 h-3.5 text-neutral-400" />
-                    Google AI Studio API Key
-                  </label>
-                  <input
-                    type="password"
-                    value={config.geminiApiKey}
-                    onChange={(e) => setConfig({ ...config, geminiApiKey: e.target.value })}
-                    placeholder="AIzaSy..."
-                    className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
-                  />
-                  <p className="text-[11px] text-neutral-500 mt-1">
-                    Dapatkan API Key gratis di{" "}
-                    <a
-                      href="https://aistudio.google.com/app/apikey"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-white underline hover:text-neutral-300"
-                    >
-                      Google AI Studio
-                    </a>
-                  </p>
+              /* OpenRouter Fields */
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-300 mb-1.5 flex items-center gap-1.5">
+                      <Key className="w-3.5 h-3.5 text-neutral-400" />
+                      OpenRouter API Key
+                    </label>
+                    <input
+                      type="password"
+                      value={config.openRouterApiKey}
+                      onChange={(e) =>
+                        setConfig({ ...config, openRouterApiKey: e.target.value })
+                      }
+                      placeholder="sk-or-v1-..."
+                      className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
+                    />
+                    <p className="text-[11px] text-neutral-500 mt-1 flex items-center gap-1">
+                      Gratis di{" "}
+                      <a
+                        href="https://openrouter.ai/keys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-white underline hover:text-neutral-300 flex items-center gap-0.5"
+                      >
+                        openrouter.ai/keys
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-neutral-300 mb-1.5">
+                      Model OpenRouter
+                    </label>
+                    <input
+                      type="text"
+                      value={config.openRouterModel}
+                      onChange={(e) =>
+                        setConfig({ ...config, openRouterModel: e.target.value })
+                      }
+                      placeholder="meta-llama/llama-3.3-70b-instruct:free"
+                      className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
+                    />
+                  </div>
                 </div>
 
+                {/* Free Models Quick Select */}
                 <div>
-                  <label className="block text-xs font-medium text-neutral-300 mb-1.5">
-                    Model Gemini
-                  </label>
-                  <input
-                    type="text"
-                    value={config.geminiModel}
-                    onChange={(e) => setConfig({ ...config, geminiModel: e.target.value })}
-                    placeholder="gemini-1.5-flash"
-                    className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-neutral-600"
-                  />
-                  <div className="flex gap-2 mt-1.5">
-                    {["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"].map((m) => (
+                  <p className="text-[11px] font-medium text-neutral-400 mb-2">
+                    🆓 Model Gratis yang Tersedia — Klik untuk Pilih:
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {OPENROUTER_FREE_MODELS.map((m) => (
                       <button
-                        key={m}
+                        key={m.id}
                         type="button"
-                        onClick={() => setConfig({ ...config, geminiModel: m })}
-                        className={`text-[10px] px-2 py-0.5 rounded border cursor-pointer transition-all ${
-                          config.geminiModel === m
+                        onClick={() => setConfig({ ...config, openRouterModel: m.id })}
+                        title={`${m.label} — ${m.desc}`}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg border cursor-pointer transition-all ${
+                          config.openRouterModel === m.id
                             ? "bg-white text-black border-white"
-                            : "bg-neutral-900 text-neutral-400 border-neutral-700 hover:text-white"
+                            : "bg-neutral-900 text-neutral-400 border-neutral-700 hover:text-white hover:border-neutral-500"
                         }`}
                       >
-                        {m}
+                        {m.label}
                       </button>
                     ))}
                   </div>
@@ -359,8 +391,8 @@ export default function GenAIRoutePage() {
               </div>
             )}
 
-            {/* Common Parameters: Temperature & Max Tokens */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+            {/* Common: Temperature & Max Tokens */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-neutral-900">
               <div>
                 <label className="block text-xs font-medium text-neutral-300 mb-1.5">
                   Temperature: {config.temperature}
@@ -372,15 +404,12 @@ export default function GenAIRoutePage() {
                   step="0.1"
                   value={config.temperature}
                   onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      temperature: parseFloat(e.target.value),
-                    })
+                    setConfig({ ...config, temperature: parseFloat(e.target.value) })
                   }
                   className="w-full accent-neutral-200"
                 />
                 <div className="flex justify-between text-[10px] text-neutral-500">
-                  <span>0 (Fokus/Deterministik)</span>
+                  <span>0 (Fokus / Deterministik)</span>
                   <span>2 (Kreatif)</span>
                 </div>
               </div>
@@ -395,27 +424,21 @@ export default function GenAIRoutePage() {
                   max="8192"
                   value={config.maxTokens}
                   onChange={(e) =>
-                    setConfig({
-                      ...config,
-                      maxTokens: parseInt(e.target.value) || 1024,
-                    })
+                    setConfig({ ...config, maxTokens: parseInt(e.target.value) || 1024 })
                   }
                   className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-neutral-600"
                 />
               </div>
             </div>
 
+            {/* Action Buttons */}
             <div className="flex items-center gap-3 pt-3">
               <button
                 onClick={saveConfig}
                 disabled={saving}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-white hover:bg-neutral-200 text-black text-xs font-medium rounded-xl shadow-md disabled:opacity-50 cursor-pointer transition-all"
               >
-                {saving ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Save className="w-3.5 h-3.5" />
-                )}
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                 {saving ? "Menyimpan..." : "Simpan Konfigurasi"}
               </button>
 
@@ -429,7 +452,9 @@ export default function GenAIRoutePage() {
                 ) : (
                   <TestTube className="w-3.5 h-3.5 text-neutral-300" />
                 )}
-                {testing ? "Testing..." : `Test Koneksi ${isGemini ? "Google AI Studio" : "LM Studio"}`}
+                {testing
+                  ? "Testing..."
+                  : `Test Koneksi ${isOpenRouter ? "OpenRouter" : "LM Studio"}`}
               </button>
             </div>
           </div>
@@ -440,7 +465,9 @@ export default function GenAIRoutePage() {
       {testResult && (
         <div
           className={`border rounded-2xl p-5 ${
-            testResult.success ? "bg-white/5 border-neutral-600" : "bg-neutral-900/80 border-neutral-700"
+            testResult.success
+              ? "bg-white/5 border-neutral-600"
+              : "bg-neutral-900/80 border-neutral-700"
           }`}
         >
           <div className="flex items-center gap-2.5 mb-3">
@@ -449,7 +476,6 @@ export default function GenAIRoutePage() {
             ) : (
               <WifiOff className="w-5 h-5 text-neutral-400" />
             )}
-
             <h3 className="text-sm font-semibold text-white">
               {testResult.success ? "Koneksi Berhasil!" : "Koneksi Gagal"}
             </h3>
@@ -462,22 +488,21 @@ export default function GenAIRoutePage() {
           {testResult.models && testResult.models.length > 0 && (
             <div>
               <p className="text-[11px] font-medium text-neutral-400 mb-1.5">
-                Model yang tersedia:
+                Model yang tersedia (klik untuk pilih):
               </p>
-
               <div className="flex flex-wrap gap-2">
-                {testResult.models.slice(0, 15).map((m) => {
-                  const currentSelected = isGemini ? config.geminiModel : config.model;
+                {testResult.models.slice(0, 20).map((m) => {
+                  const current = isOpenRouter ? config.openRouterModel : config.model;
                   return (
                     <button
                       key={m}
                       onClick={() =>
-                        isGemini
-                          ? setConfig({ ...config, geminiModel: m })
+                        isOpenRouter
+                          ? setConfig({ ...config, openRouterModel: m })
                           : setConfig({ ...config, model: m })
                       }
                       className={`text-xs px-3 py-1.5 rounded-lg border cursor-pointer transition-all ${
-                        currentSelected === m
+                        current === m
                           ? "bg-white text-black border-white"
                           : "bg-neutral-900 text-neutral-300 border-neutral-700 hover:bg-neutral-800 hover:text-white"
                       }`}
@@ -492,37 +517,43 @@ export default function GenAIRoutePage() {
         </div>
       )}
 
-      {/* Info */}
+      {/* Info / Guide */}
       <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl p-5">
         <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider mb-3">
           Panduan Penggunaan Environment
         </h3>
-
-        <ul className="space-y-2 text-xs text-neutral-400">
+        <ul className="space-y-2.5 text-xs text-neutral-400">
           <li className="flex items-start gap-2">
             <span className="text-neutral-500 mt-0.5">•</span>
             <span>
-              <strong className="text-white">Local Mode (LM Studio):</strong> Memakai variabel{" "}
-              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">LM_STUDIO_URL</code> dan{" "}
-              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">LM_STUDIO_MODEL</code> di file{" "}
-              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">.env.local</code>.
+              <strong className="text-white">Local Mode (LM Studio):</strong> Tambahkan{" "}
+              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">LM_STUDIO_URL</code>{" "}
+              dan{" "}
+              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">LM_STUDIO_MODEL</code>{" "}
+              di file <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">.env.local</code>.
             </span>
           </li>
-
           <li className="flex items-start gap-2">
             <span className="text-neutral-500 mt-0.5">•</span>
             <span>
-              <strong className="text-white">Public / Cloud Mode (Google AI Studio):</strong> Memakai variabel{" "}
-              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">GEMINI_API_KEY</code> dan{" "}
-              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">GEMINI_MODEL</code> di file{" "}
-              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">.env.production</code> atau konfigurasi dashboard.
+              <strong className="text-white">Public / Cloud Mode (OpenRouter):</strong> Tambahkan{" "}
+              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">OPENROUTER_API_KEY</code>{" "}
+              dan{" "}
+              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">OPENROUTER_MODEL</code>{" "}
+              di environment variable hosting (Vercel, Railway, dsb).
             </span>
           </li>
-
           <li className="flex items-start gap-2">
             <span className="text-neutral-500 mt-0.5">•</span>
             <span>
-              Konfigurasi yang disimpan di halaman ini akan diutamakan secara dinamis tanpa perlu me-restart server.
+              Model OpenRouter gratis ditandai dengan suffix{" "}
+              <code className="bg-neutral-900 px-1 py-0.5 rounded text-white">:free</code>. Limit default 20 req/menit dan 50 req/hari.
+            </span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-neutral-500 mt-0.5">•</span>
+            <span>
+              Konfigurasi yang disimpan melalui halaman ini akan langsung aktif tanpa perlu restart server.
             </span>
           </li>
         </ul>
