@@ -1,17 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
-import { testLMStudioConnection, testGeminiConnection } from "@/lib/ai";
+import {
+  getAIConfig,
+  getOpenRouterFreeModels,
+  testLMStudioConnection,
+  testOpenRouterConnection,
+  OPENROUTER_FREE_MODEL,
+} from "@/lib/ai";
 
-// POST /api/genai-route/test — test AI connectivity (LM Studio or Google AI Studio)
+// POST /api/genai-route/test — test AI connectivity (LM Studio or OpenRouter)
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { provider = "lmstudio", baseUrl, model, apiKey } = await req.json();
+    const { provider = "lmstudio", baseUrl, model, apiKey, listModelsOnly } = await req.json();
 
-    if (provider === "gemini") {
-      const result = await testGeminiConnection(apiKey || process.env.GEMINI_API_KEY || "", model);
+    if (provider === "openrouter") {
+      const db = await getDatabase();
+      const storedConfig = await getAIConfig(db);
+      const key = apiKey?.trim() || storedConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY || "";
+      if (listModelsOnly) {
+        const models = await getOpenRouterFreeModels(key);
+        return NextResponse.json({
+          success: true,
+          message: "Daftar model OpenRouter berhasil dimuat.",
+          models,
+        });
+      }
+      const targetModel = model || OPENROUTER_FREE_MODEL;
+      const result = await testOpenRouterConnection(key, targetModel);
       return NextResponse.json(result);
     } else {
       const url = baseUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1";

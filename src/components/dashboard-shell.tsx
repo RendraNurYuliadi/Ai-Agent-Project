@@ -19,6 +19,7 @@ import {
   Zap,
   Route,
   ChevronRight,
+  Blocks,
 } from "lucide-react";
 import { UserSession } from "@/lib/auth";
 
@@ -52,7 +53,6 @@ export default function DashboardShell({
       href: "/dashboard",
       icon: LayoutDashboard,
       current: pathname === "/dashboard",
-      roles: ["admin", "manager"],
     },
     {
       name: "Users",
@@ -81,6 +81,13 @@ export default function DashboardShell({
       roles: ["admin", "manager"],
     },
     {
+      name: "Components",
+      href: "/dashboard/components",
+      icon: Blocks,
+      current: pathname.startsWith("/dashboard/components"),
+      roles: ["admin", "manager"],
+    },
+    {
       name: "Prompts",
       href: "/dashboard/prompts",
       icon: Zap,
@@ -88,7 +95,7 @@ export default function DashboardShell({
       roles: ["admin"],
     },
     {
-      name: "GenAI Route",
+      name: "LLM Gateway",
       href: "/dashboard/genai-route",
       icon: Route,
       current: pathname.startsWith("/dashboard/genai-route"),
@@ -142,7 +149,7 @@ export default function DashboardShell({
   const RoleIcon = roleInfo.icon;
 
   const mainNav = visibleNav.filter((n) =>
-    ["Dashboard", "Chatbot", "Chat History", "GenAI Route"].includes(n.name)
+    ["Dashboard", "Chatbot", "Chat History", "LLM Gateway"].includes(n.name)
   );
 
   const adminNav = visibleNav.filter((n) =>
@@ -150,7 +157,7 @@ export default function DashboardShell({
   );
 
   const contentNav = visibleNav.filter((n) =>
-    ["Knowledge Base", "Prompts"].includes(n.name)
+    ["Knowledge Base", "Components", "Prompts"].includes(n.name)
   );
 
   return (

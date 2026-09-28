@@ -18,7 +18,7 @@ import {
 export default async function DashboardPage() {
   const session = await getSession();
   if (session?.role === "public_user") {
-    redirect("/dashboard/chatbot");
+    redirect("/dashboard/public");
   }
 
   const db = await getDatabase();
@@ -271,8 +271,8 @@ export default async function DashboardPage() {
 
           <div className="mt-4 pt-3 border-t border-neutral-900 flex items-center justify-between text-xs text-neutral-500">
             <span className="text-neutral-300 truncate max-w-[120px]">
-              {genaiConfigDoc?.provider === "gemini"
-                ? (genaiConfigDoc?.geminiModel || "Google Gemini")
+              {genaiConfigDoc?.provider === "openrouter"
+                ? (genaiConfigDoc?.openRouterModel?.split("/").pop()?.replace(":free", "") || "OpenRouter")
                 : (genaiConfigDoc?.model || "LM Studio")}
             </span>
 

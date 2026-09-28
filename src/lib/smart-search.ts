@@ -239,18 +239,12 @@ export async function smartSearchKB(
 
   // Tentukan koleksi target
   let collectionsToSearch: string[] = [];
-  if (targetCollections && targetCollections.length > 0) {
+  if (targetCollections !== undefined) {
     collectionsToSearch = targetCollections;
   } else {
     // Ambil dari knowledgeBases meta docs
-    const kbs = await db.collection("knowledgeBases").find({}).toArray();
+    const kbs = await db.collection("knowledgeBases").find({ isActive: { $ne: false } }).toArray();
     collectionsToSearch = kbs.map((k) => k.collectionName);
-
-    if (collectionsToSearch.length === 0) {
-      // Fallback ke semua collections berawalan kb_
-      const allColls = await db.listCollections().toArray();
-      collectionsToSearch = allColls.map((c) => c.name).filter((n) => n.startsWith("kb_"));
-    }
   }
 
   const allScored: ScoredArticle[] = [];

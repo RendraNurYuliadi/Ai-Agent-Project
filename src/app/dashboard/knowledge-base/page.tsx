@@ -34,6 +34,7 @@ interface KnowledgeBase {
   collectionName: string;
   displayName: string;
   description: string;
+  isActive: boolean;
   articleCount: number;
   createdAt: string;
 }
@@ -48,6 +49,7 @@ const PAGE_SIZE = 20;
 export default function KnowledgeBasePage() {
   const [kbs, setKbs] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
+  const [savingKbStatusId, setSavingKbStatusId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState("public_user");
 
   // Active KB for viewing articles
@@ -190,6 +192,28 @@ export default function KnowledgeBasePage() {
       }
       fetchKBs();
     } catch { }
+  };
+
+  const toggleKbRetrieval = async (event: React.MouseEvent, kb: KnowledgeBase) => {
+    event.stopPropagation();
+    setSavingKbStatusId(kb.id);
+    try {
+      const res = await fetch(`/api/knowledge-bases/${kb.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !kb.isActive }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal mengubah status RAG.");
+      setKbs((previous) => previous.map((item) =>
+        item.id === kb.id ? { ...item, isActive: !kb.isActive } : item
+      ));
+      notify("success", `${kb.displayName}: RAG ${kb.isActive ? "dinonaktifkan" : "diaktifkan"}.`);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal mengubah status RAG.");
+    } finally {
+      setSavingKbStatusId(null);
+    }
   };
 
   const addArticle = async (e: React.FormEvent) => {
@@ -455,16 +479,32 @@ export default function KnowledgeBasePage() {
                         <FolderOpen className="w-5 h-5" />
                       </div>
                       {!isReadOnly && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteKb(kb);
-                          }}
-                          className="text-neutral-600 hover:text-white p-1.5 rounded-lg hover:bg-neutral-900 transition-colors cursor-pointer"
-                          title="Hapus Knowledge Base"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={kb.isActive}
+                            onClick={(event) => void toggleKbRetrieval(event, kb)}
+                            disabled={savingKbStatusId === kb.id}
+                            className={`inline-flex min-h-8 shrink-0 items-center gap-2 rounded-full border px-2.5 py-1 text-[10px] leading-none whitespace-nowrap transition-colors disabled:opacity-50 ${kb.isActive ? "border-emerald-900 bg-emerald-950/40 text-emerald-300" : "border-neutral-800 bg-neutral-950 text-neutral-500"}`}
+                            title={kb.isActive ? "Nonaktifkan dari retrieval RAG" : "Aktifkan untuk retrieval RAG"}
+                          >
+                            <span className={`relative inline-flex h-4 w-8 shrink-0 items-center rounded-full transition-colors ${kb.isActive ? "bg-emerald-700" : "bg-neutral-700"}`}>
+                              <span className={`absolute left-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${kb.isActive ? "translate-x-4" : "translate-x-0"}`} />
+                            </span>
+                            <span className="shrink-0">RAG {kb.isActive ? "Aktif" : "Nonaktif"}</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteKb(kb);
+                            }}
+                            className="text-neutral-600 hover:text-white p-1.5 rounded-lg hover:bg-neutral-900 transition-colors cursor-pointer"
+                            title="Hapus Knowledge Base"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
                     </div>
                     <h3 className="text-base font-bold text-white group-hover:text-neutral-300 transition-colors truncate">
