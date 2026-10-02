@@ -137,19 +137,20 @@ export async function POST(
           setFields.title = message.trim().slice(0, 60) + (message.trim().length > 60 ? "..." : "");
         }
         const botUpdate: Record<string, unknown> = {
-          $push: { messages: { $each: [userMessage, turn.assistantMessage] } },
+          $push: { messages: { $each: turn.assistantMessage ? [userMessage, turn.assistantMessage] : [userMessage] } },
           $set: setFields,
-          $inc: { messageCount: 2 },
+          $inc: { messageCount: turn.assistantMessage ? 2 : 1 },
         };
         await db.collection("conversations").updateOne({ _id: new ObjectId(id) }, botUpdate);
         return NextResponse.json({
           success: true,
           userMessage,
           assistantMessage: turn.assistantMessage,
-          messageType: turn.assistantMessage.messageType,
-          topArticles: turn.assistantMessage.topArticles,
+          messageType: turn.assistantMessage?.messageType,
+          topArticles: turn.assistantMessage?.topArticles || [],
           contextSent: turn.contextSent,
           botStatus: turn.botStatus,
+          silent: turn.silent,
         });
       }
     }
@@ -163,11 +164,14 @@ export async function POST(
     const userFullName = session.fullName || session.name || "User";
 
     // Helper: replace all supported placeholders in a prompt template
-    const applyPlaceholders = (template: string): string =>
+    const applyPlaceholders = (template: string, values: { message?: string; context?: string } = {}): string =>
       template
-        .replace(/\{fullName\}/g, userFullName)
-        .replace(/\{name\}/g, session.name || "User")
-        .replace(/\{email\}/g, session.email || "");
+        .replace(/\{context\}/g, () => values.context || "")
+        .replace(/\{question\}/g, () => values.message || "")
+        .replace(/\{message\}/g, () => values.message || "")
+        .replace(/\{fullName\}/g, () => userFullName)
+        .replace(/\{name\}/g, () => session.name || "User")
+        .replace(/\{email\}/g, () => session.email || "");
 
     // Load AI config (LM Studio local or Google AI Studio Gemini)
     const aiConfig = await getAIConfig(db);
@@ -192,7 +196,7 @@ export async function POST(
         messages: [
           {
             role: "user",
-            content: applyPlaceholders(routePromptTemplate).replace("{question}", message.trim()),
+            content: applyPlaceholders(routePromptTemplate, { message: message.trim() }),
           },
         ],
         temperature: 0.1,
@@ -282,9 +286,10 @@ KAMU SEDANG BERBICARA DENGAN: {fullName}
 KNOWLEDGE CONTEXT:
 {context}`;
       const faqPromptTemplate = faqPromptDoc?.content || defaultFaqSystemPrompt;
-      const systemPrompt = applyPlaceholders(
-        faqPromptTemplate.replace("{context}", formattedContext)
-      );
+      const systemPrompt = applyPlaceholders(faqPromptTemplate, {
+        context: formattedContext,
+        message: message.trim(),
+      });
 
       if (aiAvailable) {
         try {
@@ -315,8 +320,7 @@ KNOWLEDGE CONTEXT:
       const smallTalkTemplate = smallTalkPromptDoc?.content ||
         "Kamu adalah asisten virtual yang ramah. Balas pesan berikut dengan menyapa {fullName}:\n\nUser: {message}\nAssistant:";
 
-      const smallTalkPrompt = applyPlaceholders(smallTalkTemplate)
-        .replace("{message}", message.trim());
+      const smallTalkPrompt = applyPlaceholders(smallTalkTemplate, { message: message.trim() });
 
       if (aiAvailable) {
         try {

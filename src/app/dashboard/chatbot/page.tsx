@@ -95,6 +95,15 @@ interface ActiveBotPreview {
   }>;
 }
 
+interface ChatSkill {
+  id: string;
+  name: string;
+  description: string;
+  botUser: { id: string; name: string; fullName: string; email: string; userType: "human" | "bot" } | null;
+  bot: ActiveBotPreview | null;
+  isAvailable: boolean;
+}
+
 interface ComponentActionButton {
   label: string;
   action: "reply" | "link";
@@ -135,6 +144,7 @@ interface Conversation {
   id: string;
   title: string;
   messageCount: number;
+  skillId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -447,7 +457,10 @@ export default function ChatbotPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [activeBot, setActiveBot] = useState<ActiveBotPreview | null>(null);
+  const [skills, setSkills] = useState<ChatSkill[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [selectedSkillId, setSelectedSkillId] = useState("");
+  const [fallbackActiveBot, setFallbackActiveBot] = useState<ActiveBotPreview | null>(null);
   const [conversationStatus, setConversationStatus] = useState("active");
   const [input, setInput] = useState("");
   const [chatModelProvider, setChatModelProvider] = useState<"lmstudio" | "openrouter">("lmstudio");
@@ -475,6 +488,9 @@ export default function ChatbotPage() {
     () => Boolean(window.SpeechRecognition || window.webkitSpeechRecognition),
     () => false
   );
+  const selectedSkill = skills.find((skill) => skill.id === selectedSkillId) || null;
+  const activeBot = skills.length > 0 ? selectedSkill?.bot || null : fallbackActiveBot;
+  const skillSelectionRequired = skills.length > 0 && !selectedSkillId && !activeConvId;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -496,8 +512,13 @@ export default function ChatbotPage() {
     fetchUserProfile();
     fetch("/api/bots/active")
       .then((response) => response.ok ? response.json() : null)
-      .then((data) => setActiveBot(data?.bot || null))
-      .catch(() => setActiveBot(null));
+      .then((data) => setFallbackActiveBot(data?.bot || null))
+      .catch(() => setFallbackActiveBot(null));
+    fetch("/api/skills")
+      .then((response) => response.ok ? response.json() : { skills: [] })
+      .then((data) => setSkills((data.skills || []).filter((skill: ChatSkill) => skill.isAvailable)))
+      .catch(() => setSkills([]))
+      .finally(() => setSkillsLoading(false));
     loadGatewayModelOptions()
       .then(({ provider, model, models }) => {
         setChatModelProvider(provider);
@@ -557,6 +578,7 @@ export default function ChatbotPage() {
         const data = await res.json();
         setMessages(data.conversation.messages || []);
         setConversationStatus(data.conversation.botStatus || "active");
+        setSelectedSkillId(data.conversation.skillId || "");
       }
     } catch (err) {
       console.error("Error loading conversation:", err);
@@ -566,11 +588,12 @@ export default function ChatbotPage() {
   };
 
   const createNewConversation = async () => {
+    if (skillSelectionRequired) return;
     try {
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "Percakapan Baru" }),
+        body: JSON.stringify({ title: "Percakapan Baru", ...(selectedSkillId ? { skillId: selectedSkillId } : {}) }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -670,6 +693,7 @@ export default function ChatbotPage() {
     message: string,
     options: MessageSubmissionOptions = {}
   ) => {
+    if (skillSelectionRequired) return;
     if (conversationStatus === "closed") return;
     const isRegenerate = Boolean(options.regenerateAssistantId);
     const isReplacement = isRegenerate || Boolean(options.editUserMessageId);
@@ -682,7 +706,7 @@ export default function ChatbotPage() {
         const res = await fetch("/api/conversations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: "Percakapan Baru" }),
+          body: JSON.stringify({ title: "Percakapan Baru", ...(selectedSkillId ? { skillId: selectedSkillId } : {}) }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -695,6 +719,7 @@ export default function ChatbotPage() {
               id: convId!,
               title: "Percakapan Baru",
               messageCount: data.conversation.messageCount || 0,
+              skillId: data.conversation.skillId || null,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             },
@@ -743,27 +768,29 @@ export default function ChatbotPage() {
       if (options.editUserMessageId) {
         setMessages((prev) => prev.map((item) => {
           if (item.id === options.editUserMessageId) return data.userMessage;
-          if (item.id === data.assistantMessage.id) return data.assistantMessage;
+          if (data.assistantMessage && item.id === data.assistantMessage.id) return data.assistantMessage;
           return item;
         }));
         setEditingMessageId(null);
         setEditingText("");
       } else if (options.regenerateAssistantId) {
-        setMessages((prev) => prev.map((item) =>
-          item.id === options.regenerateAssistantId ? data.assistantMessage : item
-        ));
+        if (data.assistantMessage) {
+          setMessages((prev) => prev.map((item) =>
+            item.id === options.regenerateAssistantId ? data.assistantMessage : item
+          ));
+        }
       } else {
-        setMessages((prev) => [
-          ...prev.map((item) => item.id === userMsg!.id ? data.userMessage : item),
-          data.assistantMessage,
-        ]);
+        setMessages((prev) => {
+          const updated = prev.map((item) => item.id === userMsg!.id ? data.userMessage : item);
+          return data.assistantMessage ? [...updated, data.assistantMessage] : updated;
+        });
         setConversations((prev) =>
           prev.map((c) =>
             c.id === convId
               ? {
                 ...c,
                 title: userMsg!.content.slice(0, 60),
-                messageCount: c.messageCount + 2,
+                messageCount: c.messageCount + (data.assistantMessage ? 2 : 1),
                 updatedAt: new Date().toISOString(),
               }
               : c
@@ -827,8 +854,9 @@ export default function ChatbotPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={createNewConversation}
-              className="p-1.5 rounded-lg bg-white hover:bg-neutral-200 text-black transition-colors cursor-pointer"
-              title="Percakapan Baru"
+              disabled={skillsLoading || skillSelectionRequired}
+              className="p-1.5 rounded-lg bg-white hover:bg-neutral-200 text-black transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+              title={skillSelectionRequired ? "Pilih skill terlebih dahulu" : "Percakapan Baru"}
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -981,13 +1009,28 @@ export default function ChatbotPage() {
 
                 <p className="text-[10px] text-neutral-500 flex items-center gap-1">
                   <Cpu className="w-2.5 h-2.5" />
-                  {activeBot ? "Active bot flow" : `${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • ${chatModel}`}
+                  {selectedSkill ? `${selectedSkill.name} · ${selectedSkill.botUser?.fullName || selectedSkill.botUser?.name || "Bot"}` : activeBot ? "Bot flow aktif (fallback)" : `${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • ${chatModel}`}
                 </p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {skills.length > 0 && <select
+              value={selectedSkillId}
+              onChange={(event) => {
+                setSelectedSkillId(event.target.value);
+                setActiveConvId(null);
+                setMessages([]);
+                setConversationStatus("active");
+              }}
+              disabled={skillsLoading || sending}
+              aria-label="Pilih skill chatbot"
+              className="h-9 max-w-40 truncate rounded-lg border border-neutral-800 bg-black px-2 text-[11px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 sm:max-w-56"
+            >
+              <option value="">Pilih skill</option>
+              {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
+            </select>}
             {userProfile && (
               <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-neutral-900/70 border border-neutral-800">
                 <div
@@ -1004,7 +1047,9 @@ export default function ChatbotPage() {
 
             <button
               onClick={createNewConversation}
-              className="text-xs px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 rounded-lg border border-neutral-800 transition-colors cursor-pointer flex items-center gap-1.5"
+              disabled={skillsLoading || skillSelectionRequired}
+              title={skillSelectionRequired ? "Pilih skill terlebih dahulu" : "Chat Baru"}
+              className="text-xs px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 rounded-lg border border-neutral-800 transition-colors cursor-pointer flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Plus className="w-3 h-3" />
               <span className="hidden sm:inline">Chat Baru</span>
@@ -1016,7 +1061,13 @@ export default function ChatbotPage() {
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
           {!activeConvId && messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center">
-              {welcomeInteraction ? (
+              {skillSelectionRequired ? (
+                <div className="max-w-sm rounded-xl border border-neutral-800 bg-[#080808] p-5">
+                  <Bot className="mx-auto mb-3 h-7 w-7 text-neutral-400" />
+                  <h3 className="text-sm font-semibold text-white">Pilih skill untuk memulai</h3>
+                  <p className="mt-1 text-xs text-neutral-500">Skill menentukan user bot dan bot flow yang digunakan dalam percakapan.</p>
+                </div>
+              ) : welcomeInteraction ? (
                 <BotInteractionCard
                   data={{
                     type: "welcome_message",
@@ -1209,7 +1260,7 @@ export default function ChatbotPage() {
                             {formatDuration(msg.generationDurationMs)}
                           </span>
                         )}
-                        {!isUser && msg.messageType === "FAQ" && (
+                        {!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG") && (
                           <details className="relative text-[10px] text-neutral-500">
                             <summary className="cursor-pointer list-none select-none hover:text-neutral-300">
                               Debug retrieval ({msg.topArticles?.length ?? 0})
@@ -1329,8 +1380,8 @@ export default function ChatbotPage() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={conversationStatus === "closed" ? "Percakapan sudah ditutup" : "Ketik pesan Anda di sini..."}
-              disabled={sending || conversationStatus === "closed"}
+              placeholder={conversationStatus === "closed" ? "Percakapan sudah ditutup" : skillSelectionRequired ? "Pilih skill untuk memulai..." : "Ketik pesan Anda di sini..."}
+              disabled={sending || conversationStatus === "closed" || skillSelectionRequired}
               className="flex-1 px-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-sm text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:border-neutral-600 disabled:opacity-50"
             />
 

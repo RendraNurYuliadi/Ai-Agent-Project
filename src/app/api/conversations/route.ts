@@ -22,6 +22,7 @@ export async function GET(req: NextRequest) {
       conversations: conversations.map((c) => ({
         id: c._id.toString(),
         title: c.title || "Percakapan Baru",
+        skillId: c.skillId || null,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt,
         messageCount: c.messageCount || 0,
@@ -39,13 +40,31 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { title } = await req.json();
+    const { title, skillId } = await req.json();
     const db = await getDatabase();
 
-    const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
-    const activeBot = activeSetting?.botId && ObjectId.isValid(activeSetting.botId)
-      ? await db.collection("bots").findOne({ _id: new ObjectId(activeSetting.botId) })
-      : null;
+    let selectedSkill: { _id: ObjectId; name: string; botUserId: string; botId: string } | null = null;
+    let botUserId: string | null = null;
+    let activeBot = null;
+    if (typeof skillId === "string" && skillId) {
+      if (!ObjectId.isValid(skillId)) return NextResponse.json({ error: "Skill tidak valid." }, { status: 400 });
+      selectedSkill = await db.collection("skills").findOne<{ _id: ObjectId; name: string; botUserId: string; botId: string }>({ _id: new ObjectId(skillId) });
+      if (!selectedSkill || !ObjectId.isValid(selectedSkill.botUserId) || !ObjectId.isValid(selectedSkill.botId)) {
+        return NextResponse.json({ error: "Skill tidak ditemukan atau relasinya tidak valid." }, { status: 400 });
+      }
+      const [botUser, skillBot] = await Promise.all([
+        db.collection("users").findOne({ _id: new ObjectId(selectedSkill.botUserId), userType: "bot" }, { projection: { _id: 1 } }),
+        db.collection("bots").findOne({ _id: new ObjectId(selectedSkill.botId) }),
+      ]);
+      if (!botUser || !skillBot) return NextResponse.json({ error: "User bot atau bot flow pada skill sudah tidak tersedia." }, { status: 409 });
+      activeBot = skillBot;
+      botUserId = selectedSkill.botUserId;
+    } else {
+      const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
+      activeBot = activeSetting?.botId && ObjectId.isValid(activeSetting.botId)
+        ? await db.collection("bots").findOne({ _id: new ObjectId(activeSetting.botId) })
+        : null;
+    }
     const flowState = activeBot
       ? initializeBotConversation({
         entryInteractionId: activeBot.entryInteractionId,
@@ -60,6 +79,7 @@ export async function POST(req: NextRequest) {
       messageCount: flowState?.messages.length || 0,
       ...(activeBot && flowState ? {
         botId: activeBot._id.toString(),
+        ...(selectedSkill ? { skillId: selectedSkill._id.toString(), botUserId } : {}),
         currentInteractionId: flowState.currentInteractionId,
         botStatus: flowState.botStatus,
       } : {}),

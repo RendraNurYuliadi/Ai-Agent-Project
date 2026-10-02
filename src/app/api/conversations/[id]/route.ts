@@ -23,17 +23,18 @@ export async function GET(
 
     if (!conversation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
 
-    const messages = (conversation.messages || []).map((m: any) => ({
-      ...m,
-      content: typeof m.content === "string"
-        ? m.content.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n")
-        : m.content,
+    const messages = (conversation.messages || []).map((message: Record<string, unknown>) => ({
+      ...message,
+      content: typeof message.content === "string"
+        ? message.content.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n").replace(/\\r/g, "\n")
+        : message.content,
     }));
 
     return NextResponse.json({
       conversation: {
         id: conversation._id.toString(),
         title: conversation.title,
+        skillId: conversation.skillId || null,
         messages,
         botStatus: conversation.botStatus || "active",
         createdAt: conversation.createdAt,

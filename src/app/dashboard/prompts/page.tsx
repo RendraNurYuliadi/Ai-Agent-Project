@@ -17,7 +17,7 @@ import {
 
 interface Prompt {
   id: string;
-  type: "faq" | "small_talk" | "route";
+  type: "faq" | "small_talk" | "route" | "guided_routing" | "rag";
   name: string;
   content: string;
   isActive: boolean;
@@ -39,6 +39,16 @@ const typeLabels: Record<string, { label: string; color: string; desc: string }>
     label: "Route",
     color: "bg-neutral-700/20 text-neutral-400 border-neutral-700/40",
     desc: "Mengklasifikasikan jenis pertanyaan user",
+  },
+  guided_routing: {
+    label: "Guided Routing",
+    color: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
+    desc: "Memilih jalur percakapan untuk bot flow",
+  },
+  rag: {
+    label: "RAG",
+    color: "bg-sky-500/10 text-sky-300 border-sky-500/20",
+    desc: "Menjawab berdasarkan hasil pencarian Knowledge Base",
   },
 };
 
@@ -64,7 +74,20 @@ export default function PromptsPage() {
     setTimeout(() => setNotification(null), 4000);
   };
 
+  async function fetchPrompts() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/prompts");
+      if (res.ok) {
+        const data = await res.json();
+        setPrompts(data.prompts || []);
+      }
+    } catch { }
+    setLoading(false);
+  }
+
   useEffect(() => {
+    let current = true;
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => {
@@ -77,20 +100,18 @@ export default function PromptsPage() {
       })
       .catch(() => { });
 
-    fetchPrompts();
-  }, []);
+    fetch("/api/prompts")
+      .then((res) => res.ok ? res.json() : { prompts: [] })
+      .then((data) => {
+        if (current) setPrompts(data.prompts || []);
+      })
+      .catch(() => { })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
 
-  const fetchPrompts = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/prompts");
-      if (res.ok) {
-        const data = await res.json();
-        setPrompts(data.prompts || []);
-      }
-    } catch { }
-    setLoading(false);
-  };
+    return () => { current = false; };
+  }, []);
 
   const openNewModal = (type?: string) => {
     setEditingPrompt(null);
@@ -218,7 +239,7 @@ export default function PromptsPage() {
           </h1>
 
           <p className="text-neutral-400 text-sm mt-1">
-            Kelola prompt template untuk FAQ, Route, dan Small Talk.
+            Kelola template prompt dan pilihannya pada node bot flow.
           </p>
         </div>
 
@@ -238,6 +259,8 @@ export default function PromptsPage() {
           { key: "faq", label: "FAQ" },
           { key: "route", label: "Route" },
           { key: "small_talk", label: "Small Talk" },
+          { key: "guided_routing", label: "Guided Routing" },
+          { key: "rag", label: "RAG" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -370,6 +393,8 @@ export default function PromptsPage() {
                   <option value="faq">FAQ</option>
                   <option value="route">Route</option>
                   <option value="small_talk">Small Talk</option>
+                  <option value="guided_routing">Guided Routing</option>
+                  <option value="rag">RAG</option>
                 </select>
               </div>
 
@@ -412,8 +437,9 @@ export default function PromptsPage() {
                 />
 
                 <p className="text-[11px] text-neutral-600 mt-1">
-                  Placeholder: {"{context}"} (FAQ KB), {"{question}"}{" "}
-                  (pertanyaan user), {"{message}"} (pesan user)
+                  {form.type === "faq" || form.type === "rag"
+                    ? `Placeholder: {context} (hasil KB), {question}, {message}, {fullName}, {name}, {email}.`
+                    : `Placeholder: {question}, {message}, {fullName}, {name}, {email}.`}
                 </p>
               </div>
 

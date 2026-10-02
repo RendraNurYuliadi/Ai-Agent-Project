@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
       fullName: u.fullName || u.name || "",
       email: u.email,
       role: u.role,
+      userType: u.userType === "bot" ? "bot" : "human",
       createdAt: u.createdAt || null,
       updatedAt: u.updatedAt || null,
     }));
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { name, email, password, role, fullName } = await req.json();
+    const { name, email, password, role, fullName, userType } = await req.json();
 
     if (!name || !email || !password || !role) {
       return NextResponse.json(
@@ -63,6 +64,10 @@ export async function POST(req: NextRequest) {
         { error: "Role tidak valid. Pilih: admin, manager, atau public_user." },
         { status: 400 }
       );
+    }
+    const resolvedUserType = userType === undefined ? "human" : userType;
+    if (resolvedUserType !== "human" && resolvedUserType !== "bot") {
+      return NextResponse.json({ error: "Tipe user tidak valid. Pilih human atau bot." }, { status: 400 });
     }
 
     const db = await getDatabase();
@@ -83,6 +88,7 @@ export async function POST(req: NextRequest) {
       email: email.toLowerCase().trim(),
       password: hashedPassword,
       role,
+      userType: resolvedUserType,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -94,6 +100,7 @@ export async function POST(req: NextRequest) {
         name: name.trim(),
         email: email.toLowerCase().trim(),
         role,
+        userType: resolvedUserType,
       },
     });
   } catch (error) {

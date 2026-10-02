@@ -38,6 +38,8 @@ export interface BotQuickButton {
 
 export interface GuidedRouteOption {
   label: string;
+  variable: string;
+  prompt: string;
   targetInteractionId: string;
 }
 
@@ -51,6 +53,7 @@ export interface BotInteractionConfig {
   text?: string;
   question?: string;
   systemPrompt?: string;
+  promptId?: string;
   provider?: "global" | "lmstudio" | "openrouter";
   model?: string;
   knowledgeBases?: string[];
@@ -120,11 +123,18 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     })
     : undefined;
   const options = Array.isArray(value.options)
-    ? value.options.slice(0, 10).flatMap((item) => {
+    ? value.options.slice(0, 10).flatMap((item, index) => {
       if (!isRecord(item)) return [];
       const label = typeof item.label === "string" ? item.label.trim().slice(0, 80) : "";
       const targetInteractionId = typeof item.targetInteractionId === "string" ? item.targetInteractionId : "";
-      return label && targetInteractionId ? [{ label, targetInteractionId }] : [];
+      const generatedVariable = label.toUpperCase().replace(/[^\p{L}\p{N}]+/gu, "_").replace(/^_+|_+$/g, "") || `ROUTE_${index + 1}`;
+      const variable = typeof item.variable === "string" && item.variable.trim()
+        ? item.variable.trim().toUpperCase().replace(/[^\p{L}\p{N}_]+/gu, "_").slice(0, 80)
+        : generatedVariable;
+      const prompt = typeof item.prompt === "string" && item.prompt.trim()
+        ? item.prompt.trim().slice(0, 1000)
+        : `Pilih route ini jika maksud pengguna sesuai dengan "${label}".`;
+      return label && targetInteractionId ? [{ label, variable, prompt, targetInteractionId }] : [];
     })
     : undefined;
 
@@ -138,6 +148,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     text: typeof value.text === "string" ? value.text.trim().slice(0, 4000) : undefined,
     question: typeof value.question === "string" ? value.question.trim().slice(0, 1000) : undefined,
     systemPrompt: typeof value.systemPrompt === "string" ? value.systemPrompt.trim().slice(0, 4000) : undefined,
+    promptId: typeof value.promptId === "string" ? value.promptId.trim().slice(0, 100) : undefined,
     provider,
     model: typeof value.model === "string" ? value.model.trim().slice(0, 200) : undefined,
     knowledgeBases: Array.isArray(value.knowledgeBases)
@@ -184,6 +195,14 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
 
   if (!ids.has(entryInteractionId)) return { success: false, error: "Entry interaction harus dipilih." };
   for (const interaction of interactions) {
+    if (interaction.type === "guided_routing") {
+      const options = interaction.config.options || [];
+      if (options.length === 0) return { success: false, error: "Guided Routing harus memiliki minimal satu pilihan route." };
+      const variables = options.map((option) => option.variable.toLocaleUpperCase());
+      if (new Set(variables).size !== variables.length) {
+        return { success: false, error: "Variable route dalam Guided Routing harus unik." };
+      }
+    }
     if (interaction.nextAction.type === "interaction" && !ids.has(interaction.nextAction.interactionId)) {
       return { success: false, error: "Next interaction tidak ditemukan." };
     }

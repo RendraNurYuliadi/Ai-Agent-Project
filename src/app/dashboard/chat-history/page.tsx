@@ -14,6 +14,8 @@ import {
   Search,
   ExternalLink,
   Calendar,
+  CircleHelp,
+  Sparkles,
 } from "lucide-react";
 import { FormattedMessage } from "@/components/formatted-message";
 
@@ -32,6 +34,15 @@ interface Message {
   messageType?: string;
   lmStudioAvailable?: boolean;
   uiComponents?: AssistantComponent[];
+  botInteraction?: {
+    type: "welcome_message" | "guided_routing";
+    title?: string;
+    subtitle?: string;
+    icon?: string;
+    footerText?: string;
+    buttons?: ComponentActionButton[];
+    quickButtons?: ComponentActionButton[];
+  };
   timestamp: string;
 }
 
@@ -156,6 +167,31 @@ function HistoryComponentPreview({ component }: { component: AssistantComponent 
   }
 
   return null;
+}
+
+function HistoryBotInteractionPreview({ data }: { data: NonNullable<Message["botInteraction"]> }) {
+  const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
+  const buttons = data.buttons || data.quickButtons || [];
+  return (
+    <article className="w-full max-w-[360px] rounded-xl border border-neutral-800 bg-[#101010] p-3.5">
+      {data.type === "welcome_message" && (
+        <div className="mb-2 flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black"><Icon className="h-4 w-4" /></span>
+          <h3 className="text-sm font-semibold text-white">{data.title}</h3>
+        </div>
+      )}
+      {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
+      {buttons.length > 0 && <div className="mt-3 flex flex-wrap items-start gap-2">
+        {buttons.map((button, index) => (
+          <span key={`${button.label}-${index}`} className="inline-flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300">
+            {button.label}
+            {button.action === "link" && <ExternalLink className="h-3 w-3 shrink-0" />}
+          </span>
+        ))}
+      </div>}
+      {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
+    </article>
+  );
 }
 
 function formatTime(ts: string): string {
@@ -515,14 +551,18 @@ export default function ChatHistoryPage() {
                         )}
 
                         {/* Bubble */}
-                        <div
+                        {msg.content && <div
                           className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser
                             ? "bg-white text-black rounded-tr-sm shadow-lg font-medium"
                             : "bg-[#111111] text-neutral-300 border border-neutral-800 rounded-tl-sm shadow-md"
                             }`}
                         >
                           <FormattedMessage content={msg.content} isUser={isUser} />
-                        </div>
+                        </div>}
+
+                        {!isUser && msg.botInteraction && (
+                          <HistoryBotInteractionPreview data={msg.botInteraction} />
+                        )}
 
                         {!isUser && msg.uiComponents?.map((component) => (
                           <div key={component.id} className="w-full pl-1">

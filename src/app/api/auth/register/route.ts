@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
       email: emailClean,
       password: hashedPassword,
       role: "public_user" as const,
+      userType: "human" as const,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
