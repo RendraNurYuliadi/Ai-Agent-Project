@@ -203,6 +203,8 @@ export async function POST(
             id: selectedComponent._id.toString(),
             name: selectedComponent.name,
             type: selectedComponent.type,
+            title: selectedComponent.title || "",
+            subtitle: selectedComponent.subtitle || "",
             buttons: selectedComponent.buttons || [],
             card: selectedComponent.card || null,
             cards: selectedComponent.cards || [],

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   History,
   MessageSquare,
@@ -30,7 +31,33 @@ interface Message {
   content: string;
   messageType?: string;
   lmStudioAvailable?: boolean;
+  uiComponents?: AssistantComponent[];
   timestamp: string;
+}
+
+interface ComponentActionButton {
+  label: string;
+  action: "reply" | "link";
+  value: string;
+}
+
+interface ComponentCard {
+  imageUrl: string;
+  imageHeight?: number;
+  title: string;
+  subtitle: string;
+  buttons: ComponentActionButton[];
+}
+
+interface AssistantComponent {
+  id: string;
+  name: string;
+  title?: string;
+  subtitle?: string;
+  type: "reply_buttons" | "link_buttons" | "card" | "carousel";
+  buttons: ComponentActionButton[];
+  card: ComponentCard | null;
+  cards: ComponentCard[];
 }
 
 interface UserProfile {
@@ -38,6 +65,97 @@ interface UserProfile {
   fullName: string;
   email: string;
   role: string;
+}
+
+function HistoryComponentPreview({ component }: { component: AssistantComponent }) {
+  const renderButtons = (items: ComponentActionButton[]) => (
+    <div className="flex flex-wrap gap-2">
+      {items.map((button, index) => (
+        <span
+          key={`${button.label}-${index}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300"
+        >
+          {button.label}
+          {button.action === "link" && <ExternalLink className="h-3 w-3" />}
+        </span>
+      ))}
+    </div>
+  );
+
+  const renderCard = (card: ComponentCard, index: number) => (
+    <article
+      key={`${component.id}-card-${index}`}
+      className="w-full min-w-0 overflow-hidden rounded-xl border border-neutral-800 bg-[#101010]"
+    >
+      {card.imageUrl && (
+        <Image
+          src={card.imageUrl}
+          alt={card.title}
+          width={520}
+          height={card.imageHeight ?? 128}
+          unoptimized
+          style={{ height: `${card.imageHeight ?? 128}px` }}
+          className="w-full object-cover"
+        />
+      )}
+      <div className="space-y-2.5 p-3">
+        <div>
+          <h4 className="text-sm font-semibold text-white">{card.title}</h4>
+          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">
+            {card.subtitle}
+          </p>
+        </div>
+        {renderButtons(card.buttons)}
+      </div>
+    </article>
+  );
+
+  if (component.type === "reply_buttons") {
+    return renderButtons(component.buttons);
+  }
+
+  if (component.type === "link_buttons") {
+    return (
+      <article className="w-full max-w-[320px] rounded-xl border border-neutral-800 bg-[#101010] p-3">
+        {component.title && <h4 className="text-sm font-semibold text-white">{component.title}</h4>}
+        {component.subtitle && (
+          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">
+            {component.subtitle}
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          {component.buttons.map((button, index) => (
+            <div
+              key={`${button.label}-${index}`}
+              className="flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5"
+            >
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-200">
+                {button.label}<ExternalLink className="h-3 w-3" />
+              </span>
+            </div>
+          ))}
+        </div>
+      </article>
+    );
+  }
+
+  if (component.type === "card" && component.card) {
+    return <div className="w-full max-w-[260px]">{renderCard(component.card, 0)}</div>;
+  }
+
+  if (component.type === "carousel" && component.cards.length > 0) {
+    return (
+      <div className="flex w-full gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
+        {component.cards.map((card, index) => (
+          <div key={`${component.id}-${index}`} className="w-[240px] shrink-0 snap-start">
+            {renderCard(card, index)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function formatTime(ts: string): string {
@@ -405,6 +523,12 @@ export default function ChatHistoryPage() {
                         >
                           <FormattedMessage content={msg.content} isUser={isUser} />
                         </div>
+
+                        {!isUser && msg.uiComponents?.map((component) => (
+                          <div key={component.id} className="w-full pl-1">
+                            <HistoryComponentPreview component={component} />
+                          </div>
+                        ))}
 
                         {/* Timestamp */}
                         <span className="text-[10px] text-neutral-600 px-1 select-none">

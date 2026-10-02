@@ -91,6 +91,8 @@ interface ComponentCard {
 interface AssistantComponent {
   id: string;
   name: string;
+  title?: string;
+  subtitle?: string;
   type: "reply_buttons" | "link_buttons" | "card" | "carousel";
   buttons: ComponentActionButton[];
   card: ComponentCard | null;
@@ -203,14 +205,38 @@ function AssistantComponents({
   onReply: (value: string) => void;
   disabled: boolean;
 }) {
-  if (component.type === "reply_buttons" || component.type === "link_buttons") {
+  if (component.type === "reply_buttons") {
     return (
       <ComponentButtons
         buttons={component.buttons}
         onReply={onReply}
         disabled={disabled}
-        buttonMode={component.type === "link_buttons" ? "link" : "reply"}
       />
+    );
+  }
+  if (component.type === "link_buttons") {
+    return (
+      <article className="w-full max-w-[320px] rounded-xl border border-neutral-800 bg-[#101010] p-3">
+        {component.title && <h3 className="text-sm font-semibold text-white">{component.title}</h3>}
+        {component.subtitle && (
+          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">
+            {component.subtitle}
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          {component.buttons.map((button, index) => (
+            <a
+              key={`${button.label}-${index}`}
+              href={button.value}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-xs font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800"
+            >
+              {button.label}<ExternalLink className="h-3 w-3" />
+            </a>
+          ))}
+        </div>
+      </article>
     );
   }
   if (component.type === "card" && component.card) {
