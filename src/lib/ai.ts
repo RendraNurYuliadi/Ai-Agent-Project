@@ -22,6 +22,15 @@ export interface ChatMessage {
 
 export const OPENROUTER_FREE_MODEL = "openrouter/free";
 
+interface StoredAIConfig {
+  provider?: string;
+  baseUrl?: string;
+  model?: string;
+  openRouterModel?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
 export function isOpenRouterFreeModel(model: string): boolean {
   return model === OPENROUTER_FREE_MODEL || model.endsWith(":free");
 }
@@ -45,11 +54,11 @@ export const OPENROUTER_FREE_MODELS = [
  * Retrieve active AI configuration, merging DB preferences with Environment Variables.
  */
 export async function getAIConfig(db?: Db | null): Promise<AIConfig> {
-  let doc: any = null;
+  let doc: StoredAIConfig | null = null;
   if (db) {
     try {
-      doc = (await db.collection("genaiConfig").findOne({ key: "active_config" })) ||
-            (await db.collection("genaiConfig").findOne({ key: "lmstudio" }));
+      doc = ((await db.collection("genaiConfig").findOne({ key: "active_config" })) ||
+        (await db.collection("genaiConfig").findOne({ key: "lmstudio" }))) as unknown as StoredAIConfig | null;
     } catch {
       doc = null;
     }
@@ -61,17 +70,19 @@ export async function getAIConfig(db?: Db | null): Promise<AIConfig> {
     doc?.provider === "openrouter" || doc?.provider === "lmstudio"
       ? doc.provider
       : defaultProvider;
+  const savedOpenRouterModel = typeof doc?.openRouterModel === "string" ? doc.openRouterModel : "";
+  const environmentOpenRouterModel = process.env.OPENROUTER_MODEL || "";
 
   return {
     provider,
     lmStudioUrl: doc?.baseUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1",
     lmStudioModel: doc?.model || process.env.LM_STUDIO_MODEL || "local-model",
-    openRouterApiKey: process.env.OPENROUTER_API_KEY || doc?.openRouterApiKey || "",
+    openRouterApiKey: process.env.OPENROUTER_API_KEY || "",
     openRouterModel:
-      isOpenRouterFreeModel(doc?.openRouterModel || "")
-        ? doc.openRouterModel
-        : isOpenRouterFreeModel(process.env.OPENROUTER_MODEL || "")
-          ? process.env.OPENROUTER_MODEL
+      isOpenRouterFreeModel(savedOpenRouterModel)
+        ? savedOpenRouterModel
+        : isOpenRouterFreeModel(environmentOpenRouterModel)
+          ? environmentOpenRouterModel
           : OPENROUTER_FREE_MODEL,
     temperature: doc?.temperature ?? 0.7,
     maxTokens: doc?.maxTokens ?? 1024,
@@ -248,6 +259,25 @@ export async function getOpenRouterFreeModels(apiKey: string): Promise<string[]>
     ?.slice(0, 100) || [];
 
   return [OPENROUTER_FREE_MODEL, ...freeModels.filter((id) => id !== OPENROUTER_FREE_MODEL)];
+}
+
+export async function getOpenRouterModels(apiKey: string): Promise<string[]> {
+  if (!apiKey || !apiKey.trim()) {
+    throw new Error("OPENROUTER_API_KEY belum dikonfigurasi di file .env.local.");
+  }
+
+  const response = await fetch("https://openrouter.ai/api/v1/models", {
+    headers: { Authorization: `Bearer ${apiKey.trim()}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!response.ok) {
+    throw new Error(`Gagal menguji koneksi OpenRouter (HTTP ${response.status}).`);
+  }
+
+  const data = await response.json();
+  const models = (data.data as Array<{ id?: string }> | undefined)
+    ?.flatMap((item) => typeof item.id === "string" ? [item.id] : []) || [];
+  return [OPENROUTER_FREE_MODEL, ...models.filter((id) => id !== OPENROUTER_FREE_MODEL)];
 }
 
 /**

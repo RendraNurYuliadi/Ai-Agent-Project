@@ -87,6 +87,10 @@ const iconChoices = [
   { id: "help", label: "Help", Icon: CircleHelp },
 ];
 
+function interactionDisplayName(interaction: Pick<BotInteraction, "type" | "config">): string {
+  return interaction.config.name?.trim() || interaction.config.title?.trim() || interaction.config.question?.trim() || BOT_INTERACTION_LABELS[interaction.type];
+}
+
 function nodeSummary(interaction: BotInteraction): string {
   if (interaction.type === "guided_routing") return `${interaction.config.options?.length || 0} route · LLM`;
   if (interaction.nextAction.type === "interaction") return "Next interaction";
@@ -126,7 +130,7 @@ function toCanvasNode(interaction: BotInteraction, entryId: string): FlowCanvasN
     type: "botInteraction",
     position: interaction.position,
     data: {
-      label: interaction.config.title || interaction.config.question || BOT_INTERACTION_LABELS[interaction.type],
+      label: interactionDisplayName(interaction),
       interactionType: interaction.type,
       summary: nodeSummary(interaction),
       entry: interaction.id === entryId,
@@ -191,7 +195,7 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
     case "small_talk":
       return { promptId, systemPrompt: "Kamu adalah asisten yang ramah dan ringkas." };
     case "rag":
-      return { provider: "global", model: "", knowledgeBases: [], promptId, systemPrompt: "Jawab berdasarkan knowledge context. Jika informasi tidak tersedia, sampaikan dengan jujur.\n\n{context}" };
+      return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.7, maxTokens: 1024, knowledgeBases: [], promptId, systemPrompt: "Jawab berdasarkan knowledge context. Jika informasi tidak tersedia, sampaikan dengan jujur.\n\n{context}" };
     case "text_question":
       return { question: "Apa yang ingin Anda tanyakan?" };
     case "text_start":
@@ -217,6 +221,7 @@ function FlowEditor({ botId }: { botId: string }) {
   const [variablesInfoOpen, setVariablesInfoOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [ragProviderTest, setRagProviderTest] = useState<{ interactionId: string; status: "testing" | "success" | "error"; message: string; models: string[] } | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowCanvasNode>([]);
@@ -277,6 +282,29 @@ function FlowEditor({ botId }: { botId: string }) {
     setInteractions(updated);
     setEdges(toEdges(updated));
     refreshNodeData(updated);
+  };
+
+  const selectRagProvider = async (provider: "lmstudio" | "openrouter") => {
+    if (!selectedInteraction) return;
+    const baseUrl = selectedInteraction.config.lmStudioUrl || "http://localhost:1234/v1";
+    updateConfig({ provider, ...(provider === "lmstudio" ? { lmStudioUrl: baseUrl } : {}) });
+    setRagProviderTest({ interactionId: selectedInteraction.id, status: "testing", message: "Menguji koneksi dan memuat model...", models: [] });
+    try {
+      const response = await fetch("/api/genai-route/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider, baseUrl, listModelsOnly: true }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || "Koneksi provider gagal.");
+      const models = Array.isArray(data.models) ? data.models as string[] : [];
+      const currentModel = selectedInteraction.config.model || "";
+      const defaultModel = provider === "openrouter" ? "openrouter/free" : models[0] || "";
+      updateConfig({ provider, ...(provider === "lmstudio" ? { lmStudioUrl: baseUrl } : {}), model: models.includes(currentModel) ? currentModel : defaultModel });
+      setRagProviderTest({ interactionId: selectedInteraction.id, status: "success", message: data.message || `${models.length} model tersedia.`, models });
+    } catch (testError) {
+      setRagProviderTest({ interactionId: selectedInteraction.id, status: "error", message: testError instanceof Error ? testError.message : "Gagal menguji koneksi provider.", models: [] });
+    }
   };
 
   const updateNextAction = (nextAction: BotNextAction) => {
@@ -436,6 +464,9 @@ function FlowEditor({ botId }: { botId: string }) {
     : interactionsOpen
       ? "grid-rows-[auto_minmax(0,1fr)] xl:grid-rows-1"
       : "grid-rows-[minmax(0,1fr)] xl:grid-rows-1";
+  const visibleInteractionTypes = BOT_INTERACTION_TYPES.filter(
+    (type) => type !== "text_start",
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
@@ -513,7 +544,7 @@ function FlowEditor({ botId }: { botId: string }) {
               <button type="button" onClick={() => setInteractionsOpen(false)} title="Minimalkan daftar interaction" aria-label="Minimalkan daftar interaction" className="rounded p-1 text-neutral-500 hover:bg-neutral-900 hover:text-white"><PanelLeftClose className="h-3.5 w-3.5" /></button>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 xl:flex-col xl:overflow-visible">
-              {BOT_INTERACTION_TYPES.map((type) => (
+              {visibleInteractionTypes.map((type) => (
                 <button
                   key={type}
                   type="button"
@@ -577,7 +608,7 @@ function FlowEditor({ botId }: { botId: string }) {
                 setEntryInteractionId(event.target.value);
                 setNodes((current) => current.map((node) => ({ ...node, data: { ...node.data, entry: node.id === event.target.value } })));
               }} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
-                {interactions.map((item) => <option key={item.id} value={item.id}>{item.config.title || item.config.question || BOT_INTERACTION_LABELS[item.type]}</option>)}
+                {interactions.map((item) => <option key={item.id} value={item.id}>{interactionDisplayName(item)}</option>)}
               </select>
             </label>
 
@@ -585,7 +616,7 @@ function FlowEditor({ botId }: { botId: string }) {
               <>
                 <div className="rounded-md border border-neutral-800 bg-black px-3 py-2.5">
                   <p className="text-[9px] uppercase tracking-wide text-neutral-600">{BOT_INTERACTION_LABELS[selectedInteraction.type]}</p>
-                  <p className="mt-1 truncate text-xs font-medium text-white">{selectedInteraction.config.title || selectedInteraction.config.question || BOT_INTERACTION_LABELS[selectedInteraction.type]}</p>
+                  <p className="mt-1 truncate text-xs font-medium text-white">{interactionDisplayName(selectedInteraction)}</p>
                 </div>
 
                 {selectedInteraction.type === "welcome_message" && (
@@ -622,11 +653,33 @@ function FlowEditor({ botId }: { botId: string }) {
                 {selectedInteraction.type === "rag" && (
                   <div className="space-y-3">
                     <label className="block space-y-1.5 text-[10px] text-neutral-500">LLM provider
-                      <select value={selectedInteraction.config.provider || "global"} onChange={(event) => updateConfig({ provider: event.target.value as BotInteractionConfig["provider"] })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
-                        <option value="global">Gunakan konfigurasi global</option><option value="lmstudio">LM Studio</option><option value="openrouter">OpenRouter</option>
+                      <select value={selectedInteraction.config.provider === "openrouter" ? "openrouter" : "lmstudio"} onChange={(event) => void selectRagProvider(event.target.value as "lmstudio" | "openrouter")} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                        <option value="lmstudio">LM Studio</option><option value="openrouter">OpenRouter</option>
                       </select>
                     </label>
-                    {selectedInteraction.config.provider !== "global" && <TextField label="Model" value={selectedInteraction.config.model || ""} onChange={(value) => updateConfig({ model: value })} placeholder="Nama model" />}
+                    {selectedInteraction.config.provider !== "openrouter" && <div className="space-y-1.5">
+                      <label className="block text-[10px] text-neutral-500">Base URL LM Studio
+                        <input value={selectedInteraction.config.lmStudioUrl || "http://localhost:1234/v1"} onChange={(event) => updateConfig({ lmStudioUrl: event.target.value })} placeholder="http://localhost:1234/v1" className="mt-1.5 w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+                      </label>
+                      <button type="button" onClick={() => void selectRagProvider("lmstudio")} disabled={ragProviderTest?.status === "testing" && ragProviderTest.interactionId === selectedInteraction.id} className="inline-flex items-center gap-1.5 text-[10px] text-neutral-400 hover:text-white disabled:opacity-50">
+                        {ragProviderTest?.status === "testing" && ragProviderTest.interactionId === selectedInteraction.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Uji koneksi dan muat model
+                      </button>
+                    </div>}
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Model
+                      <select value={selectedInteraction.config.model || ""} onChange={(event) => updateConfig({ model: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                        {selectedInteraction.config.model && !ragProviderTest?.models.includes(selectedInteraction.config.model) && <option value={selectedInteraction.config.model}>{selectedInteraction.config.model} (tersimpan)</option>}
+                        {(ragProviderTest?.interactionId === selectedInteraction.id ? ragProviderTest.models : []).map((model) => <option key={model} value={model}>{model}</option>)}
+                        {!selectedInteraction.config.model && <option value="">Pilih model setelah uji koneksi</option>}
+                      </select>
+                    </label>
+                    {ragProviderTest?.interactionId === selectedInteraction.id && <p role={ragProviderTest.status === "error" ? "alert" : "status"} className={`text-[10px] ${ragProviderTest.status === "error" ? "text-red-300" : ragProviderTest.status === "success" ? "text-emerald-300" : "text-neutral-500"}`}>{ragProviderTest.message}</p>}
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Temperature: {selectedInteraction.config.temperature ?? 0.7}
+                      <input type="range" min="0" max="2" step="0.1" value={selectedInteraction.config.temperature ?? 0.7} onChange={(event) => updateConfig({ temperature: Number(event.target.value) })} className="w-full accent-white" />
+                    </label>
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Max output tokens
+                      <input type="number" min="64" max="8192" value={selectedInteraction.config.maxTokens ?? 1024} onChange={(event) => updateConfig({ maxTokens: Math.max(64, Math.min(8192, Number(event.target.value) || 1024)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+                    </label>
                     <PromptSelector type="rag" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} />
                     <div className="space-y-2 border-t border-neutral-900 pt-3">
                       <p className="text-[10px] font-medium text-neutral-300">Knowledge Base aktif</p>
@@ -642,7 +695,17 @@ function FlowEditor({ botId }: { botId: string }) {
                 )}
 
                 {(selectedInteraction.type === "text" || selectedInteraction.type === "text_start") && <TextAreaField label="Pesan" value={selectedInteraction.config.text || ""} onChange={(value) => updateConfig({ text: value })} rows={6} />}
-                {selectedInteraction.type === "text_question" && <TextAreaField label="Pertanyaan" value={selectedInteraction.config.question || ""} onChange={(value) => updateConfig({ question: value })} rows={4} />}
+                <TextField label="Nama interaction" value={selectedInteraction.config.name || ""} onChange={(value) => updateConfig({ name: value })} placeholder="Masukkan nama interaction" />
+
+                {selectedInteraction.type === "text_question" && (
+                  <div className="space-y-3">
+                    <TextAreaField label="Pertanyaan" value={selectedInteraction.config.question || ""} onChange={(value) => updateConfig({ question: value })} rows={4} />
+                    <div className="space-y-2 border-t border-neutral-900 pt-3">
+                      <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-neutral-300">Reply / Link button</span><button type="button" onClick={() => updateConfig({ quickButtons: [...(selectedInteraction.config.quickButtons || []), { label: "", action: "reply", value: "" }] })} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white"><Plus className="h-3 w-3" /> Tambah</button></div>
+                      {(selectedInteraction.config.quickButtons || []).map((button, index) => <QuickButtonFields key={`${selectedInteraction.id}-quick-${index}`} button={button} onChange={(patch) => setQuickButton(index, patch)} onRemove={() => updateConfig({ quickButtons: selectedInteraction.config.quickButtons?.filter((_, itemIndex) => itemIndex !== index) })} />)}
+                    </div>
+                  </div>
+                )}
 
                 {selectedInteraction.type !== "guided_routing" && <div className="space-y-2 border-t border-neutral-800 pt-4">
                   <label className="block space-y-1.5 text-[10px] text-neutral-500">Next action
@@ -656,7 +719,7 @@ function FlowEditor({ botId }: { botId: string }) {
                   </label>
                   {nextAction.type === "interaction" && <label className="block space-y-1.5 text-[10px] text-neutral-500">Next interaction
                     <select value={nextAction.interactionId} onChange={(event) => updateNextAction({ type: "interaction", interactionId: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
-                      {otherInteractions.map((item) => <option key={item.id} value={item.id}>{item.config.title || item.config.question || BOT_INTERACTION_LABELS[item.type]}</option>)}
+                      {otherInteractions.map((item) => <option key={item.id} value={item.id}>{interactionDisplayName(item)}</option>)}
                     </select>
                   </label>}
                   <p className="text-[9px] leading-4 text-neutral-600">Hubungkan handle antar-node di canvas untuk mengatur next interaction secara visual.</p>
@@ -746,7 +809,7 @@ function GuidedOptionFields({ option, interactions, onChange, onRemove }: { opti
       <TextAreaField label="Kondisi route: kapan route ini dipilih" value={option.prompt} onChange={(value) => onChange({ prompt: value })} rows={3} />
       <select value={option.targetInteractionId} onChange={(event) => onChange({ targetInteractionId: event.target.value })} className="w-full rounded border border-neutral-800 bg-[#080808] px-2 py-1.5 text-[10px] text-neutral-300">
         <option value="">Pilih target interaction</option>
-        {interactions.map((item) => <option key={item.id} value={item.id}>{item.config.title || item.config.question || BOT_INTERACTION_LABELS[item.type]}</option>)}
+        {interactions.map((item) => <option key={item.id} value={item.id}>{interactionDisplayName(item)}</option>)}
       </select>
     </div>
   );

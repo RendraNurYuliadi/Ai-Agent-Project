@@ -35,7 +35,7 @@ interface Message {
   lmStudioAvailable?: boolean;
   uiComponents?: AssistantComponent[];
   botInteraction?: {
-    type: "welcome_message" | "guided_routing";
+    type: "welcome_message" | "guided_routing" | "text_question";
     title?: string;
     subtitle?: string;
     icon?: string;

@@ -2,7 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import { generateAICompletion, getAIConfig } from "@/lib/ai";
 import { smartSearchKB, type ScoredArticle } from "@/lib/smart-search";
 import type { ComponentTemplateInput } from "@/lib/component-templates";
-import type { BotDefinitionInput, BotInteraction } from "@/lib/bot-flows";
+import { BOT_INTERACTION_LABELS, type BotDefinitionInput, type BotInteraction } from "@/lib/bot-flows";
 
 type BotRuntimeComponent = Pick<ComponentTemplateInput, "name" | "title" | "subtitle" | "type" | "buttons" | "card" | "cards"> & {
   id: string;
@@ -15,7 +15,7 @@ export interface BotRuntimeMessage {
   content: string;
   messageType: string;
   botInteraction?: {
-    type: "welcome_message" | "guided_routing";
+    type: "welcome_message" | "guided_routing" | "text_question";
     title?: string;
     subtitle?: string;
     icon?: string;
@@ -87,14 +87,20 @@ export function initializeBotConversation(bot: Pick<BotDefinitionInput, "entryIn
   if (!entry) return { messages: [], currentInteractionId: null, botStatus: "ended" };
   const state = stateForAction(entry);
   const welcome = entry.type === "welcome_message";
+  const textQuestion = entry.type === "text_question";
   const quickButtons = entry.config.quickButtons || [];
   return {
-    messages: welcome ? [{
+    messages: welcome || textQuestion ? [{
       id: new ObjectId().toString(),
       role: "assistant",
-      content: "",
-      messageType: "WELCOME_MESSAGE",
-      botInteraction: {
+      content: textQuestion ? (entry.config.question || "") : "",
+      messageType: textQuestion ? "TEXT_QUESTION" : "WELCOME_MESSAGE",
+      botInteraction: textQuestion ? {
+        type: "text_question",
+        title: "Pertanyaan",
+        subtitle: entry.config.question || "",
+        buttons: quickButtons,
+      } : {
         type: "welcome_message",
         title: entry.config.title || "",
         subtitle: entry.config.subtitle || "",
@@ -135,7 +141,7 @@ export async function processBotTurn(
           "Klasifikasikan pesan pengguna ke salah satu pilihan route yang tersedia. Jika ragu, pilih route yang paling sesuai. Jawab hanya dengan label route.\n\nPesan pengguna: {question}";
         const routeChoices = options.map((option, index) => {
           const target = bot.interactions.find((item) => item.id === option.targetInteractionId);
-          const targetName = target?.config.title || target?.config.question || (target ? target.type : "target tidak valid");
+          const targetName = target ? (target.config.name?.trim() || target.config.title?.trim() || target.config.question?.trim() || BOT_INTERACTION_LABELS[target.type]) : "target tidak valid";
           const condition = option.prompt || `Pilih route ini jika maksud pengguna sesuai dengan "${option.label}".`;
           return `- Nama route: ${option.label}\n  Variable route: ${routeVariable(option, index)}\n  Kondisi: ${condition}\n  Target interaction: ${targetName}`;
         }).join("\n");
@@ -190,6 +196,12 @@ export async function processBotTurn(
     content = interaction.config.text || "";
   } else if (interaction.type === "text_question") {
     content = interaction.config.question || "";
+    interactionCard = {
+      type: "text_question",
+      title: "Pertanyaan",
+      subtitle: interaction.config.question || "",
+      buttons: interaction.config.quickButtons || [],
+    };
   } else if (interaction.type === "small_talk") {
     const config = await getAIConfig(db);
     try {
@@ -251,12 +263,17 @@ export async function processBotTurn(
       content = "Belum ada Knowledge Base aktif yang dipilih untuk interaction ini.";
     } else {
       const config = await getAIConfig(db);
-      if (interaction.config.provider === "lmstudio") config.provider = "lmstudio";
-      if (interaction.config.provider === "openrouter") config.provider = "openrouter";
-      if (interaction.config.model) {
-        if (config.provider === "lmstudio") config.lmStudioModel = interaction.config.model;
-        else config.openRouterModel = interaction.config.model;
+      if (interaction.config.provider === "lmstudio" || interaction.config.provider === "openrouter") {
+        config.provider = interaction.config.provider;
       }
+      if (config.provider === "lmstudio") {
+        config.lmStudioUrl = interaction.config.lmStudioUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1";
+        config.lmStudioModel = interaction.config.model || config.lmStudioModel;
+      } else {
+        config.openRouterModel = interaction.config.model || config.openRouterModel;
+      }
+      config.temperature = interaction.config.temperature ?? config.temperature;
+      config.maxTokens = interaction.config.maxTokens ?? config.maxTokens;
       const systemTemplate = await getPromptTemplate(db, interaction.config.promptId, "rag") ||
         interaction.config.systemPrompt || "Jawab berdasarkan knowledge context berikut. Jika informasi tidak tersedia, katakan dengan jujur.\n\n{context}";
       const renderedTemplate = applyPromptVariables(systemTemplate, message, user, contextSent || "Tidak ada artikel relevan ditemukan.");

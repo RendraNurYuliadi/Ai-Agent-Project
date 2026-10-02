@@ -27,7 +27,6 @@ interface Config {
   provider: "lmstudio" | "openrouter";
   baseUrl: string;
   model: string;
-  openRouterApiKey: string;
   openRouterModel: string;
   temperature: number;
   maxTokens: number;
@@ -38,7 +37,6 @@ export default function GenAIRoutePage() {
     provider: "lmstudio",
     baseUrl: "http://localhost:1234/v1",
     model: "local-model",
-    openRouterApiKey: "",
     openRouterModel: OPENROUTER_FREE_MODEL,
     temperature: 0.7,
     maxTokens: 1024,
@@ -78,20 +76,19 @@ export default function GenAIRoutePage() {
         }
       })
       .catch(() => {});
-    fetchConfig();
-  }, []);
-
-  const fetchConfig = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/genai-route/config");
-      if (res.ok) {
-        const data = await res.json();
-        setConfig((prev) => ({ ...prev, ...data.config }));
+    void (async () => {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/genai-route/config");
+        if (res.ok) {
+          const data = await res.json();
+          setConfig((prev) => ({ ...prev, ...data.config }));
+        }
+      } catch {} finally {
+        setLoading(false);
       }
-    } catch {}
-    setLoading(false);
-  };
+    })();
+  }, []);
 
   const saveConfig = async () => {
     setSaving(true);
@@ -123,7 +120,6 @@ export default function GenAIRoutePage() {
           provider: config.provider,
           baseUrl: config.baseUrl,
           model: isOpenRouter ? config.openRouterModel : config.model,
-          apiKey: config.openRouterApiKey,
         }),
       });
       const data = await res.json();
@@ -151,7 +147,6 @@ export default function GenAIRoutePage() {
         body: JSON.stringify({
           provider,
           baseUrl: config.baseUrl,
-          apiKey: config.openRouterApiKey,
           listModelsOnly: true,
         }),
       });

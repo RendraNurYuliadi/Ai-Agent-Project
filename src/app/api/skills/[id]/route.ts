@@ -18,34 +18,44 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { name, description, botUserId, botId } = await req.json();
     const cleanName = typeof name === "string" ? name.trim() : "";
+    const normalizedBotUserId = typeof botUserId === "string" ? botUserId.trim() : "";
+    const normalizedBotId = typeof botId === "string" ? botId.trim() : "";
     if (!cleanName || cleanName.length > 100) {
       return NextResponse.json({ error: "Nama skill wajib diisi (maksimal 100 karakter)." }, { status: 400 });
     }
     if (typeof description === "string" && description.length > 500) {
       return NextResponse.json({ error: "Deskripsi maksimal 500 karakter." }, { status: 400 });
     }
+    if (!normalizedBotUserId) {
+      return NextResponse.json({ error: "Pilih user yang valid untuk skill." }, { status: 400 });
+    }
 
     const db = await getDatabase();
     const [exists, duplicate, botUser, bot, activeSetting] = await Promise.all([
       db.collection("skills").findOne({ _id: new ObjectId(id) }, { projection: { _id: 1 } }),
       db.collection("skills").findOne({ name: cleanName, _id: { $ne: new ObjectId(id) } }, { projection: { _id: 1 } }),
-      ObjectId.isValid(botUserId) ? db.collection("users").findOne({ _id: new ObjectId(botUserId), userType: "bot" }, { projection: { _id: 1 } }) : null,
-      ObjectId.isValid(botId) ? db.collection("bots").findOne({ _id: new ObjectId(botId) }) : null,
+      ObjectId.isValid(normalizedBotUserId) ? db.collection("users").findOne({ _id: new ObjectId(normalizedBotUserId) }, { projection: { _id: 1, userType: 1 } }) : null,
+      ObjectId.isValid(normalizedBotId) ? db.collection("bots").findOne({ _id: new ObjectId(normalizedBotId) }) : null,
       db.collection("botSettings").findOne({ key: "active" }),
     ]);
     if (!exists) return NextResponse.json({ error: "Skill tidak ditemukan." }, { status: 404 });
     if (duplicate) return NextResponse.json({ error: "Nama skill sudah digunakan." }, { status: 409 });
-    if (!botUser || !bot) return NextResponse.json({ error: "Pilih user bertipe bot dan bot flow yang valid." }, { status: 400 });
-    const isBotActive = typeof bot.isActive === "boolean" ? bot.isActive : activeSetting?.botId === botId;
-    if (!isBotActive) return NextResponse.json({ error: "Skill hanya dapat dihubungkan ke bot yang aktif." }, { status: 409 });
+    const botLinked = Boolean(normalizedBotUserId && normalizedBotId);
+    if (botLinked) {
+      if (!botUser || botUser.userType !== "bot" || !bot) return NextResponse.json({ error: "Pilih user bertipe bot dan bot flow yang valid." }, { status: 400 });
+      const isBotActive = typeof bot.isActive === "boolean" ? bot.isActive : activeSetting?.botId === normalizedBotId;
+      if (!isBotActive) return NextResponse.json({ error: "Skill hanya dapat dihubungkan ke bot yang aktif." }, { status: 409 });
+    } else if (normalizedBotId) {
+      return NextResponse.json({ error: "Jika ingin menghubungkan ke bot, user harus bertipe bot dan bot flow harus dipilih." }, { status: 400 });
+    }
 
     await db.collection("skills").updateOne(
       { _id: new ObjectId(id) },
       { $set: {
         name: cleanName,
         description: typeof description === "string" ? description.trim() : "",
-        botUserId,
-        botId,
+        botUserId: normalizedBotUserId,
+        botId: normalizedBotId,
         updatedBy: { id: session.id, name: session.name },
         updatedAt: new Date(),
       } }

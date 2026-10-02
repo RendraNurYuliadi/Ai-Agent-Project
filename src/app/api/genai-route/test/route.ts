@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import {
-  getAIConfig,
-  getOpenRouterFreeModels,
+  getOpenRouterModels,
   testLMStudioConnection,
   testOpenRouterConnection,
   OPENROUTER_FREE_MODEL,
@@ -15,17 +13,15 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const { provider = "lmstudio", baseUrl, model, apiKey, listModelsOnly } = await req.json();
+    const { provider = "lmstudio", baseUrl, model, listModelsOnly } = await req.json();
 
     if (provider === "openrouter") {
-      const db = await getDatabase();
-      const storedConfig = await getAIConfig(db);
-      const key = apiKey?.trim() || storedConfig.openRouterApiKey || process.env.OPENROUTER_API_KEY || "";
+      const key = process.env.OPENROUTER_API_KEY || "";
       if (listModelsOnly) {
-        const models = await getOpenRouterFreeModels(key);
+        const models = await getOpenRouterModels(key);
         return NextResponse.json({
           success: true,
-          message: "Daftar model OpenRouter berhasil dimuat.",
+          message: "Koneksi OpenRouter berhasil diuji dan model tersedia.",
           models,
         });
       }
@@ -37,10 +33,10 @@ export async function POST(req: NextRequest) {
       const result = await testLMStudioConnection(url);
       return NextResponse.json(result);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json({
       success: false,
-      error: err?.message || "Gagal menguji koneksi AI provider.",
+      error: err instanceof Error ? err.message : "Gagal menguji koneksi AI provider.",
     });
   }
 }

@@ -44,6 +44,7 @@ export interface GuidedRouteOption {
 }
 
 export interface BotInteractionConfig {
+  name?: string;
   title?: string;
   subtitle?: string;
   icon?: string;
@@ -56,6 +57,9 @@ export interface BotInteractionConfig {
   promptId?: string;
   provider?: "global" | "lmstudio" | "openrouter";
   model?: string;
+  lmStudioUrl?: string;
+  temperature?: number;
+  maxTokens?: number;
   knowledgeBases?: string[];
 }
 
@@ -139,6 +143,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     : undefined;
 
   return {
+    name: typeof value.name === "string" ? value.name.trim().slice(0, 120) : undefined,
     title: typeof value.title === "string" ? value.title.trim().slice(0, 120) : undefined,
     subtitle: typeof value.subtitle === "string" ? value.subtitle.trim().slice(0, 500) : undefined,
     icon: typeof value.icon === "string" ? value.icon.slice(0, 40) : undefined,
@@ -151,6 +156,13 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     promptId: typeof value.promptId === "string" ? value.promptId.trim().slice(0, 100) : undefined,
     provider,
     model: typeof value.model === "string" ? value.model.trim().slice(0, 200) : undefined,
+    lmStudioUrl: typeof value.lmStudioUrl === "string" ? value.lmStudioUrl.trim().slice(0, 500) : undefined,
+    temperature: typeof value.temperature === "number" && Number.isFinite(value.temperature)
+      ? Math.max(0, Math.min(2, value.temperature))
+      : undefined,
+    maxTokens: typeof value.maxTokens === "number" && Number.isFinite(value.maxTokens)
+      ? Math.max(64, Math.min(8192, Math.round(value.maxTokens)))
+      : undefined,
     knowledgeBases: Array.isArray(value.knowledgeBases)
       ? value.knowledgeBases.filter((item): item is string => typeof item === "string").slice(0, 20)
       : undefined,

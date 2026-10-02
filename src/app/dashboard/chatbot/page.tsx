@@ -76,7 +76,7 @@ interface Message {
 }
 
 interface BotInteractionCardData {
-  type: "welcome_message" | "guided_routing";
+  type: "welcome_message" | "guided_routing" | "text_question";
   title?: string;
   subtitle?: string;
   icon?: string;
@@ -428,9 +428,28 @@ function BotInteractionCard({
 }) {
   const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : Sparkles;
   const buttons = data.buttons || data.quickButtons || [];
+
+  if (data.type === "text_question") {
+    return (
+      <article className="w-full max-w-[360px] rounded-xl border border-neutral-800 bg-[#101010] p-3.5">
+        {buttons.length > 0 && (
+          <div className="flex flex-wrap items-start gap-2">
+            {buttons.map((button, index) => button.action === "link" ? (
+              <a key={`${button.label}-${index}`} href={button.value} target="_blank" rel="noopener noreferrer" className="inline-flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800">
+                {button.label}<ExternalLink className="h-3 w-3 shrink-0" />
+              </a>
+            ) : (
+              <button key={`${button.label}-${index}`} type="button" onClick={() => onReply(button.value)} disabled={disabled} className="w-fit max-w-full break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-40">{button.label}</button>
+            ))}
+          </div>
+        )}
+      </article>
+    );
+  }
+
   return (
     <article className="w-full max-w-[360px] rounded-xl border border-neutral-800 bg-[#101010] p-3.5">
-      {data.type === "welcome_message" && (
+      {data.type === "welcome_message" && data.title && (
         <div className="mb-2 flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black"><Icon className="h-4 w-4" /></span>
           <h3 className="text-sm font-semibold text-white">{data.title}</h3>
@@ -1160,7 +1179,7 @@ export default function ChatbotPage() {
                             GenAI
                           </span>
 
-                          {msg.messageType && (
+                          {msg.messageType && msg.messageType !== "TEXT_QUESTION" && (
                             <span
                               className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium ${msg.messageType === "FAQ"
                                 ? "bg-white/10 text-white border border-white/20"

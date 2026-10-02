@@ -43,22 +43,27 @@ export async function POST(req: NextRequest) {
     const { title, skillId } = await req.json();
     const db = await getDatabase();
 
-    let selectedSkill: { _id: ObjectId; name: string; botUserId: string; botId: string } | null = null;
+    let selectedSkill: { _id: ObjectId; name: string; botUserId?: string; botId?: string } | null = null;
     let botUserId: string | null = null;
     let activeBot = null;
     if (typeof skillId === "string" && skillId) {
       if (!ObjectId.isValid(skillId)) return NextResponse.json({ error: "Skill tidak valid." }, { status: 400 });
-      selectedSkill = await db.collection("skills").findOne<{ _id: ObjectId; name: string; botUserId: string; botId: string }>({ _id: new ObjectId(skillId) });
-      if (!selectedSkill || !ObjectId.isValid(selectedSkill.botUserId) || !ObjectId.isValid(selectedSkill.botId)) {
-        return NextResponse.json({ error: "Skill tidak ditemukan atau relasinya tidak valid." }, { status: 400 });
+      selectedSkill = await db.collection("skills").findOne<{ _id: ObjectId; name: string; botUserId?: string; botId?: string }>({ _id: new ObjectId(skillId) });
+      if (!selectedSkill) return NextResponse.json({ error: "Skill tidak ditemukan." }, { status: 400 });
+      if (selectedSkill.botUserId && ObjectId.isValid(selectedSkill.botUserId) && selectedSkill.botId && ObjectId.isValid(selectedSkill.botId)) {
+        const [botUser, skillBot] = await Promise.all([
+          db.collection("users").findOne({ _id: new ObjectId(selectedSkill.botUserId), userType: "bot" }, { projection: { _id: 1 } }),
+          db.collection("bots").findOne({ _id: new ObjectId(selectedSkill.botId) }),
+        ]);
+        if (!botUser || !skillBot) return NextResponse.json({ error: "User bot atau bot flow pada skill sudah tidak tersedia." }, { status: 409 });
+        activeBot = skillBot;
+        botUserId = selectedSkill.botUserId;
+      } else {
+        const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
+        activeBot = activeSetting?.botId && ObjectId.isValid(activeSetting.botId)
+          ? await db.collection("bots").findOne({ _id: new ObjectId(activeSetting.botId) })
+          : null;
       }
-      const [botUser, skillBot] = await Promise.all([
-        db.collection("users").findOne({ _id: new ObjectId(selectedSkill.botUserId), userType: "bot" }, { projection: { _id: 1 } }),
-        db.collection("bots").findOne({ _id: new ObjectId(selectedSkill.botId) }),
-      ]);
-      if (!botUser || !skillBot) return NextResponse.json({ error: "User bot atau bot flow pada skill sudah tidak tersedia." }, { status: 409 });
-      activeBot = skillBot;
-      botUserId = selectedSkill.botUserId;
     } else {
       const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
       activeBot = activeSetting?.botId && ObjectId.isValid(activeSetting.botId)

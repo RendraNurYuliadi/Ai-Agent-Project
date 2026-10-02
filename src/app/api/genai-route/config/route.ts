@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
         maxTokens: config.maxTokens,
       },
     });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: "Failed to fetch config" }, { status: 500 });
   }
 }
@@ -41,15 +41,12 @@ export async function PUT(req: NextRequest) {
       provider,
       baseUrl,
       model,
-      openRouterApiKey,
       openRouterModel,
       temperature,
       maxTokens,
     } = await req.json();
 
     const db = await getDatabase();
-    const currentConfig = await getAIConfig(db);
-
     const selectedOpenRouterModel =
       typeof openRouterModel === "string" && isOpenRouterFreeModel(openRouterModel)
         ? openRouterModel
@@ -61,7 +58,6 @@ export async function PUT(req: NextRequest) {
       baseUrl: baseUrl || "http://localhost:1234/v1",
       model: model || "local-model",
       // OpenRouter fields
-      openRouterApiKey: openRouterApiKey?.trim() || currentConfig.openRouterApiKey,
       openRouterModel: selectedOpenRouterModel,
       // Common
       temperature: typeof temperature === "number" ? temperature : 0.7,
@@ -73,18 +69,18 @@ export async function PUT(req: NextRequest) {
     await Promise.all([
       db.collection("genaiConfig").updateOne(
         { key: "active_config" },
-        { $set: updatePayload },
+        { $set: updatePayload, $unset: { openRouterApiKey: "" } },
         { upsert: true }
       ),
       db.collection("genaiConfig").updateOne(
         { key: "lmstudio" },
-        { $set: updatePayload },
+        { $set: updatePayload, $unset: { openRouterApiKey: "" } },
         { upsert: true }
       ),
     ]);
 
     return NextResponse.json({ success: true, config: updatePayload });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: "Failed to update config" }, { status: 500 });
   }
 }

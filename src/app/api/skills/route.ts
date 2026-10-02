@@ -18,6 +18,11 @@ async function resolveSkillRelations(db: Awaited<ReturnType<typeof getDatabase>>
   return { botUser, bot, isActive };
 }
 
+async function resolveOptionalSkillUser(db: Awaited<ReturnType<typeof getDatabase>>, botUserId: string) {
+  if (!ObjectId.isValid(botUserId)) return null;
+  return db.collection("users").findOne({ _id: new ObjectId(botUserId) }, { projection: { password: 0 } });
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -38,19 +43,20 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       skills: skills.map((skill) => {
-        const botUser = userById.get(skill.botUserId);
-        const bot = botById.get(skill.botId);
+        const botUser = skill.botUserId ? userById.get(skill.botUserId) : null;
+        const bot = skill.botId && botById.get(skill.botId) ? botById.get(skill.botId) : null;
         const botActive = bot && (typeof bot.isActive === "boolean" ? bot.isActive : bot._id.toString() === legacyActiveBotId);
+        const isBotLinked = Boolean(skill.botUserId && skill.botId);
         return {
           id: skill._id.toString(),
           name: skill.name,
           description: skill.description || "",
-          botUserId: skill.botUserId,
-          botId: skill.botId,
+          botUserId: skill.botUserId || "",
+          botId: skill.botId || "",
           botUser: botUser ? {
             id: botUser._id.toString(),
-            name: botUser.name || "User bot",
-            fullName: botUser.fullName || botUser.name || "User bot",
+            name: botUser.name || "User",
+            fullName: botUser.fullName || botUser.name || "User",
             email: botUser.email || "",
             userType: botUser.userType === "bot" ? "bot" : "human",
           } : null,
@@ -62,7 +68,7 @@ export async function GET(req: NextRequest) {
             entryInteractionId: bot.entryInteractionId,
             interactions: bot.interactions || [],
           } : null,
-          isAvailable: botUser?.userType === "bot" && Boolean(botActive),
+          isAvailable: !isBotLinked ? true : botUser?.userType === "bot" && Boolean(botActive),
           createdAt: skill.createdAt || null,
           updatedAt: skill.updatedAt || null,
         };
@@ -82,17 +88,30 @@ export async function POST(req: NextRequest) {
   try {
     const { name, description, botUserId, botId } = await req.json();
     const cleanName = typeof name === "string" ? name.trim() : "";
+    const normalizedBotUserId = typeof botUserId === "string" ? botUserId.trim() : "";
+    const normalizedBotId = typeof botId === "string" ? botId.trim() : "";
     if (!cleanName || cleanName.length > 100) {
       return NextResponse.json({ error: "Nama skill wajib diisi (maksimal 100 karakter)." }, { status: 400 });
     }
     if (typeof description === "string" && description.length > 500) {
       return NextResponse.json({ error: "Deskripsi maksimal 500 karakter." }, { status: 400 });
     }
+    if (!normalizedBotUserId) {
+      return NextResponse.json({ error: "Pilih user yang valid untuk skill." }, { status: 400 });
+    }
     const db = await getDatabase();
+    const user = await resolveOptionalSkillUser(db, normalizedBotUserId);
+    if (!user) return NextResponse.json({ error: "User yang dipilih tidak valid." }, { status: 400 });
+
     const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
-    const relations = await resolveSkillRelations(db, botUserId, botId, activeSetting?.botId || "");
-    if (!relations) return NextResponse.json({ error: "Pilih user bertipe bot dan bot flow yang valid." }, { status: 400 });
-    if (!relations.isActive) return NextResponse.json({ error: "Skill hanya dapat dihubungkan ke bot yang aktif." }, { status: 409 });
+    const botLinked = Boolean(normalizedBotUserId && normalizedBotId);
+    if (botLinked) {
+      const relations = await resolveSkillRelations(db, normalizedBotUserId, normalizedBotId, activeSetting?.botId || "");
+      if (!relations) return NextResponse.json({ error: "Pilih user bertipe bot dan bot flow yang valid." }, { status: 400 });
+      if (!relations.isActive) return NextResponse.json({ error: "Skill hanya dapat dihubungkan ke bot yang aktif." }, { status: 409 });
+    } else if (normalizedBotId) {
+      return NextResponse.json({ error: "Jika ingin menghubungkan ke bot, user harus bertipe bot dan bot flow harus dipilih." }, { status: 400 });
+    }
     if (await db.collection("skills").findOne({ name: cleanName })) {
       return NextResponse.json({ error: "Nama skill sudah digunakan." }, { status: 409 });
     }
@@ -101,8 +120,8 @@ export async function POST(req: NextRequest) {
     const result = await db.collection("skills").insertOne({
       name: cleanName,
       description: typeof description === "string" ? description.trim() : "",
-      botUserId,
-      botId,
+      botUserId: normalizedBotUserId,
+      botId: normalizedBotId,
       createdBy: { id: session.id, name: session.name },
       createdAt: now,
       updatedAt: now,

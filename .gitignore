@@ -32,6 +32,7 @@ yarn-error.log*
 
 # Environment files contain local settings and secrets.
 .env*
+!.env.example
 
 # vercel
 .vercel

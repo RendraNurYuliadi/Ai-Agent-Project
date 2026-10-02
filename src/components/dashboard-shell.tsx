@@ -17,7 +17,6 @@ import {
   User,
   History,
   Zap,
-  Route,
   GitBranch,
   ChevronRight,
   Blocks,
@@ -108,13 +107,6 @@ export default function DashboardShell({
       href: "/dashboard/prompts",
       icon: Zap,
       current: pathname.startsWith("/dashboard/prompts"),
-      roles: ["admin"],
-    },
-    {
-      name: "LLM Gateway",
-      href: "/dashboard/genai-route",
-      icon: Route,
-      current: pathname.startsWith("/dashboard/genai-route"),
       roles: ["admin"],
     },
   ];
