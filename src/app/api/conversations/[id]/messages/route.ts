@@ -4,6 +4,7 @@ import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import { smartSearchKB, ScoredArticle } from "@/lib/smart-search";
 import { getAIConfig, generateAICompletion, isOpenRouterFreeModel } from "@/lib/ai";
+import { processBotTurn } from "@/lib/bot-runtime";
 
 // POST /api/conversations/[id]/messages — add message & get AI reply
 export async function POST(
@@ -35,6 +36,9 @@ export async function POST(
       userId: session.id,
     });
     if (!conversation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+    if (conversation.botStatus === "closed") {
+      return NextResponse.json({ error: "Percakapan ini sudah ditutup. Mulai percakapan baru." }, { status: 409 });
+    }
 
     type ConversationMessage = {
       id: string;
@@ -99,6 +103,55 @@ export async function POST(
         content: message.trim(),
         timestamp: new Date(),
       };
+    }
+
+    if (!editUserMessageId && !regenerateAssistantId) {
+      const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
+      const botId = conversation.botId || activeSetting?.botId;
+      const botDocument = botId && ObjectId.isValid(botId)
+        ? await db.collection("bots").findOne({ _id: new ObjectId(botId) })
+        : null;
+      if (botDocument) {
+        const turn = await processBotTurn(
+          db,
+          {
+            entryInteractionId: botDocument.entryInteractionId,
+            interactions: botDocument.interactions,
+          },
+          {
+            currentInteractionId: conversation.currentInteractionId,
+            botStatus: conversation.botStatus,
+          },
+          message.trim(),
+          session
+        );
+        const updatedAt = new Date();
+        const isFirstMessage = !existingMessages.some((item) => item.role === "user");
+        const setFields: Record<string, unknown> = {
+          botId: botDocument._id.toString(),
+          currentInteractionId: turn.currentInteractionId,
+          botStatus: turn.botStatus,
+          updatedAt,
+        };
+        if (isFirstMessage) {
+          setFields.title = message.trim().slice(0, 60) + (message.trim().length > 60 ? "..." : "");
+        }
+        const botUpdate: Record<string, unknown> = {
+          $push: { messages: { $each: [userMessage, turn.assistantMessage] } },
+          $set: setFields,
+          $inc: { messageCount: 2 },
+        };
+        await db.collection("conversations").updateOne({ _id: new ObjectId(id) }, botUpdate);
+        return NextResponse.json({
+          success: true,
+          userMessage,
+          assistantMessage: turn.assistantMessage,
+          messageType: turn.assistantMessage.messageType,
+          topArticles: turn.assistantMessage.topArticles,
+          contextSent: turn.contextSent,
+          botStatus: turn.botStatus,
+        });
+      }
     }
     const generationStartedAt = Date.now();
 

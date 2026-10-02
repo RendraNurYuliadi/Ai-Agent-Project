@@ -35,6 +35,7 @@ export async function GET(
         id: conversation._id.toString(),
         title: conversation.title,
         messages,
+        botStatus: conversation.botStatus || "active",
         createdAt: conversation.createdAt,
         updatedAt: conversation.updatedAt,
       },

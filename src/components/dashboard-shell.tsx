@@ -18,6 +18,7 @@ import {
   History,
   Zap,
   Route,
+  GitBranch,
   ChevronRight,
   Blocks,
 } from "lucide-react";
@@ -66,6 +67,13 @@ export default function DashboardShell({
       href: "/dashboard/chatbot",
       icon: Bot,
       current: pathname.startsWith("/dashboard/chatbot"),
+    },
+    {
+      name: "Bot Management",
+      href: "/dashboard/bot-management",
+      icon: GitBranch,
+      current: pathname.startsWith("/dashboard/bot-management"),
+      roles: ["admin", "manager"],
     },
     {
       name: "Chat History",
@@ -153,7 +161,7 @@ export default function DashboardShell({
   );
 
   const adminNav = visibleNav.filter((n) =>
-    ["Users"].includes(n.name)
+    ["Users", "Bot Management"].includes(n.name)
   );
 
   const contentNav = visibleNav.filter((n) =>

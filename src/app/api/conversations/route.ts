@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
+import { initializeBotConversation } from "@/lib/bot-runtime";
 
 // GET /api/conversations — list conversations for current user
 export async function GET(req: NextRequest) {
@@ -41,11 +42,27 @@ export async function POST(req: NextRequest) {
     const { title } = await req.json();
     const db = await getDatabase();
 
+    const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
+    const activeBot = activeSetting?.botId && ObjectId.isValid(activeSetting.botId)
+      ? await db.collection("bots").findOne({ _id: new ObjectId(activeSetting.botId) })
+      : null;
+    const flowState = activeBot
+      ? initializeBotConversation({
+        entryInteractionId: activeBot.entryInteractionId,
+        interactions: activeBot.interactions,
+      })
+      : null;
+
     const newConversation = {
       userId: session.id,
       title: title || "Percakapan Baru",
-      messages: [],
-      messageCount: 0,
+      messages: flowState?.messages || [],
+      messageCount: flowState?.messages.length || 0,
+      ...(activeBot && flowState ? {
+        botId: activeBot._id.toString(),
+        currentInteractionId: flowState.currentInteractionId,
+        botStatus: flowState.botStatus,
+      } : {}),
       createdAt: new Date(),
       updatedAt: new Date(),
     };

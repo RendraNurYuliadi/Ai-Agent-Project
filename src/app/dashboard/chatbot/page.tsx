@@ -71,7 +71,28 @@ interface Message {
     matchedKeywords: string[];
   }>;
   uiComponents?: AssistantComponent[];
+  botInteraction?: BotInteractionCardData;
   timestamp: string;
+}
+
+interface BotInteractionCardData {
+  type: "welcome_message" | "guided_routing";
+  title?: string;
+  subtitle?: string;
+  icon?: string;
+  footerText?: string;
+  buttons?: ComponentActionButton[];
+  quickButtons?: ComponentActionButton[];
+}
+
+interface ActiveBotPreview {
+  name: string;
+  entryInteractionId: string;
+  interactions: Array<{
+    id: string;
+    type: string;
+    config: BotInteractionCardData;
+  }>;
 }
 
 interface ComponentActionButton {
@@ -386,10 +407,48 @@ async function loadGatewayModelOptions(): Promise<GatewayModelOptions> {
   return { provider, model, models };
 }
 
+function BotInteractionCard({
+  data,
+  onReply,
+  disabled,
+}: {
+  data: BotInteractionCardData;
+  onReply: (value: string) => void;
+  disabled: boolean;
+}) {
+  const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : Sparkles;
+  const buttons = data.buttons || data.quickButtons || [];
+  return (
+    <article className="w-full max-w-[360px] rounded-xl border border-neutral-800 bg-[#101010] p-3.5">
+      {data.type === "welcome_message" && (
+        <div className="mb-2 flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black"><Icon className="h-4 w-4" /></span>
+          <h3 className="text-sm font-semibold text-white">{data.title}</h3>
+        </div>
+      )}
+      {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
+      {buttons.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          {buttons.map((button, index) => button.action === "link" ? (
+            <a key={`${button.label}-${index}`} href={button.value} target="_blank" rel="noopener noreferrer" className="inline-flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800">
+              {button.label}<ExternalLink className="h-3 w-3 shrink-0" />
+            </a>
+          ) : (
+            <button key={`${button.label}-${index}`} type="button" onClick={() => onReply(button.value)} disabled={disabled} className="w-fit max-w-full break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-40">{button.label}</button>
+          ))}
+        </div>
+      )}
+      {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
+    </article>
+  );
+}
+
 export default function ChatbotPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [activeBot, setActiveBot] = useState<ActiveBotPreview | null>(null);
+  const [conversationStatus, setConversationStatus] = useState("active");
   const [input, setInput] = useState("");
   const [chatModelProvider, setChatModelProvider] = useState<"lmstudio" | "openrouter">("lmstudio");
   const [chatModel, setChatModel] = useState("local-model");
@@ -435,6 +494,10 @@ export default function ChatbotPage() {
   useEffect(() => {
     fetchConversations();
     fetchUserProfile();
+    fetch("/api/bots/active")
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => setActiveBot(data?.bot || null))
+      .catch(() => setActiveBot(null));
     loadGatewayModelOptions()
       .then(({ provider, model, models }) => {
         setChatModelProvider(provider);
@@ -493,6 +556,7 @@ export default function ChatbotPage() {
       if (res.ok) {
         const data = await res.json();
         setMessages(data.conversation.messages || []);
+        setConversationStatus(data.conversation.botStatus || "active");
       }
     } catch (err) {
       console.error("Error loading conversation:", err);
@@ -515,14 +579,15 @@ export default function ChatbotPage() {
           {
             id: newConv.id,
             title: newConv.title,
-            messageCount: 0,
+            messageCount: newConv.messageCount || 0,
             createdAt: newConv.createdAt,
             updatedAt: newConv.updatedAt,
           },
           ...prev,
         ]);
         setActiveConvId(newConv.id);
-        setMessages([]);
+        setMessages(newConv.messages || []);
+        setConversationStatus(newConv.botStatus || "active");
       }
     } catch (err) {
       console.error("Error creating conversation:", err);
@@ -536,6 +601,7 @@ export default function ChatbotPage() {
       if (activeConvId === convId) {
         setActiveConvId(null);
         setMessages([]);
+        setConversationStatus("active");
       }
     } catch (err) {
       console.error("Error deleting conversation:", err);
@@ -604,6 +670,7 @@ export default function ChatbotPage() {
     message: string,
     options: MessageSubmissionOptions = {}
   ) => {
+    if (conversationStatus === "closed") return;
     const isRegenerate = Boolean(options.regenerateAssistantId);
     const isReplacement = isRegenerate || Boolean(options.editUserMessageId);
     if ((!message.trim() && !isRegenerate) || sending) return;
@@ -621,11 +688,13 @@ export default function ChatbotPage() {
           const data = await res.json();
           convId = data.conversation.id;
           setActiveConvId(convId);
+          setMessages(data.conversation.messages || []);
+          setConversationStatus(data.conversation.botStatus || "active");
           setConversations((prev) => [
             {
               id: convId!,
               title: "Percakapan Baru",
-              messageCount: 0,
+              messageCount: data.conversation.messageCount || 0,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             },
@@ -669,6 +738,7 @@ export default function ChatbotPage() {
       if (!res.ok) {
         throw new Error(data.error || "Gagal memproses pesan.");
       }
+      if (data.botStatus) setConversationStatus(data.botStatus);
 
       if (options.editUserMessageId) {
         setMessages((prev) => prev.map((item) => {
@@ -737,6 +807,9 @@ export default function ChatbotPage() {
   const avatarGradient = userProfile
     ? getAvatarGradient(userProfile.role)
     : "from-neutral-700 to-neutral-500";
+  const welcomeInteraction = activeBot?.interactions.find(
+    (item) => item.id === activeBot.entryInteractionId && item.type === "welcome_message"
+  );
 
   return (
     <div className="h-[calc(100vh-5rem)] flex rounded-2xl overflow-hidden border border-neutral-800 bg-black">
@@ -903,12 +976,12 @@ export default function ChatbotPage() {
 
               <div>
                 <h2 className="text-sm font-semibold text-white">
-                  GenAI Chatbot
+                  {activeBot?.name || "GenAI Chatbot"}
                 </h2>
 
                 <p className="text-[10px] text-neutral-500 flex items-center gap-1">
                   <Cpu className="w-2.5 h-2.5" />
-                  {chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • {chatModel}
+                  {activeBot ? "Active bot flow" : `${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • ${chatModel}`}
                 </p>
               </div>
             </div>
@@ -943,6 +1016,21 @@ export default function ChatbotPage() {
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
           {!activeConvId && messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center">
+              {welcomeInteraction ? (
+                <BotInteractionCard
+                  data={{
+                    type: "welcome_message",
+                    title: welcomeInteraction.config.title,
+                    subtitle: welcomeInteraction.config.subtitle,
+                    icon: welcomeInteraction.config.icon,
+                    footerText: welcomeInteraction.config.footerText,
+                    quickButtons: welcomeInteraction.config.quickButtons,
+                  }}
+                  onReply={(value) => void submitMessage(value)}
+                  disabled={sending}
+                />
+              ) : (
+                <>
               <div className="w-16 h-16 rounded-2xl bg-white mx-auto flex items-center justify-center shadow-xl mb-4">
                 <Sparkles className="w-8 h-8 text-black" />
               </div>
@@ -972,6 +1060,8 @@ export default function ChatbotPage() {
                   </button>
                 ))}
               </div>
+                </>
+              )}
             </div>
           ) : loadingMessages ? (
             <div className="h-full flex items-center justify-center">
@@ -1039,7 +1129,7 @@ export default function ChatbotPage() {
                       )}
 
                       {/* Bubble */}
-                      <div
+                      {(msg.content || isEditing) && <div
                         className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser
                           ? "bg-white text-black rounded-tr-sm shadow-lg font-medium"
                           : "bg-[#111111] text-neutral-300 border border-neutral-800 rounded-tl-sm shadow-md"
@@ -1089,7 +1179,15 @@ export default function ChatbotPage() {
                         ) : (
                           <FormattedMessage content={msg.content} isUser={isUser} />
                         )}
-                      </div>
+                      </div>}
+
+                      {!isUser && msg.botInteraction && (
+                        <BotInteractionCard
+                          data={msg.botInteraction}
+                          onReply={(value) => void submitMessage(value)}
+                          disabled={sending}
+                        />
+                      )}
 
                       {!isUser && msg.uiComponents?.map((component) => (
                         <div key={component.id} className="w-full pl-1">
@@ -1231,12 +1329,12 @@ export default function ChatbotPage() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ketik pesan Anda di sini..."
-              disabled={sending}
+              placeholder={conversationStatus === "closed" ? "Percakapan sudah ditutup" : "Ketik pesan Anda di sini..."}
+              disabled={sending || conversationStatus === "closed"}
               className="flex-1 px-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-sm text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:border-neutral-600 disabled:opacity-50"
             />
 
-            <select
+            {!activeBot && <select
               value={chatModel}
               onChange={(event) => setChatModel(event.target.value)}
               disabled={loadingChatModels || availableChatModels.length === 0}
@@ -1250,12 +1348,12 @@ export default function ChatbotPage() {
               {availableChatModels.map((model) => (
                 <option key={model} value={model}>{model}</option>
               ))}
-            </select>
+            </select>}
 
             <select
               value={speechLanguage}
               onChange={(e) => setSpeechLanguage(e.target.value)}
-              disabled={sending || isListening}
+              disabled={sending || isListening || conversationStatus === "closed"}
               aria-label="Bahasa input suara"
               className="h-10 bg-black border border-neutral-800 rounded-xl px-2 text-[11px] text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50"
             >
@@ -1266,7 +1364,7 @@ export default function ChatbotPage() {
             <button
               type="button"
               onClick={startSpeechInput}
-              disabled={sending || !speechSupported || speechModalOpen}
+              disabled={sending || !speechSupported || speechModalOpen || conversationStatus === "closed"}
               aria-label={isListening ? "Berhenti merekam" : "Input suara"}
               title={
                 speechSupported
@@ -1285,7 +1383,7 @@ export default function ChatbotPage() {
 
             <button
               type="submit"
-              disabled={sending || !input.trim()}
+              disabled={sending || !input.trim() || conversationStatus === "closed"}
               className="p-2.5 bg-white hover:bg-neutral-200 text-black rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-md"
             >
               <Send className="w-4 h-4" />
