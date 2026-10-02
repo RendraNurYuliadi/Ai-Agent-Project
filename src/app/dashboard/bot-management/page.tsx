@@ -12,6 +12,7 @@ interface BotListItem {
   description: string;
   isActive: boolean;
   interactions: Array<{ id: string }>;
+  skillCount: number;
   updatedAt: string;
 }
 
@@ -64,15 +65,19 @@ export default function BotManagementPage() {
     }
   };
 
-  const activateBot = async (bot: BotListItem) => {
+  const setBotActive = async (bot: BotListItem, isActive: boolean) => {
     setError("");
-    const response = await fetch(`/api/bots/${bot.id}`, { method: "PATCH" });
+    const response = await fetch(`/api/bots/${bot.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive }),
+    });
     const data = await response.json();
     if (!response.ok) {
-      setError(data.error || "Gagal mengaktifkan bot.");
+      setError(data.error || "Gagal memperbarui status bot.");
       return;
     }
-    setBots((items) => items.map((item) => ({ ...item, isActive: item.id === bot.id })));
+    setBots((items) => items.map((item) => item.id === bot.id ? { ...item, isActive } : item));
   };
 
   const deleteBot = async (bot: BotListItem) => {
@@ -83,10 +88,7 @@ export default function BotManagementPage() {
       setError(data.error || "Gagal menghapus bot.");
       return;
     }
-    setBots((items) => items.filter((item) => item.id !== bot.id).map((item) => ({
-      ...item,
-      isActive: data.activeBotId ? item.id === data.activeBotId : item.isActive,
-    })));
+    setBots((items) => items.filter((item) => item.id !== bot.id));
   };
 
   return (
@@ -97,7 +99,7 @@ export default function BotManagementPage() {
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white">
             <GitBranch className="h-6 w-6" /> Bot Management
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-neutral-500">Kelola bot dan susun alur interaksinya. Hanya satu bot aktif yang digunakan Chatbot.</p>
+          <p className="mt-1 max-w-2xl text-sm text-neutral-500">Kelola bot dan susun alur interaksinya. Beberapa bot aktif dapat digunakan oleh skill yang berbeda.</p>
         </div>
         <button
           type="button"
@@ -132,16 +134,16 @@ export default function BotManagementPage() {
             <Link href={`/dashboard/bot-management/${bot.id}`} className="group min-w-0">
               <span className="block truncate text-sm font-semibold text-neutral-200 group-hover:text-white">{bot.name}</span>
               <span className="mt-1 block truncate text-xs text-neutral-600">{bot.description || "Belum ada deskripsi"}</span>
-              <span className="mt-2 hidden text-[10px] text-neutral-600 max-sm:block">{bot.interactions?.length || 0} interactions</span>
+              <span className="mt-2 hidden text-[10px] text-neutral-600 max-sm:block">{bot.interactions?.length || 0} interactions · {bot.skillCount || 0} skill</span>
             </Link>
             <span className="text-xs text-neutral-400 max-sm:hidden">{bot.interactions?.length || 0}</span>
             <span className="max-sm:hidden">
               {bot.isActive ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-900/70 bg-emerald-950/40 px-2.5 py-1 text-[10px] text-emerald-300"><Check className="h-3 w-3" /> Aktif</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-900/70 bg-emerald-950/40 px-2.5 py-1 text-[10px] text-emerald-300"><Check className="h-3 w-3" /> Aktif · {bot.skillCount || 0} skill</span>
               ) : <span className="text-[10px] text-neutral-600">Nonaktif</span>}
             </span>
             <div className="flex items-center justify-end gap-1.5">
-              {!bot.isActive && <button type="button" onClick={() => void activateBot(bot)} className="rounded-md border border-neutral-800 px-2.5 py-1.5 text-[10px] text-neutral-400 hover:border-neutral-600 hover:text-white">Aktifkan</button>}
+              <button type="button" onClick={() => void setBotActive(bot, !bot.isActive)} className={`rounded-md border px-2.5 py-1.5 text-[10px] ${bot.isActive ? "border-neutral-800 text-neutral-500 hover:border-amber-900 hover:text-amber-300" : "border-neutral-800 text-neutral-400 hover:border-emerald-900 hover:text-emerald-300"}`}>{bot.isActive ? "Nonaktifkan" : "Aktifkan"}</button>
               <Link href={`/dashboard/bot-management/${bot.id}`} title="Atur flow" aria-label={`Atur flow ${bot.name}`} className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><Settings2 className="h-4 w-4" /></Link>
               <button type="button" onClick={() => void deleteBot(bot)} title="Hapus bot" aria-label={`Hapus ${bot.name}`} className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
             </div>
