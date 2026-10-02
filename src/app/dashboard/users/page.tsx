@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Lock,
   Mail,
+  Bot,
 } from "lucide-react";
 
 interface UserItem {
@@ -23,6 +24,7 @@ interface UserItem {
   fullName?: string;
   email: string;
   role: "admin" | "manager" | "public_user";
+  userType: "human" | "bot";
   createdAt?: string;
   updatedAt?: string;
 }
@@ -47,6 +49,7 @@ export default function UsersPage() {
     email: "",
     password: "",
     role: "public_user" as "admin" | "manager" | "public_user",
+    userType: "human" as "human" | "bot",
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
@@ -86,7 +89,34 @@ export default function UsersPage() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    let current = true;
+    const loadUsers = async () => {
+      try {
+        const [resUsers, resMe] = await Promise.all([
+          fetch("/api/users"),
+          fetch("/api/auth/me"),
+        ]);
+        if (!current) return;
+        if (resUsers.ok) {
+          const data = await resUsers.json();
+          if (current) setUsers(data.users || []);
+        }
+        if (resMe.ok) {
+          const meData = await resMe.json();
+          if (!current) return;
+          setCurrentUser(meData.user || null);
+          if (meData.user && meData.user.role !== "admin") {
+            window.location.href = meData.user.role === "manager" ? "/dashboard" : "/dashboard/chatbot";
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load users:", err);
+      } finally {
+        if (current) setLoading(false);
+      }
+    };
+    void loadUsers();
+    return () => { current = false; };
   }, []);
 
   const showNotification = (type: "success" | "error", message: string) => {
@@ -104,6 +134,7 @@ export default function UsersPage() {
       email: "",
       password: "",
       role: "public_user",
+      userType: "human",
     });
     setFormError(null);
     setIsAddModalOpen(true);
@@ -118,6 +149,7 @@ export default function UsersPage() {
       email: user.email,
       password: "",
       role: user.role,
+      userType: user.userType || "human",
     });
     setFormError(null);
     setIsEditModalOpen(true);
@@ -260,6 +292,10 @@ export default function UsersPage() {
     }
   };
 
+  const getUserTypeBadge = (userType: "human" | "bot") => userType === "bot"
+    ? { label: "Bot", Icon: Bot, className: "border-sky-900/70 bg-sky-950/30 text-sky-300" }
+    : { label: "Human", Icon: UserIcon, className: "border-neutral-800 bg-neutral-900 text-neutral-300" };
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -354,6 +390,7 @@ export default function UsersPage() {
                 <th className="py-3.5 px-5">User</th>
                 <th className="py-3.5 px-5">Email</th>
                 <th className="py-3.5 px-5">Role</th>
+                <th className="py-3.5 px-5">Tipe user</th>
                 <th className="py-3.5 px-5">Keamanan Sandi</th>
                 <th className="py-3.5 px-5 text-right">Aksi</th>
               </tr>
@@ -363,7 +400,7 @@ export default function UsersPage() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="py-12 text-center text-neutral-400"
                   >
                     <div className="inline-block w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mb-2" />
@@ -375,7 +412,7 @@ export default function UsersPage() {
               ) : filteredUsers.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="py-12 text-center text-neutral-500"
                   >
                     Tidak ada pengguna yang cocok dengan kriteria pencarian.
@@ -385,6 +422,7 @@ export default function UsersPage() {
                 filteredUsers.map((user) => {
                   const roleBadge = getRoleBadge(user.role);
                   const RoleIconComponent = roleBadge.icon;
+                  const userTypeBadge = getUserTypeBadge(user.userType || "human");
                   const isSelf = currentUser?.id === user.id;
 
                   return (
@@ -429,6 +467,13 @@ export default function UsersPage() {
                         >
                           <RoleIconComponent className="w-3.5 h-3.5" />
                           {user.role}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-5">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${userTypeBadge.className}`}>
+                          <userTypeBadge.Icon className="h-3.5 w-3.5" />
+                          {userTypeBadge.label}
                         </span>
                       </td>
 
@@ -653,6 +698,15 @@ export default function UsersPage() {
                 </select>
               </div>
 
+              <div>
+                <label className="block text-xs font-medium text-neutral-300 mb-1.5">Tipe user</label>
+                <select value={formData.userType} onChange={(e) => setFormData({ ...formData, userType: e.target.value as "human" | "bot" })} className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-neutral-600 focus:border-neutral-600">
+                  <option value="human">Human</option>
+                  <option value="bot">Bot</option>
+                </select>
+                <p className="mt-1 text-[11px] text-neutral-500">Tipe user untuk pengelompokan; tidak mengubah role atau hak akses.</p>
+              </div>
+
               <div className="pt-3 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
@@ -818,6 +872,15 @@ export default function UsersPage() {
                   <option value="manager">manager</option>
                   <option value="admin">admin</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-neutral-300 mb-1.5">Tipe user</label>
+                <select value={formData.userType} onChange={(e) => setFormData({ ...formData, userType: e.target.value as "human" | "bot" })} className="w-full px-3.5 py-2.5 bg-black border border-neutral-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-neutral-600 focus:border-neutral-600">
+                  <option value="human">Human</option>
+                  <option value="bot">Bot</option>
+                </select>
+                <p className="mt-1 text-[11px] text-neutral-500">User bot yang terhubung ke skill tidak dapat diubah menjadi human.</p>
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-2.5">

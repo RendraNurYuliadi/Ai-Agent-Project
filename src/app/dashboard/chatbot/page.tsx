@@ -71,7 +71,37 @@ interface Message {
     matchedKeywords: string[];
   }>;
   uiComponents?: AssistantComponent[];
+  botInteraction?: BotInteractionCardData;
   timestamp: string;
+}
+
+interface BotInteractionCardData {
+  type: "welcome_message" | "guided_routing";
+  title?: string;
+  subtitle?: string;
+  icon?: string;
+  footerText?: string;
+  buttons?: ComponentActionButton[];
+  quickButtons?: ComponentActionButton[];
+}
+
+interface ActiveBotPreview {
+  name: string;
+  entryInteractionId: string;
+  interactions: Array<{
+    id: string;
+    type: string;
+    config: BotInteractionCardData;
+  }>;
+}
+
+interface ChatSkill {
+  id: string;
+  name: string;
+  description: string;
+  botUser: { id: string; name: string; fullName: string; email: string; userType: "human" | "bot" } | null;
+  bot: ActiveBotPreview | null;
+  isAvailable: boolean;
 }
 
 interface ComponentActionButton {
@@ -91,6 +121,8 @@ interface ComponentCard {
 interface AssistantComponent {
   id: string;
   name: string;
+  title?: string;
+  subtitle?: string;
   type: "reply_buttons" | "link_buttons" | "card" | "carousel";
   buttons: ComponentActionButton[];
   card: ComponentCard | null;
@@ -112,6 +144,7 @@ interface Conversation {
   id: string;
   title: string;
   messageCount: number;
+  skillId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -203,14 +236,38 @@ function AssistantComponents({
   onReply: (value: string) => void;
   disabled: boolean;
 }) {
-  if (component.type === "reply_buttons" || component.type === "link_buttons") {
+  if (component.type === "reply_buttons") {
     return (
       <ComponentButtons
         buttons={component.buttons}
         onReply={onReply}
         disabled={disabled}
-        buttonMode={component.type === "link_buttons" ? "link" : "reply"}
       />
+    );
+  }
+  if (component.type === "link_buttons") {
+    return (
+      <article className="w-full max-w-[320px] rounded-xl border border-neutral-800 bg-[#101010] p-3">
+        {component.title && <h3 className="text-sm font-semibold text-white">{component.title}</h3>}
+        {component.subtitle && (
+          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">
+            {component.subtitle}
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          {component.buttons.map((button, index) => (
+            <a
+              key={`${button.label}-${index}`}
+              href={button.value}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-xs font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800"
+            >
+              {button.label}<ExternalLink className="h-3 w-3" />
+            </a>
+          ))}
+        </div>
+      </article>
     );
   }
   if (component.type === "card" && component.card) {
@@ -360,10 +417,51 @@ async function loadGatewayModelOptions(): Promise<GatewayModelOptions> {
   return { provider, model, models };
 }
 
+function BotInteractionCard({
+  data,
+  onReply,
+  disabled,
+}: {
+  data: BotInteractionCardData;
+  onReply: (value: string) => void;
+  disabled: boolean;
+}) {
+  const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : Sparkles;
+  const buttons = data.buttons || data.quickButtons || [];
+  return (
+    <article className="w-full max-w-[360px] rounded-xl border border-neutral-800 bg-[#101010] p-3.5">
+      {data.type === "welcome_message" && (
+        <div className="mb-2 flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black"><Icon className="h-4 w-4" /></span>
+          <h3 className="text-sm font-semibold text-white">{data.title}</h3>
+        </div>
+      )}
+      {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
+      {buttons.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          {buttons.map((button, index) => button.action === "link" ? (
+            <a key={`${button.label}-${index}`} href={button.value} target="_blank" rel="noopener noreferrer" className="inline-flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800">
+              {button.label}<ExternalLink className="h-3 w-3 shrink-0" />
+            </a>
+          ) : (
+            <button key={`${button.label}-${index}`} type="button" onClick={() => onReply(button.value)} disabled={disabled} className="w-fit max-w-full break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-40">{button.label}</button>
+          ))}
+        </div>
+      )}
+      {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
+    </article>
+  );
+}
+
 export default function ChatbotPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [skills, setSkills] = useState<ChatSkill[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [selectedSkillId, setSelectedSkillId] = useState("");
+  const [fallbackActiveBot, setFallbackActiveBot] = useState<ActiveBotPreview | null>(null);
+  const [conversationStatus, setConversationStatus] = useState("active");
   const [input, setInput] = useState("");
   const [chatModelProvider, setChatModelProvider] = useState<"lmstudio" | "openrouter">("lmstudio");
   const [chatModel, setChatModel] = useState("local-model");
@@ -390,6 +488,9 @@ export default function ChatbotPage() {
     () => Boolean(window.SpeechRecognition || window.webkitSpeechRecognition),
     () => false
   );
+  const selectedSkill = skills.find((skill) => skill.id === selectedSkillId) || null;
+  const activeBot = skills.length > 0 ? selectedSkill?.bot || null : fallbackActiveBot;
+  const skillSelectionRequired = skills.length > 0 && !selectedSkillId && !activeConvId;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -409,6 +510,15 @@ export default function ChatbotPage() {
   useEffect(() => {
     fetchConversations();
     fetchUserProfile();
+    fetch("/api/bots/active")
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => setFallbackActiveBot(data?.bot || null))
+      .catch(() => setFallbackActiveBot(null));
+    fetch("/api/skills")
+      .then((response) => response.ok ? response.json() : { skills: [] })
+      .then((data) => setSkills((data.skills || []).filter((skill: ChatSkill) => skill.isAvailable)))
+      .catch(() => setSkills([]))
+      .finally(() => setSkillsLoading(false));
     loadGatewayModelOptions()
       .then(({ provider, model, models }) => {
         setChatModelProvider(provider);
@@ -467,6 +577,8 @@ export default function ChatbotPage() {
       if (res.ok) {
         const data = await res.json();
         setMessages(data.conversation.messages || []);
+        setConversationStatus(data.conversation.botStatus || "active");
+        setSelectedSkillId(data.conversation.skillId || "");
       }
     } catch (err) {
       console.error("Error loading conversation:", err);
@@ -476,11 +588,12 @@ export default function ChatbotPage() {
   };
 
   const createNewConversation = async () => {
+    if (skillSelectionRequired) return;
     try {
       const res = await fetch("/api/conversations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: "Percakapan Baru" }),
+        body: JSON.stringify({ title: "Percakapan Baru", ...(selectedSkillId ? { skillId: selectedSkillId } : {}) }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -489,14 +602,15 @@ export default function ChatbotPage() {
           {
             id: newConv.id,
             title: newConv.title,
-            messageCount: 0,
+            messageCount: newConv.messageCount || 0,
             createdAt: newConv.createdAt,
             updatedAt: newConv.updatedAt,
           },
           ...prev,
         ]);
         setActiveConvId(newConv.id);
-        setMessages([]);
+        setMessages(newConv.messages || []);
+        setConversationStatus(newConv.botStatus || "active");
       }
     } catch (err) {
       console.error("Error creating conversation:", err);
@@ -510,6 +624,7 @@ export default function ChatbotPage() {
       if (activeConvId === convId) {
         setActiveConvId(null);
         setMessages([]);
+        setConversationStatus("active");
       }
     } catch (err) {
       console.error("Error deleting conversation:", err);
@@ -578,6 +693,8 @@ export default function ChatbotPage() {
     message: string,
     options: MessageSubmissionOptions = {}
   ) => {
+    if (skillSelectionRequired) return;
+    if (conversationStatus === "closed") return;
     const isRegenerate = Boolean(options.regenerateAssistantId);
     const isReplacement = isRegenerate || Boolean(options.editUserMessageId);
     if ((!message.trim() && !isRegenerate) || sending) return;
@@ -589,17 +706,20 @@ export default function ChatbotPage() {
         const res = await fetch("/api/conversations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: "Percakapan Baru" }),
+          body: JSON.stringify({ title: "Percakapan Baru", ...(selectedSkillId ? { skillId: selectedSkillId } : {}) }),
         });
         if (res.ok) {
           const data = await res.json();
           convId = data.conversation.id;
           setActiveConvId(convId);
+          setMessages(data.conversation.messages || []);
+          setConversationStatus(data.conversation.botStatus || "active");
           setConversations((prev) => [
             {
               id: convId!,
               title: "Percakapan Baru",
-              messageCount: 0,
+              messageCount: data.conversation.messageCount || 0,
+              skillId: data.conversation.skillId || null,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             },
@@ -643,31 +763,34 @@ export default function ChatbotPage() {
       if (!res.ok) {
         throw new Error(data.error || "Gagal memproses pesan.");
       }
+      if (data.botStatus) setConversationStatus(data.botStatus);
 
       if (options.editUserMessageId) {
         setMessages((prev) => prev.map((item) => {
           if (item.id === options.editUserMessageId) return data.userMessage;
-          if (item.id === data.assistantMessage.id) return data.assistantMessage;
+          if (data.assistantMessage && item.id === data.assistantMessage.id) return data.assistantMessage;
           return item;
         }));
         setEditingMessageId(null);
         setEditingText("");
       } else if (options.regenerateAssistantId) {
-        setMessages((prev) => prev.map((item) =>
-          item.id === options.regenerateAssistantId ? data.assistantMessage : item
-        ));
+        if (data.assistantMessage) {
+          setMessages((prev) => prev.map((item) =>
+            item.id === options.regenerateAssistantId ? data.assistantMessage : item
+          ));
+        }
       } else {
-        setMessages((prev) => [
-          ...prev.map((item) => item.id === userMsg!.id ? data.userMessage : item),
-          data.assistantMessage,
-        ]);
+        setMessages((prev) => {
+          const updated = prev.map((item) => item.id === userMsg!.id ? data.userMessage : item);
+          return data.assistantMessage ? [...updated, data.assistantMessage] : updated;
+        });
         setConversations((prev) =>
           prev.map((c) =>
             c.id === convId
               ? {
                 ...c,
                 title: userMsg!.content.slice(0, 60),
-                messageCount: c.messageCount + 2,
+                messageCount: c.messageCount + (data.assistantMessage ? 2 : 1),
                 updatedAt: new Date().toISOString(),
               }
               : c
@@ -711,6 +834,9 @@ export default function ChatbotPage() {
   const avatarGradient = userProfile
     ? getAvatarGradient(userProfile.role)
     : "from-neutral-700 to-neutral-500";
+  const welcomeInteraction = activeBot?.interactions.find(
+    (item) => item.id === activeBot.entryInteractionId && item.type === "welcome_message"
+  );
 
   return (
     <div className="h-[calc(100vh-5rem)] flex rounded-2xl overflow-hidden border border-neutral-800 bg-black">
@@ -728,8 +854,9 @@ export default function ChatbotPage() {
           <div className="flex items-center gap-1">
             <button
               onClick={createNewConversation}
-              className="p-1.5 rounded-lg bg-white hover:bg-neutral-200 text-black transition-colors cursor-pointer"
-              title="Percakapan Baru"
+              disabled={skillsLoading || skillSelectionRequired}
+              className="p-1.5 rounded-lg bg-white hover:bg-neutral-200 text-black transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+              title={skillSelectionRequired ? "Pilih skill terlebih dahulu" : "Percakapan Baru"}
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -877,18 +1004,33 @@ export default function ChatbotPage() {
 
               <div>
                 <h2 className="text-sm font-semibold text-white">
-                  GenAI Chatbot
+                  {activeBot?.name || "GenAI Chatbot"}
                 </h2>
 
                 <p className="text-[10px] text-neutral-500 flex items-center gap-1">
                   <Cpu className="w-2.5 h-2.5" />
-                  {chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • {chatModel}
+                  {selectedSkill ? `${selectedSkill.name} · ${selectedSkill.botUser?.fullName || selectedSkill.botUser?.name || "Bot"}` : activeBot ? "Bot flow aktif (fallback)" : `${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • ${chatModel}`}
                 </p>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {skills.length > 0 && <select
+              value={selectedSkillId}
+              onChange={(event) => {
+                setSelectedSkillId(event.target.value);
+                setActiveConvId(null);
+                setMessages([]);
+                setConversationStatus("active");
+              }}
+              disabled={skillsLoading || sending}
+              aria-label="Pilih skill chatbot"
+              className="h-9 max-w-40 truncate rounded-lg border border-neutral-800 bg-black px-2 text-[11px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 sm:max-w-56"
+            >
+              <option value="">Pilih skill</option>
+              {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
+            </select>}
             {userProfile && (
               <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-neutral-900/70 border border-neutral-800">
                 <div
@@ -905,7 +1047,9 @@ export default function ChatbotPage() {
 
             <button
               onClick={createNewConversation}
-              className="text-xs px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 rounded-lg border border-neutral-800 transition-colors cursor-pointer flex items-center gap-1.5"
+              disabled={skillsLoading || skillSelectionRequired}
+              title={skillSelectionRequired ? "Pilih skill terlebih dahulu" : "Chat Baru"}
+              className="text-xs px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 rounded-lg border border-neutral-800 transition-colors cursor-pointer flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Plus className="w-3 h-3" />
               <span className="hidden sm:inline">Chat Baru</span>
@@ -917,6 +1061,27 @@ export default function ChatbotPage() {
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
           {!activeConvId && messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center">
+              {skillSelectionRequired ? (
+                <div className="max-w-sm rounded-xl border border-neutral-800 bg-[#080808] p-5">
+                  <Bot className="mx-auto mb-3 h-7 w-7 text-neutral-400" />
+                  <h3 className="text-sm font-semibold text-white">Pilih skill untuk memulai</h3>
+                  <p className="mt-1 text-xs text-neutral-500">Skill menentukan user bot dan bot flow yang digunakan dalam percakapan.</p>
+                </div>
+              ) : welcomeInteraction ? (
+                <BotInteractionCard
+                  data={{
+                    type: "welcome_message",
+                    title: welcomeInteraction.config.title,
+                    subtitle: welcomeInteraction.config.subtitle,
+                    icon: welcomeInteraction.config.icon,
+                    footerText: welcomeInteraction.config.footerText,
+                    quickButtons: welcomeInteraction.config.quickButtons,
+                  }}
+                  onReply={(value) => void submitMessage(value)}
+                  disabled={sending}
+                />
+              ) : (
+                <>
               <div className="w-16 h-16 rounded-2xl bg-white mx-auto flex items-center justify-center shadow-xl mb-4">
                 <Sparkles className="w-8 h-8 text-black" />
               </div>
@@ -946,6 +1111,8 @@ export default function ChatbotPage() {
                   </button>
                 ))}
               </div>
+                </>
+              )}
             </div>
           ) : loadingMessages ? (
             <div className="h-full flex items-center justify-center">
@@ -1013,7 +1180,7 @@ export default function ChatbotPage() {
                       )}
 
                       {/* Bubble */}
-                      <div
+                      {(msg.content || isEditing) && <div
                         className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser
                           ? "bg-white text-black rounded-tr-sm shadow-lg font-medium"
                           : "bg-[#111111] text-neutral-300 border border-neutral-800 rounded-tl-sm shadow-md"
@@ -1063,7 +1230,15 @@ export default function ChatbotPage() {
                         ) : (
                           <FormattedMessage content={msg.content} isUser={isUser} />
                         )}
-                      </div>
+                      </div>}
+
+                      {!isUser && msg.botInteraction && (
+                        <BotInteractionCard
+                          data={msg.botInteraction}
+                          onReply={(value) => void submitMessage(value)}
+                          disabled={sending}
+                        />
+                      )}
 
                       {!isUser && msg.uiComponents?.map((component) => (
                         <div key={component.id} className="w-full pl-1">
@@ -1085,7 +1260,7 @@ export default function ChatbotPage() {
                             {formatDuration(msg.generationDurationMs)}
                           </span>
                         )}
-                        {!isUser && msg.messageType === "FAQ" && (
+                        {!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG") && (
                           <details className="relative text-[10px] text-neutral-500">
                             <summary className="cursor-pointer list-none select-none hover:text-neutral-300">
                               Debug retrieval ({msg.topArticles?.length ?? 0})
@@ -1205,12 +1380,12 @@ export default function ChatbotPage() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ketik pesan Anda di sini..."
-              disabled={sending}
+              placeholder={conversationStatus === "closed" ? "Percakapan sudah ditutup" : skillSelectionRequired ? "Pilih skill untuk memulai..." : "Ketik pesan Anda di sini..."}
+              disabled={sending || conversationStatus === "closed" || skillSelectionRequired}
               className="flex-1 px-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-sm text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:border-neutral-600 disabled:opacity-50"
             />
 
-            <select
+            {!activeBot && <select
               value={chatModel}
               onChange={(event) => setChatModel(event.target.value)}
               disabled={loadingChatModels || availableChatModels.length === 0}
@@ -1224,12 +1399,12 @@ export default function ChatbotPage() {
               {availableChatModels.map((model) => (
                 <option key={model} value={model}>{model}</option>
               ))}
-            </select>
+            </select>}
 
             <select
               value={speechLanguage}
               onChange={(e) => setSpeechLanguage(e.target.value)}
-              disabled={sending || isListening}
+              disabled={sending || isListening || conversationStatus === "closed"}
               aria-label="Bahasa input suara"
               className="h-10 bg-black border border-neutral-800 rounded-xl px-2 text-[11px] text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50"
             >
@@ -1240,7 +1415,7 @@ export default function ChatbotPage() {
             <button
               type="button"
               onClick={startSpeechInput}
-              disabled={sending || !speechSupported || speechModalOpen}
+              disabled={sending || !speechSupported || speechModalOpen || conversationStatus === "closed"}
               aria-label={isListening ? "Berhenti merekam" : "Input suara"}
               title={
                 speechSupported
@@ -1259,7 +1434,7 @@ export default function ChatbotPage() {
 
             <button
               type="submit"
-              disabled={sending || !input.trim()}
+              disabled={sending || !input.trim() || conversationStatus === "closed"}
               className="p-2.5 bg-white hover:bg-neutral-200 text-black rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-md"
             >
               <Send className="w-4 h-4" />

@@ -18,6 +18,7 @@ import {
   History,
   Zap,
   Route,
+  GitBranch,
   ChevronRight,
   Blocks,
 } from "lucide-react";
@@ -43,6 +44,7 @@ export default function DashboardShell({
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const isBotFlowEditor = pathname.startsWith("/dashboard/bot-management/") && pathname !== "/dashboard/bot-management";
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -66,6 +68,20 @@ export default function DashboardShell({
       href: "/dashboard/chatbot",
       icon: Bot,
       current: pathname.startsWith("/dashboard/chatbot"),
+    },
+    {
+      name: "Bot Management",
+      href: "/dashboard/bot-management",
+      icon: GitBranch,
+      current: pathname.startsWith("/dashboard/bot-management"),
+      roles: ["admin", "manager"],
+    },
+    {
+      name: "Skills",
+      href: "/dashboard/skills",
+      icon: Sparkles,
+      current: pathname.startsWith("/dashboard/skills"),
+      roles: ["admin", "manager"],
     },
     {
       name: "Chat History",
@@ -153,7 +169,7 @@ export default function DashboardShell({
   );
 
   const adminNav = visibleNav.filter((n) =>
-    ["Users"].includes(n.name)
+    ["Users", "Bot Management", "Skills"].includes(n.name)
   );
 
   const contentNav = visibleNav.filter((n) =>
@@ -161,7 +177,7 @@ export default function DashboardShell({
   );
 
   return (
-    <div className="min-h-screen bg-black flex flex-col md:flex-row text-neutral-100">
+    <div className={`${isBotFlowEditor ? "h-dvh w-full overflow-hidden" : "min-h-screen"} bg-black flex flex-col md:flex-row text-neutral-100`}>
 
       {/* Mobile Top Header */}
       <div
@@ -451,8 +467,8 @@ export default function DashboardShell({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0 flex flex-col min-h-screen bg-black">
-        <div className="flex-1 p-5 md:p-7 max-w-7xl w-full mx-auto">
+      <main className={`${isBotFlowEditor ? "h-[calc(100dvh-60px)] min-h-0 md:h-screen" : "min-h-screen"} flex flex-1 min-w-0 flex-col bg-black`}>
+        <div className={`${isBotFlowEditor ? "w-full min-w-0 max-w-none flex-1 min-h-0 overflow-hidden p-2 md:p-3" : "mx-auto w-full max-w-7xl flex-1 p-5 md:p-7"}`}>
           {children}
         </div>
       </main>

@@ -4,6 +4,7 @@ import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import { smartSearchKB, ScoredArticle } from "@/lib/smart-search";
 import { getAIConfig, generateAICompletion, isOpenRouterFreeModel } from "@/lib/ai";
+import { processBotTurn } from "@/lib/bot-runtime";
 
 // POST /api/conversations/[id]/messages — add message & get AI reply
 export async function POST(
@@ -35,6 +36,9 @@ export async function POST(
       userId: session.id,
     });
     if (!conversation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+    if (conversation.botStatus === "closed") {
+      return NextResponse.json({ error: "Percakapan ini sudah ditutup. Mulai percakapan baru." }, { status: 409 });
+    }
 
     type ConversationMessage = {
       id: string;
@@ -100,6 +104,56 @@ export async function POST(
         timestamp: new Date(),
       };
     }
+
+    if (!editUserMessageId && !regenerateAssistantId) {
+      const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
+      const botId = conversation.botId || activeSetting?.botId;
+      const botDocument = botId && ObjectId.isValid(botId)
+        ? await db.collection("bots").findOne({ _id: new ObjectId(botId) })
+        : null;
+      if (botDocument) {
+        const turn = await processBotTurn(
+          db,
+          {
+            entryInteractionId: botDocument.entryInteractionId,
+            interactions: botDocument.interactions,
+          },
+          {
+            currentInteractionId: conversation.currentInteractionId,
+            botStatus: conversation.botStatus,
+          },
+          message.trim(),
+          session
+        );
+        const updatedAt = new Date();
+        const isFirstMessage = !existingMessages.some((item) => item.role === "user");
+        const setFields: Record<string, unknown> = {
+          botId: botDocument._id.toString(),
+          currentInteractionId: turn.currentInteractionId,
+          botStatus: turn.botStatus,
+          updatedAt,
+        };
+        if (isFirstMessage) {
+          setFields.title = message.trim().slice(0, 60) + (message.trim().length > 60 ? "..." : "");
+        }
+        const botUpdate: Record<string, unknown> = {
+          $push: { messages: { $each: turn.assistantMessage ? [userMessage, turn.assistantMessage] : [userMessage] } },
+          $set: setFields,
+          $inc: { messageCount: turn.assistantMessage ? 2 : 1 },
+        };
+        await db.collection("conversations").updateOne({ _id: new ObjectId(id) }, botUpdate);
+        return NextResponse.json({
+          success: true,
+          userMessage,
+          assistantMessage: turn.assistantMessage,
+          messageType: turn.assistantMessage?.messageType,
+          topArticles: turn.assistantMessage?.topArticles || [],
+          contextSent: turn.contextSent,
+          botStatus: turn.botStatus,
+          silent: turn.silent,
+        });
+      }
+    }
     const generationStartedAt = Date.now();
 
     // 1. Classify the user message via GenAI Route
@@ -110,11 +164,14 @@ export async function POST(
     const userFullName = session.fullName || session.name || "User";
 
     // Helper: replace all supported placeholders in a prompt template
-    const applyPlaceholders = (template: string): string =>
+    const applyPlaceholders = (template: string, values: { message?: string; context?: string } = {}): string =>
       template
-        .replace(/\{fullName\}/g, userFullName)
-        .replace(/\{name\}/g, session.name || "User")
-        .replace(/\{email\}/g, session.email || "");
+        .replace(/\{context\}/g, () => values.context || "")
+        .replace(/\{question\}/g, () => values.message || "")
+        .replace(/\{message\}/g, () => values.message || "")
+        .replace(/\{fullName\}/g, () => userFullName)
+        .replace(/\{name\}/g, () => session.name || "User")
+        .replace(/\{email\}/g, () => session.email || "");
 
     // Load AI config (LM Studio local or Google AI Studio Gemini)
     const aiConfig = await getAIConfig(db);
@@ -139,7 +196,7 @@ export async function POST(
         messages: [
           {
             role: "user",
-            content: applyPlaceholders(routePromptTemplate).replace("{question}", message.trim()),
+            content: applyPlaceholders(routePromptTemplate, { message: message.trim() }),
           },
         ],
         temperature: 0.1,
@@ -203,6 +260,8 @@ export async function POST(
             id: selectedComponent._id.toString(),
             name: selectedComponent.name,
             type: selectedComponent.type,
+            title: selectedComponent.title || "",
+            subtitle: selectedComponent.subtitle || "",
             buttons: selectedComponent.buttons || [],
             card: selectedComponent.card || null,
             cards: selectedComponent.cards || [],
@@ -227,9 +286,10 @@ KAMU SEDANG BERBICARA DENGAN: {fullName}
 KNOWLEDGE CONTEXT:
 {context}`;
       const faqPromptTemplate = faqPromptDoc?.content || defaultFaqSystemPrompt;
-      const systemPrompt = applyPlaceholders(
-        faqPromptTemplate.replace("{context}", formattedContext)
-      );
+      const systemPrompt = applyPlaceholders(faqPromptTemplate, {
+        context: formattedContext,
+        message: message.trim(),
+      });
 
       if (aiAvailable) {
         try {
@@ -260,8 +320,7 @@ KNOWLEDGE CONTEXT:
       const smallTalkTemplate = smallTalkPromptDoc?.content ||
         "Kamu adalah asisten virtual yang ramah. Balas pesan berikut dengan menyapa {fullName}:\n\nUser: {message}\nAssistant:";
 
-      const smallTalkPrompt = applyPlaceholders(smallTalkTemplate)
-        .replace("{message}", message.trim());
+      const smallTalkPrompt = applyPlaceholders(smallTalkTemplate, { message: message.trim() });
 
       if (aiAvailable) {
         try {

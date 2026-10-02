@@ -29,6 +29,8 @@ export interface StaticComponentCard {
 export interface ComponentTemplateInput {
   name: string;
   type: ComponentType;
+  title?: string;
+  subtitle?: string;
   isActive: boolean;
   articleRefs: ComponentArticleReference[];
   buttons: ComponentButton[];
@@ -96,11 +98,18 @@ export function validateComponentTemplate(value: unknown): ValidationResult {
   if (!isRecord(value)) return { success: false, error: "Format template tidak valid." };
 
   const name = typeof value.name === "string" ? value.name.trim() : "";
+  const title = typeof value.title === "string" ? value.title.trim() : "";
+  const subtitle = typeof value.subtitle === "string" ? value.subtitle.trim() : "";
   if (!name) return { success: false, error: "Nama template wajib diisi." };
   if (name.length > 100) return { success: false, error: "Nama template maksimal 100 karakter." };
   if (!COMPONENT_TYPES.includes(value.type as ComponentType)) {
     return { success: false, error: "Tipe komponen tidak valid." };
   }
+  if (value.type === "link_buttons" && (!title || !subtitle)) {
+    return { success: false, error: "Title dan subtitle wajib diisi untuk Link Buttons." };
+  }
+  if (title.length > 120) return { success: false, error: "Title maksimal 120 karakter." };
+  if (subtitle.length > 300) return { success: false, error: "Subtitle maksimal 300 karakter." };
 
   if (!Array.isArray(value.articleRefs) || value.articleRefs.length < 1 || value.articleRefs.length > 10) {
     return { success: false, error: "Pilih 1 sampai 10 artikel Knowledge Base." };
@@ -154,6 +163,8 @@ export function validateComponentTemplate(value: unknown): ValidationResult {
     data: {
       name: name.slice(0, 100),
       type,
+      title: type === "link_buttons" ? title.slice(0, 120) : "",
+      subtitle: type === "link_buttons" ? subtitle.slice(0, 300) : "",
       isActive: value.isActive === true,
       articleRefs,
       buttons,

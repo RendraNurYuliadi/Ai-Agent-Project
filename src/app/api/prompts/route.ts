@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 
-// GET /api/prompts?type=faq|small_talk|route
+// GET /api/prompts?type=faq|small_talk|route|guided_routing|rag
 export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -42,9 +42,9 @@ export async function POST(req: NextRequest) {
     if (!type || !name || !content) {
       return NextResponse.json({ error: "Type, nama, dan konten prompt wajib diisi" }, { status: 400 });
     }
-    const validTypes = ["faq", "small_talk", "route"];
+    const validTypes = ["faq", "small_talk", "route", "guided_routing", "rag"];
     if (!validTypes.includes(type)) {
-      return NextResponse.json({ error: "Type tidak valid. Pilih: faq, small_talk, atau route" }, { status: 400 });
+      return NextResponse.json({ error: "Type tidak valid." }, { status: 400 });
     }
 
     const db = await getDatabase();

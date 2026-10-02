@@ -50,6 +50,8 @@ const blankCard = (): StaticComponentCard => ({
 const blankTemplate = (): ComponentTemplateInput => ({
   name: "",
   type: "reply_buttons",
+  title: "",
+  subtitle: "",
   isActive: true,
   articleRefs: [],
   buttons: [blankButton()],
@@ -266,6 +268,8 @@ export default function ComponentsPage() {
     setForm({
       name: template.name,
       type: template.type,
+      title: template.title || "",
+      subtitle: template.subtitle || "",
       isActive: template.isActive,
       articleRefs: template.articleRefs.map((item) => ({ ...item })),
       buttons: template.buttons.map((item) => ({ ...item })),
@@ -475,6 +479,35 @@ export default function ComponentsPage() {
                   </section>
                 )}
 
+                {form.type === "link_buttons" && (
+                  <section className="space-y-3 border-t border-neutral-900 pt-4">
+                    <h3 className="text-xs font-medium text-neutral-200">Konten link</h3>
+                    <label className="block space-y-1.5 text-[11px] text-neutral-400">
+                      Title
+                      <input
+                        required
+                        maxLength={120}
+                        value={form.title || ""}
+                        onChange={(event) => setForm({ ...form, title: event.target.value })}
+                        placeholder="Judul yang tampil di atas link"
+                        className="w-full rounded-md border border-neutral-800 bg-black px-3 py-2.5 text-xs text-white placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+                      />
+                    </label>
+                    <label className="block space-y-1.5 text-[11px] text-neutral-400">
+                      Subtitle
+                      <textarea
+                        required
+                        maxLength={300}
+                        value={form.subtitle || ""}
+                        onChange={(event) => setForm({ ...form, subtitle: event.target.value })}
+                        placeholder="Keterangan singkat di bawah title"
+                        rows={3}
+                        className="w-full resize-y rounded-md border border-neutral-800 bg-black px-3 py-2.5 text-xs text-white placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+                      />
+                    </label>
+                  </section>
+                )}
+
                 {form.type === "card" && (
                   <section className="space-y-2 border-t border-neutral-900 pt-4">
                     <h3 className="text-xs font-medium text-neutral-200">Konten card</h3>
@@ -548,6 +581,18 @@ export default function ComponentsPage() {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    ) : form.type === "link_buttons" ? (
+                      <div className="rounded-md border border-neutral-800 bg-black p-3">
+                        <p className="text-xs font-semibold text-white">{form.title || "Title"}</p>
+                        <p className="mt-1 whitespace-pre-wrap text-[10px] text-neutral-500">{form.subtitle || "Subtitle"}</p>
+                        <div className="mt-3 flex flex-wrap items-start gap-2">
+                          {form.buttons.map((button, index) => (
+                            <div key={index} className="w-fit max-w-full break-words rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-[10px] font-medium text-neutral-200">
+                              {button.label || `Link ${index + 1}`}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ) : (
                       <div className="flex flex-wrap gap-1.5">

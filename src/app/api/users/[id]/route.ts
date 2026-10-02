@@ -26,7 +26,7 @@ export async function PUT(
       return NextResponse.json({ error: "ID user tidak valid" }, { status: 400 });
     }
 
-    const { name, email, password, role, fullName } = await req.json();
+    const { name, email, password, role, fullName, userType } = await req.json();
 
     const db = await getDatabase();
     const usersCol = db.collection("users");
@@ -39,6 +39,17 @@ export async function PUT(
     const updateDoc: Record<string, unknown> = {
       updatedAt: new Date(),
     };
+
+    if (userType !== undefined) {
+      if (userType !== "human" && userType !== "bot") {
+        return NextResponse.json({ error: "Tipe user tidak valid. Pilih human atau bot." }, { status: 400 });
+      }
+      if (targetUser.userType === "bot" && userType !== "bot") {
+        const linkedSkill = await db.collection("skills").findOne({ botUserId: id });
+        if (linkedSkill) return NextResponse.json({ error: "User bot masih terhubung ke skill." }, { status: 409 });
+      }
+      updateDoc.userType = userType;
+    }
 
     if (name) updateDoc.name = name.trim();
     if (fullName !== undefined) updateDoc.fullName = fullName?.trim() || name?.trim() || targetUser.name;
@@ -113,6 +124,10 @@ export async function DELETE(
     }
 
     const db = await getDatabase();
+    const linkedSkill = await db.collection("skills").findOne({ botUserId: id });
+    if (linkedSkill) {
+      return NextResponse.json({ error: "User bot masih terhubung ke skill. Hapus atau ubah skill tersebut terlebih dahulu." }, { status: 409 });
+    }
     const result = await db.collection("users").deleteOne({ _id: new ObjectId(id) });
 
     if (result.deletedCount === 0) {
