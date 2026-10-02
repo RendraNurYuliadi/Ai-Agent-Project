@@ -7,14 +7,15 @@ function canManage(role: string): boolean {
   return role === "admin" || role === "manager";
 }
 
-async function resolveSkillRelations(db: Awaited<ReturnType<typeof getDatabase>>, botUserId: string, botId: string) {
+async function resolveSkillRelations(db: Awaited<ReturnType<typeof getDatabase>>, botUserId: string, botId: string, legacyActiveBotId: string) {
   if (!ObjectId.isValid(botUserId) || !ObjectId.isValid(botId)) return null;
   const [botUser, bot] = await Promise.all([
     db.collection("users").findOne({ _id: new ObjectId(botUserId) }, { projection: { password: 0 } }),
     db.collection("bots").findOne({ _id: new ObjectId(botId) }),
   ]);
   if (!botUser || botUser.userType !== "bot" || !bot) return null;
-  return { botUser, bot };
+  const isActive = typeof bot.isActive === "boolean" ? bot.isActive : bot._id.toString() === legacyActiveBotId;
+  return { botUser, bot, isActive };
 }
 
 export async function GET(req: NextRequest) {
@@ -26,10 +27,12 @@ export async function GET(req: NextRequest) {
     const skills = await db.collection("skills").find({}).sort({ name: 1 }).toArray();
     const userIds = [...new Set(skills.map((skill) => skill.botUserId).filter((id) => ObjectId.isValid(id)))].map((id) => new ObjectId(id));
     const botIds = [...new Set(skills.map((skill) => skill.botId).filter((id) => ObjectId.isValid(id)))].map((id) => new ObjectId(id));
-    const [users, bots] = await Promise.all([
+    const [users, bots, activeSetting] = await Promise.all([
       userIds.length ? db.collection("users").find({ _id: { $in: userIds } }, { projection: { password: 0 } }).toArray() : [],
       botIds.length ? db.collection("bots").find({ _id: { $in: botIds } }).toArray() : [],
+      db.collection("botSettings").findOne({ key: "active" }),
     ]);
+    const legacyActiveBotId = activeSetting?.botId || "";
     const userById = new Map(users.map((user) => [user._id.toString(), user]));
     const botById = new Map(bots.map((bot) => [bot._id.toString(), bot]));
 
@@ -37,6 +40,7 @@ export async function GET(req: NextRequest) {
       skills: skills.map((skill) => {
         const botUser = userById.get(skill.botUserId);
         const bot = botById.get(skill.botId);
+        const botActive = bot && (typeof bot.isActive === "boolean" ? bot.isActive : bot._id.toString() === legacyActiveBotId);
         return {
           id: skill._id.toString(),
           name: skill.name,
@@ -54,10 +58,11 @@ export async function GET(req: NextRequest) {
             id: bot._id.toString(),
             name: bot.name,
             description: bot.description || "",
+            isActive: Boolean(botActive),
             entryInteractionId: bot.entryInteractionId,
             interactions: bot.interactions || [],
           } : null,
-          isAvailable: botUser?.userType === "bot" && Boolean(bot),
+          isAvailable: botUser?.userType === "bot" && Boolean(botActive),
           createdAt: skill.createdAt || null,
           updatedAt: skill.updatedAt || null,
         };
@@ -84,8 +89,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Deskripsi maksimal 500 karakter." }, { status: 400 });
     }
     const db = await getDatabase();
-    const relations = await resolveSkillRelations(db, botUserId, botId);
+    const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
+    const relations = await resolveSkillRelations(db, botUserId, botId, activeSetting?.botId || "");
     if (!relations) return NextResponse.json({ error: "Pilih user bertipe bot dan bot flow yang valid." }, { status: 400 });
+    if (!relations.isActive) return NextResponse.json({ error: "Skill hanya dapat dihubungkan ke bot yang aktif." }, { status: 409 });
     if (await db.collection("skills").findOne({ name: cleanName })) {
       return NextResponse.json({ error: "Nama skill sudah digunakan." }, { status: 409 });
     }

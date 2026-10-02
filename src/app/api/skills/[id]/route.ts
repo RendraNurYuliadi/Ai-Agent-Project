@@ -26,15 +26,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const db = await getDatabase();
-    const [exists, duplicate, botUser, bot] = await Promise.all([
+    const [exists, duplicate, botUser, bot, activeSetting] = await Promise.all([
       db.collection("skills").findOne({ _id: new ObjectId(id) }, { projection: { _id: 1 } }),
       db.collection("skills").findOne({ name: cleanName, _id: { $ne: new ObjectId(id) } }, { projection: { _id: 1 } }),
       ObjectId.isValid(botUserId) ? db.collection("users").findOne({ _id: new ObjectId(botUserId), userType: "bot" }, { projection: { _id: 1 } }) : null,
-      ObjectId.isValid(botId) ? db.collection("bots").findOne({ _id: new ObjectId(botId) }, { projection: { _id: 1 } }) : null,
+      ObjectId.isValid(botId) ? db.collection("bots").findOne({ _id: new ObjectId(botId) }) : null,
+      db.collection("botSettings").findOne({ key: "active" }),
     ]);
     if (!exists) return NextResponse.json({ error: "Skill tidak ditemukan." }, { status: 404 });
     if (duplicate) return NextResponse.json({ error: "Nama skill sudah digunakan." }, { status: 409 });
     if (!botUser || !bot) return NextResponse.json({ error: "Pilih user bertipe bot dan bot flow yang valid." }, { status: 400 });
+    const isBotActive = typeof bot.isActive === "boolean" ? bot.isActive : activeSetting?.botId === botId;
+    if (!isBotActive) return NextResponse.json({ error: "Skill hanya dapat dihubungkan ke bot yang aktif." }, { status: 409 });
 
     await db.collection("skills").updateOne(
       { _id: new ObjectId(id) },

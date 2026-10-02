@@ -17,6 +17,7 @@ interface SkillBotOption {
   id: string;
   name: string;
   description: string;
+  isActive: boolean;
 }
 
 interface SkillItem {
@@ -43,6 +44,7 @@ export default function SkillsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SkillItem | null>(null);
   const [form, setForm] = useState({ name: "", description: "", botUserId: "", botId: "" });
+  const activeBots = bots.filter((bot) => bot.isActive);
 
   useEffect(() => {
     let current = true;
@@ -77,7 +79,7 @@ export default function SkillsPage() {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ name: "", description: "", botUserId: botUsers[0]?.id || "", botId: bots[0]?.id || "" });
+    setForm({ name: "", description: "", botUserId: botUsers[0]?.id || "", botId: activeBots[0]?.id || "" });
     setError("");
     setModalOpen(true);
   };
@@ -135,15 +137,15 @@ export default function SkillsPage() {
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white"><Sparkles className="h-6 w-6" />Skills</h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-500">Hubungkan user bertipe Bot dengan bot flow untuk memilih persona di Chatbot.</p>
         </div>
-        <button type="button" onClick={openCreate} disabled={loading || !botUsers.length || !bots.length} className="inline-flex w-fit items-center gap-2 rounded-lg bg-white px-3.5 py-2.5 text-xs font-semibold text-black transition-colors hover:bg-neutral-200 disabled:opacity-40"><Plus className="h-4 w-4" />Buat skill</button>
+        <button type="button" onClick={openCreate} disabled={loading || !botUsers.length || !activeBots.length} className="inline-flex w-fit items-center gap-2 rounded-lg bg-white px-3.5 py-2.5 text-xs font-semibold text-black transition-colors hover:bg-neutral-200 disabled:opacity-40"><Plus className="h-4 w-4" />Buat skill</button>
       </header>
 
       {error && !modalOpen && <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}
 
-      {!loading && (!botUsers.length || !bots.length) && <div className="flex flex-col gap-2 rounded-lg border border-neutral-800 bg-[#080808] px-4 py-3 text-xs text-neutral-400 sm:flex-row sm:items-center">
-        <span>{!botUsers.length ? "Tambahkan user bertipe Bot terlebih dahulu." : "Buat bot flow terlebih dahulu."}</span>
+      {!loading && (!botUsers.length || !activeBots.length) && <div className="flex flex-col gap-2 rounded-lg border border-neutral-800 bg-[#080808] px-4 py-3 text-xs text-neutral-400 sm:flex-row sm:items-center">
+        <span>{!botUsers.length ? "Tambahkan user bertipe Bot terlebih dahulu." : !bots.length ? "Buat bot flow terlebih dahulu." : "Aktifkan minimal satu bot flow untuk menghubungkannya ke skill."}</span>
         {!botUsers.length && <Link href="/dashboard/users" className="text-neutral-200 underline">Buka Users</Link>}
-        {!bots.length && <Link href="/dashboard/bot-management" className="text-neutral-200 underline">Buka Bot Management</Link>}
+        {botUsers.length > 0 && <Link href="/dashboard/bot-management" className="text-neutral-200 underline">Buka Bot Management</Link>}
       </div>}
 
       <section className="overflow-hidden rounded-xl border border-neutral-800 bg-[#080808]">
@@ -169,7 +171,7 @@ export default function SkillsPage() {
           <label className="block space-y-1.5 text-xs text-neutral-400">Nama skill<input required maxLength={100} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Contoh: Asisten Rendra" className="w-full rounded-md border border-neutral-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600" /></label>
           <label className="block space-y-1.5 text-xs text-neutral-400">Deskripsi<textarea maxLength={500} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Tujuan skill ini" className="w-full resize-y rounded-md border border-neutral-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600" /></label>
           <label className="block space-y-1.5 text-xs text-neutral-400">User bertipe Bot<select required value={form.botUserId} onChange={(event) => setForm({ ...form, botUserId: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600"><option value="">Pilih user bot</option>{botUsers.map((user) => <option key={user.id} value={user.id}>{user.fullName || user.name} · {user.email}</option>)}</select></label>
-          <label className="block space-y-1.5 text-xs text-neutral-400">Bot flow<select required value={form.botId} onChange={(event) => setForm({ ...form, botId: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600"><option value="">Pilih bot flow</option>{bots.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
+          <label className="block space-y-1.5 text-xs text-neutral-400">Bot flow aktif<select required value={form.botId} onChange={(event) => setForm({ ...form, botId: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600"><option value="">Pilih bot aktif</option>{activeBots.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select></label>
           <div className="flex justify-end gap-2 border-t border-neutral-900 pt-4"><button type="button" onClick={() => setModalOpen(false)} className="rounded-md border border-neutral-800 px-3 py-2 text-xs text-neutral-400 hover:text-white">Batal</button><button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-md bg-white px-3.5 py-2 text-xs font-semibold text-black disabled:opacity-40">{saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}{editing ? "Simpan perubahan" : "Buat skill"}</button></div>
         </form>
       </div>}

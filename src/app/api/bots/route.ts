@@ -26,14 +26,27 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = await getDatabase();
-    const [bots, activeSetting] = await Promise.all([
+    const [bots, activeSetting, skills] = await Promise.all([
       db.collection("bots").find({}).sort({ updatedAt: -1 }).toArray(),
       db.collection("botSettings").findOne({ key: "active" }),
+      db.collection("skills").find({}, { projection: { botId: 1 } }).toArray(),
     ]);
     const activeId = activeSetting?.botId || "";
+    const skillCounts = new Map<string, number>();
+    for (const skill of skills) {
+      if (typeof skill.botId === "string") skillCounts.set(skill.botId, (skillCounts.get(skill.botId) || 0) + 1);
+    }
     return NextResponse.json({
       activeBotId: activeId,
-      bots: bots.map(({ _id, ...bot }) => ({ id: _id.toString(), ...bot, isActive: _id.toString() === activeId })),
+      bots: bots.map(({ _id, ...bot }) => {
+        const id = _id.toString();
+        return {
+          id,
+          ...bot,
+          isActive: typeof bot.isActive === "boolean" ? bot.isActive : id === activeId,
+          skillCount: skillCounts.get(id) || 0,
+        };
+      }),
     });
   } catch (error) {
     console.error("GET bots error:", error);
@@ -57,6 +70,7 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const result = await db.collection("bots").insertOne({
       ...validation.data,
+      isActive: true,
       createdBy: { id: session.id, name: session.name },
       createdAt: now,
       updatedAt: now,

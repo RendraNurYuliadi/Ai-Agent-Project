@@ -32,13 +32,20 @@ export async function GET(
 
   try {
     const db = await getDatabase();
-    const [bot, activeSetting] = await Promise.all([
+    const [bot, activeSetting, skillCount] = await Promise.all([
       db.collection("bots").findOne({ _id: new ObjectId(id) }),
       db.collection("botSettings").findOne({ key: "active" }),
+      db.collection("skills").countDocuments({ botId: id }),
     ]);
     if (!bot) return NextResponse.json({ error: "Bot tidak ditemukan." }, { status: 404 });
     const { _id, ...data } = bot;
-    return NextResponse.json({ bot: { id: _id.toString(), ...data, isActive: activeSetting?.botId === _id.toString() } });
+    const botId = _id.toString();
+    return NextResponse.json({ bot: {
+      id: botId,
+      ...data,
+      isActive: typeof bot.isActive === "boolean" ? bot.isActive : activeSetting?.botId === botId,
+      skillCount,
+    } });
   } catch (error) {
     console.error("GET bot error:", error);
     return NextResponse.json({ error: "Gagal memuat bot." }, { status: 500 });
@@ -86,14 +93,40 @@ export async function PATCH(
 
   try {
     const db = await getDatabase();
-    const exists = await db.collection("bots").findOne({ _id: new ObjectId(id) }, { projection: { _id: 1 } });
-    if (!exists) return NextResponse.json({ error: "Bot tidak ditemukan." }, { status: 404 });
-    await db.collection("botSettings").updateOne(
-      { key: "active" },
-      { $set: { botId: id, updatedAt: new Date() } },
-      { upsert: true }
+    const body = await req.json().catch(() => ({}));
+    const isActive = typeof body.isActive === "boolean" ? body.isActive : true;
+    if (!isActive && await db.collection("skills").findOne({ botId: id }, { projection: { _id: 1 } })) {
+      return NextResponse.json({ error: "Bot masih dipakai skill. Pindahkan atau hapus skill terlebih dahulu." }, { status: 409 });
+    }
+    const now = new Date();
+    const result = await db.collection("bots").updateOne(
+      { _id: new ObjectId(id) },
+      { $set: { isActive, updatedAt: now } }
     );
-    return NextResponse.json({ success: true });
+    if (!result.matchedCount) return NextResponse.json({ error: "Bot tidak ditemukan." }, { status: 404 });
+
+    const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
+    if (isActive && !activeSetting) {
+      await db.collection("botSettings").updateOne(
+        { key: "active" },
+        { $set: { botId: id, updatedAt: now } },
+        { upsert: true }
+      );
+    } else if (!isActive && activeSetting?.botId === id) {
+      const fallback = await db.collection("bots").findOne(
+        { _id: { $ne: new ObjectId(id) }, isActive: true },
+        { sort: { updatedAt: -1 }, projection: { _id: 1 } }
+      );
+      if (fallback) {
+        await db.collection("botSettings").updateOne(
+          { key: "active" },
+          { $set: { botId: fallback._id.toString(), updatedAt: now } }
+        );
+      } else {
+        await db.collection("botSettings").deleteOne({ key: "active" });
+      }
+    }
+    return NextResponse.json({ success: true, isActive });
   } catch (error) {
     console.error("PATCH active bot error:", error);
     return NextResponse.json({ error: "Gagal mengaktifkan bot." }, { status: 500 });
@@ -112,16 +145,25 @@ export async function DELETE(
 
   try {
     const db = await getDatabase();
+    if (await db.collection("skills").findOne({ botId: id }, { projection: { _id: 1 } })) {
+      return NextResponse.json({ error: "Bot masih terhubung ke skill. Hapus atau ubah skill terlebih dahulu." }, { status: 409 });
+    }
     const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
     let activeBotId = activeSetting?.botId || null;
     if (activeSetting?.botId === id) {
-      const fallback = await db.collection("bots").findOne({ _id: { $ne: new ObjectId(id) } }, { sort: { updatedAt: -1 }, projection: { _id: 1 } });
-      if (!fallback) return NextResponse.json({ error: "Bot aktif terakhir tidak dapat dihapus." }, { status: 400 });
-      activeBotId = fallback._id.toString();
-      await db.collection("botSettings").updateOne(
-        { key: "active" },
-        { $set: { botId: fallback._id.toString(), updatedAt: new Date() } }
+      const fallback = await db.collection("bots").findOne(
+        { _id: { $ne: new ObjectId(id) }, isActive: true },
+        { sort: { updatedAt: -1 }, projection: { _id: 1 } }
       );
+      activeBotId = fallback?._id.toString() || null;
+      if (fallback) {
+        await db.collection("botSettings").updateOne(
+          { key: "active" },
+          { $set: { botId: fallback._id.toString(), updatedAt: new Date() } }
+        );
+      } else {
+        await db.collection("botSettings").deleteOne({ key: "active" });
+      }
     }
     const result = await db.collection("bots").deleteOne({ _id: new ObjectId(id) });
     if (!result.deletedCount) return NextResponse.json({ error: "Bot tidak ditemukan." }, { status: 404 });

@@ -54,6 +54,7 @@ import {
 interface BotDetail extends BotDefinitionInput {
   id: string;
   isActive: boolean;
+  skillCount: number;
 }
 
 interface KnowledgeBaseOption {
@@ -207,6 +208,7 @@ function FlowEditor({ botId }: { botId: string }) {
   const [interactions, setInteractions] = useState<BotInteraction[]>([]);
   const [entryInteractionId, setEntryInteractionId] = useState("");
   const [activeBot, setActiveBot] = useState(false);
+  const [skillCount, setSkillCount] = useState(0);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseOption[]>([]);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
   const [selectedId, setSelectedId] = useState("");
@@ -247,6 +249,7 @@ function FlowEditor({ botId }: { botId: string }) {
       setInteractions(normalizedInteractions);
       setEntryInteractionId(bot.entryInteractionId);
       setActiveBot(bot.isActive);
+      setSkillCount(bot.skillCount || 0);
       setKnowledgeBases(bases.filter((base) => base.isActive !== false));
       setPrompts(promptOptions);
       setNodes(normalizedInteractions.map((item) => toCanvasNode(item, bot.entryInteractionId)));
@@ -370,14 +373,19 @@ function FlowEditor({ botId }: { botId: string }) {
     }
   };
 
-  const activateBot = async () => {
-    const response = await fetch(`/api/bots/${botId}`, { method: "PATCH" });
+  const updateBotStatus = async () => {
+    const nextActive = !activeBot;
+    const response = await fetch(`/api/bots/${botId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: nextActive }),
+    });
     const data = await response.json();
     if (!response.ok) {
-      setError(data.error || "Gagal mengaktifkan bot.");
+      setError(data.error || "Gagal memperbarui status bot.");
       return;
     }
-    setActiveBot(true);
+    setActiveBot(data.isActive);
   };
 
   const savePromptTemplate = async (promptId: string, content: string) => {
@@ -438,9 +446,10 @@ function FlowEditor({ botId }: { botId: string }) {
             <p className="text-[10px] uppercase tracking-wide text-neutral-600">Bot flow editor</p>
             <input aria-label="Nama bot" value={botName} onChange={(event) => setBotName(event.target.value)} className="w-full max-w-md truncate border-0 bg-transparent p-0 text-lg font-semibold text-white outline-none focus:ring-0" />
           </div>
-          {activeBot ? <span className="rounded-full border border-emerald-900 bg-emerald-950/40 px-2 py-1 text-[10px] text-emerald-300">Aktif</span> : <button type="button" onClick={() => void activateBot()} className="rounded-md border border-neutral-700 px-2.5 py-1.5 text-[10px] text-neutral-300 hover:bg-neutral-900">Aktifkan bot</button>}
+          {activeBot && <span className="rounded-full border border-emerald-900 bg-emerald-950/40 px-2 py-1 text-[10px] text-emerald-300">Aktif · {skillCount} skill</span>}
         </div>
         <div className="flex items-center gap-2">
+          <button type="button" onClick={() => void updateBotStatus()} className="rounded-md border border-neutral-800 px-2.5 py-2 text-[10px] text-neutral-400 hover:border-neutral-600 hover:text-white">{activeBot ? "Nonaktifkan bot" : "Aktifkan bot"}</button>
           <div className="relative">
             <button type="button" onClick={() => setVariablesInfoOpen((open) => !open)} title="Variabel sistem yang tersedia" aria-label="Variabel sistem yang tersedia" aria-expanded={variablesInfoOpen} className="rounded-md border border-neutral-800 p-2 text-neutral-400 hover:bg-neutral-900 hover:text-white">
               <CircleHelp className="h-4 w-4" />
