@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, GitBranch, Loader2, Plus, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { AlertCircle, GitBranch, Loader2, Plus, Sparkles, Trash2, UserRound, X } from "lucide-react";
 
 interface SkillUserOption {
   id: string;
@@ -40,7 +41,11 @@ export default function SkillsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<SkillItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SkillItem | null>(null);
   const [form, setForm] = useState({ name: "", description: "", botUserId: "", botId: "", attachBot: false });
@@ -118,8 +123,7 @@ export default function SkillsPage() {
       if (!response.ok) throw new Error(data.error || "Gagal menyimpan skill.");
       await refreshSkills();
       setModalOpen(false);
-      setNotice(editing ? "Skill berhasil diperbarui." : "Skill berhasil dibuat.");
-      window.setTimeout(() => setNotice(""), 3500);
+      setNotice({ type: "success", message: editing ? "Skill berhasil diperbarui." : "Skill berhasil dibuat." });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Gagal menyimpan skill.");
     } finally {
@@ -127,22 +131,59 @@ export default function SkillsPage() {
     }
   };
 
-  const deleteSkill = async (skill: SkillItem) => {
-    if (!window.confirm(`Hapus skill "${skill.name}"? Percakapan yang sudah ada tetap tersimpan.`)) return;
+  const deleteSkill = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      const response = await fetch(`/api/skills/${skill.id}`, { method: "DELETE" });
+      const response = await fetch(`/api/skills/${pendingDelete.id}`, { method: "DELETE" });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Gagal menghapus skill.");
-      setSkills((items) => items.filter((item) => item.id !== skill.id));
+      setSkills((items) => items.filter((item) => item.id !== pendingDelete.id));
+      setNotice({ type: "success", message: `Skill "${pendingDelete.name}" berhasil dihapus.` });
+      setPendingDelete(null);
     } catch (deleteError) {
-      setNotice(deleteError instanceof Error ? deleteError.message : "Gagal menghapus skill.");
-      window.setTimeout(() => setNotice(""), 3500);
+      setNotice({ type: "error", message: deleteError instanceof Error ? deleteError.message : "Gagal menghapus skill." });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const deleteAllSkills = async () => {
+    setDeletingAll(true);
+    try {
+      const response = await fetch("/api/skills", { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus semua skill.");
+      setSkills([]);
+      setBulkDeleteOpen(false);
+      setNotice({ type: "success", message: `${data.deletedCount} skill berhasil dihapus.` });
+    } catch (deleteError) {
+      setNotice({ type: "error", message: deleteError instanceof Error ? deleteError.message : "Gagal menghapus semua skill." });
+    } finally {
+      setDeletingAll(false);
     }
   };
 
   return (
     <div className="space-y-6">
-      {notice && <div role="status" className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-lg border border-neutral-700 bg-[#0a0a0a] px-4 py-3 text-xs text-neutral-200 shadow-xl"><CheckCircle2 className="h-4 w-4" />{notice}</div>}
+      <ActionToast type={notice?.type || "success"} message={notice?.message || ""} />
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Hapus skill?"
+        message={pendingDelete ? `Skill "${pendingDelete.name}" akan dihapus. Percakapan yang sudah ada tetap tersimpan.` : ""}
+        pending={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void deleteSkill()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Hapus semua skill?"
+        message={`Sebanyak ${skills.length} skill akan dihapus. Percakapan yang sudah ada tetap tersimpan.`}
+        confirmLabel="Hapus semua"
+        pending={deletingAll}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void deleteAllSkills()}
+      />
 
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -150,7 +191,10 @@ export default function SkillsPage() {
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white"><Sparkles className="h-6 w-6" />Skills</h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-500">Hubungkan user bertipe Bot dengan bot flow untuk memilih persona di Chatbot.</p>
         </div>
-        <button type="button" onClick={openCreate} disabled={loading || !users.length} className="inline-flex w-fit items-center gap-2 rounded-lg bg-white px-3.5 py-2.5 text-xs font-semibold text-black transition-colors hover:bg-neutral-200 disabled:opacity-40"><Plus className="h-4 w-4" />Buat skill</button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || skills.length === 0 || deletingAll} className="inline-flex items-center gap-2 rounded-lg border border-red-900/70 px-3.5 py-2.5 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-4 w-4" />Hapus semua ({skills.length})</button>
+          <button type="button" onClick={openCreate} disabled={loading || !users.length} className="inline-flex w-fit items-center gap-2 rounded-lg bg-white px-3.5 py-2.5 text-xs font-semibold text-black transition-colors hover:bg-neutral-200 disabled:opacity-40"><Plus className="h-4 w-4" />Buat skill</button>
+        </div>
       </header>
 
       {error && !modalOpen && <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}
@@ -171,7 +215,7 @@ export default function SkillsPage() {
             <div className="min-w-0"><p className="truncate text-sm font-semibold text-neutral-200">{skill.name}</p><p className="mt-1 truncate text-xs text-neutral-600">{skill.description || "Tanpa deskripsi"}</p><span className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] ${skill.isAvailable ? "border-emerald-900/70 bg-emerald-950/30 text-emerald-300" : "border-amber-900/70 bg-amber-950/30 text-amber-300"}`}>{skill.isAvailable ? "Siap digunakan" : "Relasi perlu diperbaiki"}</span></div>
             <div className="hidden min-w-0 items-center gap-2 text-xs text-neutral-400 sm:flex"><UserRound className="h-4 w-4 shrink-0 text-neutral-600" /><span className="truncate">{skill.botUser?.fullName || skill.botUser?.name || "User tidak ditemukan"}</span></div>
             <div className="hidden min-w-0 items-center gap-2 text-xs text-neutral-400 sm:flex"><GitBranch className="h-4 w-4 shrink-0 text-neutral-600" /><span className="truncate">{skill.bot?.name || "Bot tidak ditemukan"}</span></div>
-            <div className="flex items-center justify-end gap-1"><button type="button" onClick={() => openEdit(skill)} aria-label={`Edit skill ${skill.name}`} title="Edit skill" className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><GitBranch className="h-4 w-4" /></button><button type="button" onClick={() => void deleteSkill(skill)} aria-label={`Hapus skill ${skill.name}`} title="Hapus skill" className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button></div>
+            <div className="flex items-center justify-end gap-1"><button type="button" onClick={() => openEdit(skill)} aria-label={`Edit skill ${skill.name}`} title="Edit skill" className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><GitBranch className="h-4 w-4" /></button><button type="button" onClick={() => setPendingDelete(skill)} aria-label={`Hapus skill ${skill.name}`} title="Hapus skill" className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button></div>
           </article>
         ))}
       </section>

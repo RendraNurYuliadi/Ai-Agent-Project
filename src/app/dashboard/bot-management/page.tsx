@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Bot, Check, GitBranch, Loader2, Plus, Settings2, Trash2, X } from "lucide-react";
+import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
 import { createStarterBot, type BotDefinitionInput } from "@/lib/bot-flows";
 
 interface BotListItem {
@@ -25,6 +26,11 @@ export default function BotManagementPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [notice, setNotice] = useState("");
+  const [pendingDelete, setPendingDelete] = useState<BotListItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -57,7 +63,7 @@ export default function BotManagementPage() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Gagal membuat bot.");
-      router.push(`/dashboard/bot-management/${data.id}`);
+      router.push(`/dashboard/bot-management/${data.id}?created=1`);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Gagal membuat bot.");
     } finally {
@@ -67,32 +73,57 @@ export default function BotManagementPage() {
 
   const setBotActive = async (bot: BotListItem, isActive: boolean) => {
     setError("");
-    const response = await fetch(`/api/bots/${bot.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive }),
-    });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error || "Gagal memperbarui status bot.");
-      return;
+    try {
+      const response = await fetch(`/api/bots/${bot.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal memperbarui status bot.");
+      setBots((items) => items.map((item) => item.id === bot.id ? { ...item, isActive } : item));
+      setNotice(`Bot "${bot.name}" berhasil ${isActive ? "diaktifkan" : "dinonaktifkan"}.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Gagal memperbarui status bot.");
     }
-    setBots((items) => items.map((item) => item.id === bot.id ? { ...item, isActive } : item));
   };
 
-  const deleteBot = async (bot: BotListItem) => {
-    if (!window.confirm(`Hapus bot "${bot.name}"?`)) return;
-    const response = await fetch(`/api/bots/${bot.id}`, { method: "DELETE" });
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error || "Gagal menghapus bot.");
-      return;
+  const deleteBot = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/bots/${pendingDelete.id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus bot.");
+      setBots((items) => items.filter((item) => item.id !== pendingDelete.id));
+      setNotice(`Bot "${pendingDelete.name}" berhasil dihapus.`);
+      setPendingDelete(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Gagal menghapus bot.");
+    } finally {
+      setDeleting(false);
     }
-    setBots((items) => items.filter((item) => item.id !== bot.id));
+  };
+
+  const deleteAllBots = async () => {
+    setDeletingAll(true);
+    try {
+      const response = await fetch("/api/bots", { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus semua bot.");
+      setBots([]);
+      setBulkDeleteOpen(false);
+      setNotice(`${data.deletedCount} bot berhasil dihapus.`);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Gagal menghapus semua bot.");
+    } finally {
+      setDeletingAll(false);
+    }
   };
 
   return (
     <div className="space-y-6">
+      <ActionToast type="success" message={notice} />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Automation</p>
@@ -101,13 +132,18 @@ export default function BotManagementPage() {
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-neutral-500">Kelola bot dan susun alur interaksinya. Beberapa bot aktif dapat digunakan oleh skill yang berbeda.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => { setName(""); setDescription(""); setModalOpen(true); }}
-          className="inline-flex w-fit items-center gap-2 rounded-lg bg-white px-3.5 py-2.5 text-xs font-semibold text-black transition-colors hover:bg-neutral-200"
-        >
-          <Plus className="h-4 w-4" /> Buat bot
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || bots.length === 0 || deletingAll} className="inline-flex items-center gap-2 rounded-lg border border-red-900/70 px-3.5 py-2.5 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40">
+            <Trash2 className="h-4 w-4" /> Hapus semua ({bots.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => { setName(""); setDescription(""); setModalOpen(true); }}
+            className="inline-flex w-fit items-center gap-2 rounded-lg bg-white px-3.5 py-2.5 text-xs font-semibold text-black transition-colors hover:bg-neutral-200"
+          >
+            <Plus className="h-4 w-4" /> Buat bot
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -145,7 +181,7 @@ export default function BotManagementPage() {
             <div className="flex items-center justify-end gap-1.5">
               <button type="button" onClick={() => void setBotActive(bot, !bot.isActive)} className={`rounded-md border px-2.5 py-1.5 text-[10px] ${bot.isActive ? "border-neutral-800 text-neutral-500 hover:border-amber-900 hover:text-amber-300" : "border-neutral-800 text-neutral-400 hover:border-emerald-900 hover:text-emerald-300"}`}>{bot.isActive ? "Nonaktifkan" : "Aktifkan"}</button>
               <Link href={`/dashboard/bot-management/${bot.id}`} title="Atur flow" aria-label={`Atur flow ${bot.name}`} className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><Settings2 className="h-4 w-4" /></Link>
-              <button type="button" onClick={() => void deleteBot(bot)} title="Hapus bot" aria-label={`Hapus ${bot.name}`} className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
+              <button type="button" onClick={() => setPendingDelete(bot)} title="Hapus bot" aria-label={`Hapus ${bot.name}`} className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
             </div>
           </article>
         ))}
@@ -155,7 +191,7 @@ export default function BotManagementPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <form onSubmit={createBot} className="w-full max-w-md space-y-4 rounded-xl border border-neutral-800 bg-[#0a0a0a] p-5 shadow-2xl">
             <div className="flex items-start justify-between">
-              <div><h2 className="text-base font-semibold text-white">Buat bot</h2><p className="mt-1 text-xs text-neutral-500">Flow awal berisi Welcome dan Text Start.</p></div>
+              <div><h2 className="text-base font-semibold text-white">Buat bot</h2><p className="mt-1 text-xs text-neutral-500">Flow awal berisi Welcome dan Text Interaction.</p></div>
               <button type="button" onClick={() => setModalOpen(false)} aria-label="Tutup" className="rounded p-1 text-neutral-500 hover:text-white"><X className="h-4 w-4" /></button>
             </div>
             <label className="block space-y-1.5 text-xs text-neutral-400">Nama bot
@@ -173,6 +209,23 @@ export default function BotManagementPage() {
           </form>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Hapus bot?"
+        message={pendingDelete ? `Bot "${pendingDelete.name}" akan dihapus. Tindakan ini tidak dapat dibatalkan.` : ""}
+        pending={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void deleteBot()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Hapus semua bot?"
+        message={`Sebanyak ${bots.length} bot akan dihapus. Bot yang masih terhubung ke skill harus dilepas terlebih dahulu.`}
+        confirmLabel="Hapus semua"
+        pending={deletingAll}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void deleteAllBots()}
+      />
     </div>
   );
 }

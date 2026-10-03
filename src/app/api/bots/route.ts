@@ -89,3 +89,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Gagal menyimpan bot." }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canManage(session.role)) return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
+
+  try {
+    const db = await getDatabase();
+    const bots = await db.collection("bots").find({}, { projection: { _id: 1 } }).toArray();
+    const botIds = bots.map((bot) => bot._id.toString());
+    if (botIds.length && await db.collection("skills").findOne({ botId: { $in: botIds } }, { projection: { _id: 1 } })) {
+      return NextResponse.json({ error: "Sebagian bot masih terhubung ke skill. Hapus atau ubah skill terlebih dahulu." }, { status: 409 });
+    }
+
+    const result = await db.collection("bots").deleteMany({});
+    await db.collection("botSettings").deleteOne({ key: "active" });
+    return NextResponse.json({ success: true, deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error("DELETE all bots error:", error);
+    return NextResponse.json({ error: "Gagal menghapus semua bot." }, { status: 500 });
+  }
+}

@@ -67,3 +67,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to create prompt" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role !== "admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
+
+  try {
+    const db = await getDatabase();
+    const result = await db.collection("prompts").deleteMany({});
+    return NextResponse.json({ success: true, deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error("DELETE all prompts error:", error);
+    return NextResponse.json({ error: "Gagal menghapus semua prompt." }, { status: 500 });
+  }
+}

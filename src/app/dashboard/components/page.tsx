@@ -11,6 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/action-feedback";
 import type {
   ComponentArticleReference,
   ComponentButton,
@@ -202,6 +203,10 @@ export default function ComponentsPage() {
   const [form, setForm] = useState<ComponentTemplateInput>(blankTemplate());
   const [articleSearch, setArticleSearch] = useState("");
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ComponentTemplate | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const notify = useCallback((type: "success" | "error", message: string) => {
     setNotification({ type, message });
@@ -315,18 +320,40 @@ export default function ComponentsPage() {
     setTemplates((previous) => previous.map((item) =>
       item.id === template.id ? { ...item, isActive: !item.isActive } : item
     ));
+    notify("success", `Template ${template.isActive ? "dinonaktifkan" : "diaktifkan"}.`);
   };
 
-  const deleteTemplate = async (template: ComponentTemplate) => {
-    if (!window.confirm(`Hapus template "${template.name}"?`)) return;
-    const response = await fetch(`/api/components/${template.id}`, { method: "DELETE" });
-    if (!response.ok) {
+  const deleteTemplate = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/components/${pendingDelete.id}`, { method: "DELETE" });
       const data = await response.json();
-      notify("error", data.error || "Gagal menghapus template.");
-      return;
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus template.");
+      setTemplates((previous) => previous.filter((item) => item.id !== pendingDelete.id));
+      notify("success", `Template "${pendingDelete.name}" berhasil dihapus.`);
+      setPendingDelete(null);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menghapus template.");
+    } finally {
+      setDeleting(false);
     }
-    setTemplates((previous) => previous.filter((item) => item.id !== template.id));
-    notify("success", "Template dihapus.");
+  };
+
+  const deleteAllTemplates = async () => {
+    setDeletingAll(true);
+    try {
+      const response = await fetch("/api/components", { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus semua template.");
+      setTemplates([]);
+      setBulkDeleteOpen(false);
+      notify("success", `${data.deletedCount} template berhasil dihapus.`);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menghapus semua template.");
+    } finally {
+      setDeletingAll(false);
+    }
   };
 
   const toggleArticle = (article: ArticleOption) => {
@@ -368,6 +395,23 @@ export default function ComponentsPage() {
           {notification.message}
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Hapus template?"
+        message={pendingDelete ? `Template "${pendingDelete.name}" akan dihapus permanen.` : ""}
+        pending={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void deleteTemplate()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Hapus semua template?"
+        message={`Sebanyak ${templates.length} template Components akan dihapus permanen.`}
+        confirmLabel="Hapus semua"
+        pending={deletingAll}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void deleteAllTemplates()}
+      />
 
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-neutral-900 pb-5">
         <div>
@@ -377,13 +421,10 @@ export default function ComponentsPage() {
           </div>
           <h1 className="text-xl font-semibold text-white">Components</h1>
         </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-md bg-white px-3.5 py-2 text-xs font-semibold text-black hover:bg-neutral-200"
-        >
-          <Plus className="h-4 w-4" /> Buat template
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || templates.length === 0 || deletingAll} className="inline-flex items-center gap-2 rounded-md border border-red-900/70 px-3.5 py-2 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-4 w-4" /> Hapus semua ({templates.length})</button>
+          <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-md bg-white px-3.5 py-2 text-xs font-semibold text-black hover:bg-neutral-200"><Plus className="h-4 w-4" /> Buat template</button>
+        </div>
       </header>
 
       <section className="overflow-hidden rounded-lg border border-neutral-800 bg-[#090909]">
@@ -415,7 +456,7 @@ export default function ComponentsPage() {
               <button type="button" onClick={() => openEdit(template)} title="Edit" aria-label={`Edit ${template.name}`} className="rounded p-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-white">
                 <Pencil className="h-3.5 w-3.5" />
               </button>
-              <button type="button" onClick={() => void deleteTemplate(template)} title="Hapus" aria-label={`Hapus ${template.name}`} className="rounded p-1.5 text-neutral-600 hover:bg-red-950 hover:text-red-300">
+              <button type="button" onClick={() => setPendingDelete(template)} title="Hapus" aria-label={`Hapus ${template.name}`} className="rounded p-1.5 text-neutral-600 hover:bg-red-950 hover:text-red-300">
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>

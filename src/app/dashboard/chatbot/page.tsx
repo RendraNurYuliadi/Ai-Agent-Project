@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { FormattedMessage } from "@/components/formatted-message";
 import { ResponseMeta } from "@/components/response-meta";
+import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
 
 interface SpeechRecognitionResultEventLike {
   resultIndex: number;
@@ -480,6 +481,9 @@ export default function ChatbotPage() {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Conversation | null>(null);
+  const [deletingConversation, setDeletingConversation] = useState(false);
   const [sending, setSending] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -501,6 +505,7 @@ export default function ChatbotPage() {
   const selectedSkill = skills.find((skill) => skill.id === selectedSkillId) || null;
   const activeBot = skills.length > 0 ? selectedSkill?.bot || null : fallbackActiveBot;
   const skillSelectionRequired = skills.length > 0 && !selectedSkillId && !activeConvId;
+  const notify = (type: "success" | "error", message: string) => setNotification({ type, message });
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -605,39 +610,47 @@ export default function ChatbotPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "Percakapan Baru", ...(selectedSkillId ? { skillId: selectedSkillId } : {}) }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        const newConv = data.conversation;
-        setConversations((prev) => [
-          {
-            id: newConv.id,
-            title: newConv.title,
-            messageCount: newConv.messageCount || 0,
-            createdAt: newConv.createdAt,
-            updatedAt: newConv.updatedAt,
-          },
-          ...prev,
-        ]);
-        setActiveConvId(newConv.id);
-        setMessages(newConv.messages || []);
-        setConversationStatus(newConv.botStatus || "active");
-      }
-    } catch (err) {
-      console.error("Error creating conversation:", err);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal membuat percakapan.");
+      const newConv = data.conversation;
+      setConversations((prev) => [
+        {
+          id: newConv.id,
+          title: newConv.title,
+          messageCount: newConv.messageCount || 0,
+          createdAt: newConv.createdAt,
+          updatedAt: newConv.updatedAt,
+        },
+        ...prev,
+      ]);
+      setActiveConvId(newConv.id);
+      setMessages(newConv.messages || []);
+      setConversationStatus(newConv.botStatus || "active");
+      notify("success", "Percakapan baru berhasil dibuat.");
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal membuat percakapan.");
     }
   };
 
-  const deleteConversation = async (convId: string) => {
+  const deleteConversation = async () => {
+    if (!pendingDelete) return;
+    setDeletingConversation(true);
     try {
-      await fetch(`/api/conversations/${convId}`, { method: "DELETE" });
-      setConversations((prev) => prev.filter((c) => c.id !== convId));
-      if (activeConvId === convId) {
+      const response = await fetch(`/api/conversations/${pendingDelete.id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus percakapan.");
+      setConversations((prev) => prev.filter((conversation) => conversation.id !== pendingDelete.id));
+      if (activeConvId === pendingDelete.id) {
         setActiveConvId(null);
         setMessages([]);
         setConversationStatus("active");
       }
-    } catch (err) {
-      console.error("Error deleting conversation:", err);
+      notify("success", `Percakapan "${pendingDelete.title}" berhasil dihapus.`);
+      setPendingDelete(null);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menghapus percakapan.");
+    } finally {
+      setDeletingConversation(false);
     }
   };
 
@@ -916,7 +929,7 @@ export default function ChatbotPage() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    deleteConversation(conv.id);
+                    setPendingDelete(conv);
                   }}
                   className={`p-1 rounded transition-all ${activeConvId === conv.id
                     ? "text-neutral-500 hover:text-black"
@@ -1411,6 +1424,15 @@ export default function ChatbotPage() {
           </form>
         </div>
       </div>
+      <ActionToast type={notification?.type || "success"} message={notification?.message || ""} />
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Hapus percakapan?"
+        message={pendingDelete ? `Percakapan "${pendingDelete.title}" akan dihapus permanen.` : ""}
+        pending={deletingConversation}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void deleteConversation()}
+      />
     </div>
   );
 }

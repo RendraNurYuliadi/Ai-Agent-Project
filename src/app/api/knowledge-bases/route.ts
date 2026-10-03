@@ -97,3 +97,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to create knowledge base" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session.role !== "admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
+
+  try {
+    const db = await getDatabase();
+    const knowledgeBases = await db.collection("knowledgeBases").find({}, { projection: { collectionName: 1 } }).toArray();
+    await Promise.all(knowledgeBases.map(async (base) => {
+      try {
+        await db.collection(base.collectionName).drop();
+      } catch {
+        // The registered collection may already be missing.
+      }
+    }));
+    const result = await db.collection("knowledgeBases").deleteMany({});
+    return NextResponse.json({ success: true, deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error("DELETE all knowledge bases error:", error);
+    return NextResponse.json({ error: "Gagal menghapus semua Knowledge Base." }, { status: 500 });
+  }
+}

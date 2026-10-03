@@ -14,6 +14,7 @@ import {
   Loader2,
   Sparkles,
 } from "lucide-react";
+import { ConfirmDialog } from "@/components/action-feedback";
 
 interface Prompt {
   id: string;
@@ -68,6 +69,10 @@ export default function PromptsPage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Prompt | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const notify = (type: "success" | "error", message: string) => {
     setNotification({ type, message });
@@ -174,22 +179,42 @@ export default function PromptsPage() {
     }
   };
 
-  const deletePrompt = async (id: string) => {
-    if (!confirm("Hapus prompt ini?")) return;
-
+  const deletePrompt = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     try {
-      await fetch(`/api/prompts/${id}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(`/api/prompts/${pendingDelete.id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus prompt.");
+      notify("success", `Prompt "${pendingDelete.name}" berhasil dihapus.`);
+      setPendingDelete(null);
+      await fetchPrompts();
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menghapus prompt.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
-      notify("success", "Prompt berhasil dihapus.");
-      fetchPrompts();
-    } catch { }
+  const deleteAllPrompts = async () => {
+    setDeletingAll(true);
+    try {
+      const response = await fetch("/api/prompts", { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus semua prompt.");
+      setPrompts([]);
+      setBulkDeleteOpen(false);
+      notify("success", `${data.deletedCount} prompt berhasil dihapus.`);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menghapus semua prompt.");
+    } finally {
+      setDeletingAll(false);
+    }
   };
 
   const toggleActive = async (p: Prompt) => {
     try {
-      await fetch(`/api/prompts/${p.id}`, {
+      const response = await fetch(`/api/prompts/${p.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -198,9 +223,13 @@ export default function PromptsPage() {
           type: p.type,
         }),
       });
-
-      fetchPrompts();
-    } catch { }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal mengubah status prompt.");
+      notify("success", `Prompt "${p.name}" berhasil ${p.isActive ? "dinonaktifkan" : "diaktifkan"}.`);
+      await fetchPrompts();
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal mengubah status prompt.");
+    }
   };
 
   const filtered =
@@ -229,6 +258,23 @@ export default function PromptsPage() {
           </span>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Hapus prompt?"
+        message={pendingDelete ? `Prompt "${pendingDelete.name}" akan dihapus permanen.` : ""}
+        pending={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void deletePrompt()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Hapus semua prompt?"
+        message={`Sebanyak ${prompts.length} prompt akan dihapus permanen.`}
+        confirmLabel="Hapus semua"
+        pending={deletingAll}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void deleteAllPrompts()}
+      />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -243,13 +289,10 @@ export default function PromptsPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => openNewModal()}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-neutral-200 text-black text-sm font-medium rounded-xl shadow-lg shadow-black/30 transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Prompt
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || prompts.length === 0 || deletingAll} className="inline-flex items-center gap-2 rounded-xl border border-red-900/70 px-3.5 py-2.5 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-4 w-4" />Hapus semua ({prompts.length})</button>
+          <button onClick={() => openNewModal()} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-neutral-200 text-black text-sm font-medium rounded-xl shadow-lg shadow-black/30 transition-all cursor-pointer"><Plus className="w-4 h-4" />Tambah Prompt</button>
+        </div>
       </div>
 
       {/* Type Tabs */}
@@ -345,7 +388,7 @@ export default function PromptsPage() {
                     </button>
 
                     <button
-                      onClick={() => deletePrompt(p.id)}
+                      onClick={() => setPendingDelete(p)}
                       className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />

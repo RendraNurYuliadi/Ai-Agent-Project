@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { FormattedMessage } from "@/components/formatted-message";
 import { ResponseMeta } from "@/components/response-meta";
+import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
 
 interface Conversation {
   id: string;
@@ -329,6 +330,11 @@ export default function ChatHistoryPage() {
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
   const [refreshCount, setRefreshCount] = useState(0);
+  const [pendingDelete, setPendingDelete] = useState<Conversation | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -412,11 +418,41 @@ export default function ChatHistoryPage() {
     setLoadingDetail(false);
   };
 
-  const deleteConv = async (id: string) => {
-    if (!confirm("Hapus percakapan ini dari riwayat?")) return;
-    await fetch(`/api/conversations/${id}`, { method: "DELETE" });
-    setConversations((prev) => prev.filter((c) => c.id !== id));
-    if (viewConv?.id === id) setViewConv(null);
+  const deleteConv = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/conversations/${pendingDelete.id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus percakapan.");
+      setConversations((prev) => prev.filter((conversation) => conversation.id !== pendingDelete.id));
+      if (viewConv?.id === pendingDelete.id) setViewConv(null);
+      setNotice(`Percakapan "${pendingDelete.title}" berhasil dihapus.`);
+      setPendingDelete(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Gagal menghapus percakapan.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const deleteAllConversations = async () => {
+    setDeletingAll(true);
+    try {
+      const response = await fetch(`/api/conversations${isAllConversationsRoute ? "?scope=all" : ""}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus semua percakapan.");
+      setConversations([]);
+      setViewConv(null);
+      setSelectedConversationId("");
+      setPagination({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+      setBulkDeleteOpen(false);
+      setNotice(`${data.deletedCount} percakapan berhasil dihapus.`);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Gagal menghapus semua percakapan.");
+    } finally {
+      setDeletingAll(false);
+    }
   };
 
   const filtered = isAllConversationsRoute
@@ -431,15 +467,34 @@ export default function ChatHistoryPage() {
     const selectedSkill = viewConv?.skill || selectedConversation?.skill;
 
     return <div className="space-y-5">
+      <ActionToast type="success" message={notice} />
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Hapus percakapan?"
+        message={pendingDelete ? `Percakapan "${pendingDelete.title}" akan dihapus permanen.` : ""}
+        pending={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void deleteConv()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Hapus semua percakapan?"
+        message={isAllConversationsRoute ? "Semua percakapan di seluruh sistem akan dihapus, termasuk yang tidak terlihat karena filter aktif. Tindakan ini tidak dapat dibatalkan." : "Semua percakapan milik akun Anda akan dihapus permanen. Tindakan ini tidak dapat dibatalkan."}
+        confirmLabel="Hapus semua"
+        pending={deletingAll}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void deleteAllConversations()}
+      />
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Admin workspace</p>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white"><History className="h-6 w-6" />All Conversations</h1>
           <p className="mt-1 text-sm text-neutral-500">Semua percakapan user, beserta detail user dan bot yang digunakan.</p>
         </div>
-        <button type="button" onClick={() => void fetchHistory()} disabled={loading} className="inline-flex w-fit items-center gap-2 rounded-md border border-neutral-800 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-900 disabled:opacity-50">
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />Muat ulang
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || deletingAll} className="inline-flex items-center gap-2 rounded-md border border-red-900/70 px-3 py-2 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-3.5 w-3.5" />Hapus semua percakapan</button>
+          <button type="button" onClick={() => void fetchHistory()} disabled={loading} className="inline-flex w-fit items-center gap-2 rounded-md border border-neutral-800 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-900 disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />Muat ulang</button>
+        </div>
       </header>
 
       <form onSubmit={(event) => {
@@ -567,6 +622,24 @@ export default function ChatHistoryPage() {
 
   return (
     <div className="space-y-6">
+      <ActionToast type="success" message={notice} />
+      <ConfirmDialog
+        open={Boolean(pendingDelete)}
+        title="Hapus percakapan?"
+        message={pendingDelete ? `Percakapan "${pendingDelete.title}" akan dihapus permanen.` : ""}
+        pending={deleting}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void deleteConv()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Hapus semua percakapan?"
+        message={isAllConversationsRoute ? "Semua percakapan di seluruh sistem akan dihapus, termasuk yang tidak terlihat karena filter aktif. Tindakan ini tidak dapat dibatalkan." : "Semua percakapan milik akun Anda akan dihapus permanen. Tindakan ini tidak dapat dibatalkan."}
+        confirmLabel="Hapus semua"
+        pending={deletingAll}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void deleteAllConversations()}
+      />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
@@ -580,13 +653,10 @@ export default function ChatHistoryPage() {
           </p>
         </div>
 
-        <Link
-          href="/dashboard/chatbot"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-medium transition-colors shadow-md shadow-black/30 w-fit"
-        >
-          <Bot className="w-4 h-4" />
-          Buka Chatbot
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || conversations.length === 0 || deletingAll} className="inline-flex items-center gap-2 rounded-xl border border-red-900/70 px-3.5 py-2 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-4 w-4" />Hapus semua ({conversations.length})</button>
+          <Link href="/dashboard/chatbot" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-medium transition-colors shadow-md shadow-black/30 w-fit"><Bot className="w-4 h-4" />Buka Chatbot</Link>
+        </div>
       </div>
 
       {/* Search */}
@@ -665,7 +735,7 @@ export default function ChatHistoryPage() {
                     </Link>
 
                     <button
-                      onClick={() => deleteConv(conv.id)}
+                      onClick={() => setPendingDelete(conv)}
                       className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-900 transition-colors"
                       title="Hapus"
                     >

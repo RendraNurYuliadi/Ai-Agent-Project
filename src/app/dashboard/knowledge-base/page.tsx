@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import Papa from "papaparse";
 import { FormattedMessage } from "@/components/formatted-message";
+import { ConfirmDialog } from "@/components/action-feedback";
 
 interface KnowledgeBase {
   id: string;
@@ -88,6 +89,10 @@ export default function KnowledgeBasePage() {
   // New KB form
   const [newKbName, setNewKbName] = useState("");
   const [newKbDesc, setNewKbDesc] = useState("");
+  const [pendingDeleteKb, setPendingDeleteKb] = useState<KnowledgeBase | null>(null);
+  const [deletingKb, setDeletingKb] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [deletingAllKb, setDeletingAllKb] = useState(false);
 
   // Manual article form
   const [manualForm, setManualForm] = useState({
@@ -181,17 +186,43 @@ export default function KnowledgeBasePage() {
     }
   };
 
-  const deleteKb = async (kb: KnowledgeBase) => {
-    if (!confirm(`Hapus Knowledge Base "${kb.displayName}" beserta seluruh artikelnya?`)) return;
+  const deleteKb = async () => {
+    if (!pendingDeleteKb) return;
+    setDeletingKb(true);
     try {
-      await fetch(`/api/knowledge-bases/${kb.id}`, { method: "DELETE" });
-      notify("success", `"${kb.displayName}" berhasil dihapus.`);
-      if (activeKb?.id === kb.id) {
+      const response = await fetch(`/api/knowledge-bases/${pendingDeleteKb.id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus Knowledge Base.");
+      notify("success", `Knowledge Base "${pendingDeleteKb.displayName}" berhasil dihapus.`);
+      if (activeKb?.id === pendingDeleteKb.id) {
         setActiveKb(null);
         setArticles([]);
       }
-      fetchKBs();
-    } catch { }
+      setPendingDeleteKb(null);
+      await fetchKBs();
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menghapus Knowledge Base.");
+    } finally {
+      setDeletingKb(false);
+    }
+  };
+
+  const deleteAllKbs = async () => {
+    setDeletingAllKb(true);
+    try {
+      const response = await fetch("/api/knowledge-bases", { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menghapus semua Knowledge Base.");
+      setKbs([]);
+      setActiveKb(null);
+      setArticles([]);
+      setBulkDeleteOpen(false);
+      notify("success", `${data.deletedCount} Knowledge Base beserta artikelnya berhasil dihapus.`);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menghapus semua Knowledge Base.");
+    } finally {
+      setDeletingAllKb(false);
+    }
   };
 
   const toggleKbRetrieval = async (event: React.MouseEvent, kb: KnowledgeBase) => {
@@ -376,6 +407,23 @@ export default function KnowledgeBasePage() {
           <span>{notification.message}</span>
         </div>
       )}
+      <ConfirmDialog
+        open={Boolean(pendingDeleteKb)}
+        title="Hapus Knowledge Base?"
+        message={pendingDeleteKb ? `Knowledge Base "${pendingDeleteKb.displayName}" beserta seluruh artikelnya akan dihapus permanen.` : ""}
+        pending={deletingKb}
+        onCancel={() => setPendingDeleteKb(null)}
+        onConfirm={() => void deleteKb()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Hapus semua Knowledge Base?"
+        message={`Sebanyak ${kbs.length} Knowledge Base dan seluruh artikelnya akan dihapus permanen.`}
+        confirmLabel="Hapus semua"
+        pending={deletingAllKb}
+        onCancel={() => setBulkDeleteOpen(false)}
+        onConfirm={() => void deleteAllKbs()}
+      />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -429,13 +477,10 @@ export default function KnowledgeBasePage() {
             </>
           ) : (
             !isReadOnly && (
-              <button
-                onClick={() => setShowNewKbModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-semibold transition-all shadow-md cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Collection</span>
-              </button>
+              <div className="flex flex-wrap gap-2">
+                {userRole === "admin" && <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || kbs.length === 0 || deletingAllKb} className="inline-flex items-center gap-2 rounded-xl border border-red-900/70 px-3.5 py-2.5 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-4 w-4" />Hapus semua ({kbs.length})</button>}
+                <button onClick={() => setShowNewKbModal(true)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-semibold transition-all shadow-md cursor-pointer"><Plus className="w-4 h-4" /><span>Add Collection</span></button>
+              </div>
             )
           )}
         </div>
@@ -497,7 +542,7 @@ export default function KnowledgeBasePage() {
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              deleteKb(kb);
+                              setPendingDeleteKb(kb);
                             }}
                             className="text-neutral-600 hover:text-white p-1.5 rounded-lg hover:bg-neutral-900 transition-colors cursor-pointer"
                             title="Hapus Knowledge Base"

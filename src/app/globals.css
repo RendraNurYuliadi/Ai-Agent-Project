@@ -23,3 +23,26 @@ body {
   color: var(--foreground);
   font-family: var(--font-poppins), sans-serif;
 }
+
+@keyframes action-toast-dismiss {
+  0%, 82% {
+    opacity: 1;
+    transform: translateY(0);
+    visibility: visible;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(8px);
+    visibility: hidden;
+  }
+}
+
+.action-toast {
+  animation: action-toast-dismiss 4.8s ease forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-toast {
+    animation-timing-function: steps(1, end);
+  }
+}

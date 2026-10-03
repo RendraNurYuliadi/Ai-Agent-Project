@@ -21,6 +21,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
 import {
   ArrowLeft,
   Bot,
@@ -252,7 +253,7 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
   }
 }
 
-function FlowEditor({ botId }: { botId: string }) {
+function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: string }) {
   const { screenToFlowPosition } = useReactFlow();
   const [botName, setBotName] = useState("");
   const [description, setDescription] = useState("");
@@ -272,6 +273,8 @@ function FlowEditor({ botId }: { botId: string }) {
   const [ragProviderTest, setRagProviderTest] = useState<{ interactionId: string; status: "testing" | "success" | "error"; message: string; models: string[] } | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [notice, setNotice] = useState(initialNotice || "");
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
   const [variableDraft, setVariableDraft] = useState({ name: "", value: "" });
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowCanvasNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -405,6 +408,7 @@ function FlowEditor({ botId }: { botId: string }) {
 
   const removeSelected = () => {
     if (!selectedInteraction || interactions.length <= 1) return;
+    const removedName = interactionDisplayName(selectedInteraction);
     const updated = interactions
       .filter((item) => item.id !== selectedId)
       .map((item) => ({
@@ -423,6 +427,8 @@ function FlowEditor({ botId }: { botId: string }) {
     setNodes(updated.map((item) => toCanvasNode(item, nextEntry)));
     setEdges(toEdges(updated));
     setSelectedId("");
+    setConfirmRemoveOpen(false);
+    setNotice(`Interaction "${removedName}" dihapus dari flow. Simpan flow untuk menerapkan perubahan.`);
   };
 
   const saveBot = async () => {
@@ -443,6 +449,7 @@ function FlowEditor({ botId }: { botId: string }) {
       if (!response.ok) throw new Error(data.error || "Gagal menyimpan flow.");
       setInteractions(savedInteractions);
       setSaved(true);
+      setNotice("Flow bot berhasil diperbarui.");
       window.setTimeout(() => setSaved(false), 1800);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Gagal menyimpan flow.");
@@ -464,6 +471,7 @@ function FlowEditor({ botId }: { botId: string }) {
       return;
     }
     setActiveBot(data.isActive);
+    setNotice(`Bot berhasil ${data.isActive ? "diaktifkan" : "dinonaktifkan"}.`);
   };
 
   const savePromptTemplate = async (promptId: string, content: string) => {
@@ -477,6 +485,7 @@ function FlowEditor({ botId }: { botId: string }) {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Gagal menyimpan prompt.");
     setPrompts((items) => items.map((item) => item.id === promptId ? { ...item, content } : item));
+    setNotice("Prompt berhasil diperbarui.");
   };
 
   const setQuickButton = (index: number, patch: Partial<BotQuickButton>) => {
@@ -622,6 +631,15 @@ function FlowEditor({ botId }: { botId: string }) {
       </label>
 
       {error && <div role="alert" className="flex items-center justify-between rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-200">{error}<button type="button" onClick={() => setError("")} aria-label="Tutup error"><X className="h-4 w-4" /></button></div>}
+      <ActionToast type="success" message={notice} />
+      <ConfirmDialog
+        open={confirmRemoveOpen}
+        title="Hapus interaction?"
+        message={selectedInteraction ? `Interaction "${interactionDisplayName(selectedInteraction)}" akan dihapus dari flow. Perubahan baru diterapkan setelah flow disimpan.` : ""}
+        confirmLabel="Hapus interaction"
+        onCancel={() => setConfirmRemoveOpen(false)}
+        onConfirm={removeSelected}
+      />
 
       <div className={`grid min-h-0 flex-1 grid-cols-1 overflow-hidden rounded-xl border border-neutral-800 bg-[#080808] ${editorRowsClass} ${editorGridClass}`}>
         <aside className={`${interactionsOpen ? "block p-3" : "hidden p-1 xl:block"} min-h-0 overflow-auto border-b border-neutral-800 xl:border-b-0 xl:border-r`}>
@@ -695,7 +713,7 @@ function FlowEditor({ botId }: { botId: string }) {
             </div>
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => setConfigOpen(false)} aria-label="Sembunyikan konfigurasi" title="Sembunyikan konfigurasi" className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-900 hover:text-white"><PanelRightClose className="h-3.5 w-3.5" /></button>
-              {selectedInteraction && <button type="button" onClick={removeSelected} disabled={interactions.length <= 1} aria-label="Hapus interaction" title="Hapus interaction" className="rounded-md p-1.5 text-neutral-600 hover:bg-red-950/50 hover:text-red-300 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>}
+              {selectedInteraction && <button type="button" onClick={() => setConfirmRemoveOpen(true)} disabled={interactions.length <= 1} aria-label="Hapus interaction" title="Hapus interaction" className="rounded-md p-1.5 text-neutral-600 hover:bg-red-950/50 hover:text-red-300 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>}
             </div>
           </div>
 
@@ -1159,7 +1177,11 @@ function GuidedOptionFields({ option, interactions, onChange, onRemove }: { opti
   );
 }
 
-export default function BotFlowEditorPage({ params }: { params: Promise<{ id: string }> }) {
+export default function BotFlowEditorPage({ params, searchParams }: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ created?: string }>;
+}) {
   const { id } = use(params);
-  return <ReactFlowProvider><FlowEditor botId={id} /></ReactFlowProvider>;
+  const { created } = use(searchParams);
+  return <ReactFlowProvider><FlowEditor botId={id} initialNotice={created === "1" ? "Bot berhasil dibuat." : ""} /></ReactFlowProvider>;
 }

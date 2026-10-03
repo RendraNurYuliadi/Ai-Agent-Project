@@ -195,3 +195,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to create conversation" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const allConversations = req.nextUrl.searchParams.get("scope") === "all";
+  const isStaff = session.role === "admin" || session.role === "manager";
+  if (allConversations && !isStaff) return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
+
+  try {
+    const db = await getDatabase();
+    const result = await db.collection("conversations").deleteMany(allConversations ? {} : { userId: session.id });
+    return NextResponse.json({ success: true, deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error("DELETE conversations error:", error);
+    return NextResponse.json({ error: "Gagal menghapus percakapan." }, { status: 500 });
+  }
+}

@@ -69,3 +69,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Gagal menyimpan component template." }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canManage(session.role)) return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
+
+  try {
+    const db = await getDatabase();
+    const result = await db.collection("components").deleteMany({});
+    return NextResponse.json({ success: true, deletedCount: result.deletedCount });
+  } catch (error) {
+    console.error("DELETE all components error:", error);
+    return NextResponse.json({ error: "Gagal menghapus semua component template." }, { status: 500 });
+  }
+}
