@@ -161,6 +161,7 @@ export async function POST(req: NextRequest) {
       ? await initializeBotConversation(db, {
         entryInteractionId: activeBot.entryInteractionId,
         interactions: activeBot.interactions,
+        variables: activeBot.variables || [],
       }, session)
       : null;
 

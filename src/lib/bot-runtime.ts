@@ -5,8 +5,9 @@ import { smartSearchKB, type ScoredArticle } from "@/lib/smart-search";
 import type { ComponentTemplateInput } from "@/lib/component-templates";
 import { BOT_INTERACTION_LABELS, type BotDefinitionInput, type BotInteraction, type DataCollectionQuestion } from "@/lib/bot-flows";
 
-type BotRuntimeComponent = Pick<ComponentTemplateInput, "name" | "title" | "subtitle" | "type" | "buttons" | "card" | "cards"> & {
+type BotRuntimeComponent = Omit<Pick<ComponentTemplateInput, "name" | "title" | "subtitle" | "type" | "buttons" | "card" | "cards">, "card"> & {
   id: string;
+  card: ComponentTemplateInput["card"] | null;
   triggeredBy: Array<{ collectionName: string; articleId: string; title: string; score: number }>;
 };
 
@@ -43,6 +44,8 @@ export interface DataCollectionState {
   interactionId: string;
   questionIndex: number;
   answers: Record<string, unknown>;
+  stage?: "collecting" | "confirm" | "select_question";
+  reviewing?: boolean;
   completed?: boolean;
 }
 
@@ -142,7 +145,7 @@ export async function initializeBotConversation(
   const initialDataCollection = dataCollection ? entry : welcome && nextInteraction?.type === "data_collection" ? nextInteraction : null;
   const firstDataQuestion = initialDataCollection?.config.dataCollectionQuestions?.[0];
   const firstDataPrompt = initialDataCollection && firstDataQuestion
-    ? await phraseDataQuestion(db, initialDataCollection, firstDataQuestion, {}, user, bot.variables || [])
+    ? phraseDataQuestion(firstDataQuestion, user, bot.variables || [])
     : "";
   const quickButtons = entry.config.quickButtons || [];
   const messages: BotRuntimeMessage[] = [];
@@ -174,6 +177,7 @@ export async function initializeBotConversation(
         })),
       },
       topArticles: [],
+      uiComponents: dataCollection && firstDataQuestion ? dataQuestionComponents(firstDataQuestion, user, bot.variables || []) : undefined,
       timestamp: new Date(),
     });
   }
@@ -184,6 +188,7 @@ export async function initializeBotConversation(
       content: firstDataPrompt,
       messageType: "DATA_COLLECTION",
       topArticles: [],
+      uiComponents: dataQuestionComponents(firstDataQuestion, user, bot.variables || []),
       timestamp: new Date(),
     });
   }
@@ -191,7 +196,7 @@ export async function initializeBotConversation(
     messages,
     currentInteractionId: welcome ? state.currentInteractionId : entry.id,
     botStatus: welcome ? state.botStatus : "active",
-    dataCollectionState: initialDataCollection ? { interactionId: initialDataCollection.id, questionIndex: 0, answers: {} } : null,
+    dataCollectionState: initialDataCollection ? { interactionId: initialDataCollection.id, questionIndex: 0, answers: {}, stage: "collecting" } : null,
   };
 }
 
@@ -211,66 +216,47 @@ function interactionAIConfig(
   return config;
 }
 
-async function phraseDataQuestion(
-  db: Db,
-  interaction: BotInteraction,
+function phraseDataQuestion(
   question: DataCollectionQuestion,
-  answers: Record<string, unknown>,
   user: { name?: string; fullName?: string; email?: string; username?: string; role?: string },
   customVariables: Array<{ name: string; value: string }> = [],
   sessionVariables: Record<string, string> = {}
-): Promise<string> {
-  const config = interactionAIConfig(await getAIConfig(db), interaction);
-  try {
-    const renderedQuestion = applyPromptVariables(question.question, "", user, "", customVariables, sessionVariables);
-    return (await generateAICompletion({
-      config,
-      messages: [{
-        role: "user",
-        content: `Nama field: ${question.name}\nPertanyaan: ${renderedQuestion}\nData yang sudah terkumpul: ${JSON.stringify(answers)}\nNama user: ${user.fullName || user.name || "User"}`,
-      }],
-      systemInstruction: "Ajukan tepat satu pertanyaan singkat dalam bahasa Indonesia. Gunakan teks pertanyaan yang sudah diberikan. Jangan menampilkan nama field atau JSON. Jawab hanya dengan kalimat pertanyaannya.",
-      temperature: config.temperature,
-      maxTokens: Math.min(config.maxTokens, 160),
-      timeoutMs: 12000,
-    })).trim();
-  } catch {
-    return applyPromptVariables(question.question, "", user, "", customVariables, sessionVariables);
-  }
+): string {
+  return applyPromptVariables(question.question, "", user, "", customVariables, sessionVariables);
 }
 
-async function extractDataAnswer(
-  db: Db,
-  interaction: BotInteraction,
+function dataQuestionComponents(
   question: DataCollectionQuestion,
-  message: string,
-  answers: Record<string, unknown>
-): Promise<unknown> {
-  const config = interactionAIConfig(await getAIConfig(db), interaction);
-  const result = await generateAICompletion({
-    config,
-    messages: [{ role: "user", content: `Jawaban user: ${message.trim()}\nData sebelumnya: ${JSON.stringify(answers)}` }],
-    systemInstruction: `Ekstrak jawaban user untuk satu field. Field: ${question.name}. Pertanyaan: ${question.question}. Jangan menebak atau mengisi dari data sebelumnya. Kembalikan hanya JSON valid dengan bentuk {"understood":true,"value":...} atau {"understood":false,"value":null}.`,
-    temperature: 0,
-    maxTokens: 160,
-    timeoutMs: 12000,
+  user: { name?: string; fullName?: string; email?: string; username?: string; role?: string },
+  customVariables: Array<{ name: string; value: string }> = [],
+  sessionVariables: Record<string, string> = {}
+): BotRuntimeComponent[] {
+  return (question.components || []).map((component, index) => {
+    const render = (value: string) => applyPromptVariables(value, "", user, "", customVariables, sessionVariables);
+    const renderButtons = (buttons: typeof component.buttons) => buttons.map((button) => ({
+      ...button,
+      label: render(button.label),
+      value: render(button.value),
+    }));
+    const renderCard = (card: NonNullable<typeof component.card>) => ({
+      ...card,
+      title: render(card.title),
+      subtitle: render(card.subtitle),
+      imageUrl: render(card.imageUrl),
+      buttons: renderButtons(card.buttons),
+    });
+    return {
+      id: `${question.variable}-${index}`,
+      name: render(component.name),
+      type: component.type,
+      title: render(component.title),
+      subtitle: render(component.subtitle),
+      buttons: renderButtons(component.buttons),
+      card: component.card ? renderCard(component.card) : null,
+      cards: component.cards.map(renderCard),
+      triggeredBy: [],
+    };
   });
-  const start = result.indexOf("{");
-  const end = result.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  const parsed = JSON.parse(result.slice(start, end + 1)) as { understood?: boolean; value?: unknown };
-  return parsed.understood ? parsed.value : null;
-}
-
-function validateDataAnswer(value: unknown): unknown | null {
-  if (typeof value === "string") {
-    const text = value.trim().slice(0, 1000);
-    return text ? text : null;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  return null;
 }
 
 export async function processBotTurn(
@@ -281,13 +267,14 @@ export async function processBotTurn(
   user: { id?: string; name?: string; fullName?: string; email?: string; username?: string; role?: string }
 ): Promise<BotRuntimeResult> {
   const entry = bot.interactions.find((item) => item.id === bot.entryInteractionId);
-  const start = bot.interactions.find((item) => item.type === "text_start") || entry;
+  const start = entry;
   let interaction = conversation.botStatus === "ended"
     ? start
     : bot.interactions.find((item) => item.id === conversation.currentInteractionId) || start;
   if (!interaction) throw new Error("Bot tidak memiliki entry interaction.");
 
   let guidedTargetSelected = false;
+  let advanceFromDataCollection = false;
   let dataCollectionState = conversation.dataCollectionState || null;
   if (interaction.type === "guided_routing") {
     const options = interaction.config.options || [];
@@ -518,36 +505,102 @@ export async function processBotTurn(
       const currentState = dataCollectionState?.interactionId === interaction.id
         ? dataCollectionState
         : null;
+      const validator = interaction.config.dataCollectionValidator;
+      const answerVariables = (answers: Record<string, unknown>) => Object.fromEntries(
+        Object.entries(answers).map(([key, value]) => [key, String(value ?? "")])
+      );
+      const confirmationButtons = validator?.confirmationButtons.length
+        ? validator.confirmationButtons
+        : [
+          { label: "Ya", action: "reply" as const, value: "Ya", type: "true" as const },
+          { label: "Tidak", action: "reply" as const, value: "Tidak", type: "false" as const },
+        ];
+      const showConfirmation = (answers: Record<string, unknown>) => {
+        content = applyPromptVariables(validator?.confirmationQuestion || "Apakah ada data yang ingin diubah?", message, user, "", bot.variables || [], answerVariables(answers));
+        interactionCard = {
+          type: "text_question",
+          title: "",
+          subtitle: content,
+          buttons: confirmationButtons.map((button) => ({
+            action: "reply" as const,
+            label: applyPromptVariables(button.label, message, user, "", bot.variables || [], answerVariables(answers)),
+            value: applyPromptVariables(button.value, message, user, "", bot.variables || [], answerVariables(answers)),
+          })),
+        };
+      };
+      const showReviewChoices = (answers: Record<string, unknown>) => {
+        content = applyPromptVariables(validator?.reviewQuestion || "Pilih data yang ingin diubah.", message, user, "", bot.variables || [], answerVariables(answers));
+        interactionCard = {
+          type: "text_question",
+          title: "",
+          subtitle: content,
+          buttons: questions.map((question) => ({
+            label: applyPromptVariables(question.name, message, user, "", bot.variables || [], answerVariables(answers)),
+            action: "reply" as const,
+            value: question.variable || question.name,
+          })),
+        };
+      };
       if (!currentState || guidedTargetSelected) {
-        dataCollectionState = { interactionId: interaction.id, questionIndex: 0, answers: {} };
-        content = await phraseDataQuestion(db, interaction, questions[0], {}, user, bot.variables || []);
+        dataCollectionState = { interactionId: interaction.id, questionIndex: 0, answers: {}, stage: "collecting" };
+        content = phraseDataQuestion(questions[0], user, bot.variables || []);
+        uiComponents = dataQuestionComponents(questions[0], user, bot.variables || []);
+      } else if (currentState.stage === "confirm") {
+        const currentAnswerVariables = answerVariables(currentState.answers);
+        const selectedButton = confirmationButtons.find((button) =>
+          applyPromptVariables(button.value, message, user, "", bot.variables || [], currentAnswerVariables).trim().toLocaleLowerCase() === message.trim().toLocaleLowerCase()
+        );
+        if (!selectedButton) {
+          dataCollectionState = currentState;
+          showConfirmation(currentState.answers);
+        } else if (selectedButton.type === "true") {
+          dataCollectionState = { ...currentState, stage: "select_question" };
+          showReviewChoices(currentState.answers);
+        } else {
+          dataCollectionState = { ...currentState, completed: true };
+          advanceFromDataCollection = true;
+          content = "";
+        }
+      } else if (currentState.stage === "select_question") {
+        const selectedIndex = questions.findIndex((question) =>
+          (question.variable || question.name).toLocaleLowerCase() === message.trim().toLocaleLowerCase()
+        );
+        if (selectedIndex < 0) {
+          dataCollectionState = currentState;
+          showReviewChoices(currentState.answers);
+        } else {
+          const question = questions[selectedIndex];
+          const variables = answerVariables(currentState.answers);
+          dataCollectionState = { ...currentState, questionIndex: selectedIndex, stage: "collecting", reviewing: true };
+          content = phraseDataQuestion(question, user, bot.variables || [], variables);
+          uiComponents = dataQuestionComponents(question, user, bot.variables || [], variables);
+        }
       } else {
         const question = questions[currentState.questionIndex];
         if (!question) {
           content = "Pengumpulan data sudah lengkap.";
-          dataCollectionState = null;
+          dataCollectionState = { ...currentState, completed: true };
         } else {
-          let extracted: unknown = null;
-          try {
-            extracted = await extractDataAnswer(db, interaction, question, message, currentState.answers);
-          } catch {
-            extracted = null;
-          }
-          const answer = validateDataAnswer(extracted);
-          if (answer === null) {
-            const rephrasedQuestion = await phraseDataQuestion(db, interaction, question, currentState.answers, user, bot.variables || [], Object.fromEntries(Object.entries(currentState.answers).map(([key, value]) => [key, String(value ?? "")] )));
-            content = `Maaf, jawabannya belum sesuai. ${rephrasedQuestion}`;
-            dataCollectionState = currentState;
+          const answers = { ...currentState.answers, [question.variable || question.name]: message.trim() };
+          const variables = answerVariables(answers);
+          if (currentState.reviewing && validator) {
+            dataCollectionState = { interactionId: interaction.id, questionIndex: questions.length, answers, stage: "confirm" };
+            showConfirmation(answers);
           } else {
-            const answers = { ...currentState.answers, [question.variable || question.name]: answer };
             const nextQuestionIndex = currentState.questionIndex + 1;
             const nextQuestion = questions[nextQuestionIndex];
             if (nextQuestion) {
-              dataCollectionState = { interactionId: interaction.id, questionIndex: nextQuestionIndex, answers };
-              content = await phraseDataQuestion(db, interaction, nextQuestion, answers, user, bot.variables || [], Object.fromEntries(Object.entries(answers).map(([key, value]) => [key, String(value ?? "")])));
+              dataCollectionState = { interactionId: interaction.id, questionIndex: nextQuestionIndex, answers, stage: "collecting" };
+              content = phraseDataQuestion(nextQuestion, user, bot.variables || [], variables);
+              uiComponents = dataQuestionComponents(nextQuestion, user, bot.variables || [], variables);
             } else {
-              dataCollectionState = { interactionId: interaction.id, questionIndex: questions.length, answers, completed: true };
-              content = "";
+              if (validator) {
+                dataCollectionState = { interactionId: interaction.id, questionIndex: questions.length, answers, stage: "confirm" };
+                showConfirmation(answers);
+              } else {
+                dataCollectionState = { interactionId: interaction.id, questionIndex: questions.length, answers, completed: true };
+                content = "";
+              }
             }
           }
         }
@@ -560,9 +613,10 @@ export async function processBotTurn(
     const nextInteraction = bot.interactions.find((item) => item.id === nextDataCollectionId);
     const firstQuestion = nextInteraction?.config.dataCollectionQuestions?.[0];
     if (nextInteraction?.type === "data_collection" && firstQuestion) {
-      dataCollectionState = { interactionId: nextInteraction.id, questionIndex: 0, answers: {} };
-      const nextPrompt = await phraseDataQuestion(db, nextInteraction, firstQuestion, {}, user, bot.variables || []);
+      dataCollectionState = { interactionId: nextInteraction.id, questionIndex: 0, answers: {}, stage: "collecting" };
+      const nextPrompt = phraseDataQuestion(firstQuestion, user, bot.variables || []);
       content = content ? `${content}\n\n${nextPrompt}` : nextPrompt;
+      uiComponents = dataQuestionComponents(firstQuestion, user, bot.variables || []);
       interaction = nextInteraction;
       messageType = "DATA_COLLECTION";
     }
@@ -575,6 +629,20 @@ export async function processBotTurn(
       ? { currentInteractionId: interaction.id, botStatus: "active" as const }
     : stateForAction(interaction);
   const silent = (interaction.type === "guided_routing" && !guidedTargetSelected) || (interaction.type === "data_collection" && Boolean(dataCollectionState?.completed));
+
+  if (advanceFromDataCollection && interaction.nextAction.type === "interaction") {
+    return processBotTurn(
+      db,
+      bot,
+      {
+        currentInteractionId: interaction.nextAction.interactionId,
+        botStatus: "active",
+        dataCollectionState,
+      },
+      message,
+      user
+    );
+  }
 
   return {
     assistantMessage: silent ? null : {

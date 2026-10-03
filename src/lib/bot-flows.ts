@@ -6,11 +6,10 @@ export const BOT_INTERACTION_TYPES = [
   "web_search",
   "data_collection",
   "text",
-  "text_start",
   "text_question",
 ] as const;
 
-export type BotInteractionType = (typeof BOT_INTERACTION_TYPES)[number];
+export type BotInteractionType = (typeof BOT_INTERACTION_TYPES)[number] | "text_start";
 
 export const BOT_INTERACTION_LABELS: Record<BotInteractionType, string> = {
   welcome_message: "Welcome Message",
@@ -20,7 +19,7 @@ export const BOT_INTERACTION_LABELS: Record<BotInteractionType, string> = {
   web_search: "Web Search",
   data_collection: "Data Collection",
   text: "Text Interaction",
-  text_start: "Text Start Interaction",
+  text_start: "Text Interaction",
   text_question: "Text Question Interaction",
 };
 
@@ -51,6 +50,35 @@ export interface DataCollectionQuestion {
   name: string;
   question: string;
   variable: string;
+  components?: DataCollectionComponent[];
+}
+
+export interface DataCollectionComponentCard {
+  imageUrl: string;
+  imageHeight: number;
+  title: string;
+  subtitle: string;
+  buttons: BotQuickButton[];
+}
+
+export interface DataCollectionComponent {
+  name: string;
+  type: "reply_buttons" | "link_buttons" | "card" | "carousel";
+  title: string;
+  subtitle: string;
+  buttons: BotQuickButton[];
+  card: DataCollectionComponentCard | null;
+  cards: DataCollectionComponentCard[];
+}
+
+export interface DataCollectionValidator {
+  confirmationQuestion: string;
+  confirmationButtons: DataCollectionValidatorButton[];
+  reviewQuestion: string;
+}
+
+export interface DataCollectionValidatorButton extends BotQuickButton {
+  type: "true" | "false";
 }
 
 export interface BotInteractionConfig {
@@ -72,6 +100,7 @@ export interface BotInteractionConfig {
   maxTokens?: number;
   webSearchMaxResults?: number;
   dataCollectionQuestions?: DataCollectionQuestion[];
+  dataCollectionValidator?: DataCollectionValidator;
   knowledgeBases?: string[];
 }
 
@@ -175,8 +204,78 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
           ? item.name.trim()
           : "";
       if (!name || /[.$]/.test(name) || ["__proto__", "prototype", "constructor"].includes(name.toLocaleLowerCase()) || !question || !variable) return [];
-      return [{ name, question, variable }];
+      const components = Array.isArray(item.components)
+        ? item.components.slice(0, 5).flatMap((component, index) => {
+          if (!isRecord(component) || !["reply_buttons", "link_buttons", "card", "carousel"].includes(String(component.type))) return [];
+          const type = component.type as DataCollectionComponent["type"];
+          const parseComponentButtons = (buttons: unknown, max: number): BotQuickButton[] => Array.isArray(buttons)
+            ? buttons.slice(0, max).flatMap((button) => {
+              if (!isRecord(button)) return [];
+              const label = typeof button.label === "string" ? button.label.trim().slice(0, 60) : "";
+              const buttonValue = typeof button.value === "string" ? button.value.trim().slice(0, 500) : "";
+              const action = button.action === "link" ? "link" : button.action === "reply" ? "reply" : null;
+              return label && buttonValue && action && (action !== "link" || validLink(buttonValue)) ? [{ label, value: buttonValue, action }] : [];
+            })
+            : [];
+          const parseComponentCard = (cardValue: unknown): DataCollectionComponentCard | null => {
+            if (!isRecord(cardValue)) return null;
+            const title = typeof cardValue.title === "string" ? cardValue.title.trim().slice(0, 120) : "";
+            const subtitle = typeof cardValue.subtitle === "string" ? cardValue.subtitle.trim().slice(0, 300) : "";
+            const imageUrl = typeof cardValue.imageUrl === "string" ? cardValue.imageUrl.trim().slice(0, 1000) : "";
+            const imageHeight = typeof cardValue.imageHeight === "number" ? Math.round(cardValue.imageHeight) : 128;
+            if (!title || !subtitle || !Number.isFinite(imageHeight) || imageHeight < 64 || imageHeight > 500 || (imageUrl && !validLink(imageUrl))) return null;
+            return { title, subtitle, imageUrl, imageHeight, buttons: parseComponentButtons(cardValue.buttons, 3) };
+          };
+          const card = type === "card" ? parseComponentCard(component.card) : null;
+          const cards = type === "carousel" && Array.isArray(component.cards)
+            ? component.cards.slice(0, 10).flatMap((cardValue) => {
+              const parsedCard = parseComponentCard(cardValue);
+              return parsedCard ? [parsedCard] : [];
+            })
+            : [];
+          const buttons = type === "reply_buttons" || type === "link_buttons"
+            ? parseComponentButtons(component.buttons, 10).map((button) => ({
+              ...button,
+              action: type === "link_buttons" ? "link" as const : "reply" as const,
+            }))
+            : [];
+          if (type === "card" && !card) return [];
+          if (type === "carousel" && cards.length === 0) return [];
+          if ((type === "reply_buttons" || type === "link_buttons") && buttons.length === 0) return [];
+          return [{
+            name: typeof component.name === "string" && component.name.trim() ? component.name.trim().slice(0, 100) : `Komponen ${index + 1}`,
+            type,
+            title: typeof component.title === "string" ? component.title.trim().slice(0, 120) : "",
+            subtitle: typeof component.subtitle === "string" ? component.subtitle.trim().slice(0, 300) : "",
+            buttons,
+            card,
+            cards,
+          }];
+        })
+        : [];
+      return [{ name, question, variable, components }];
     })
+    : undefined;
+  const dataCollectionValidator = isRecord(value.dataCollectionValidator)
+    ? {
+      confirmationQuestion: typeof value.dataCollectionValidator.confirmationQuestion === "string"
+        ? value.dataCollectionValidator.confirmationQuestion.trim().slice(0, 1000)
+        : "",
+      confirmationButtons: Array.isArray(value.dataCollectionValidator.confirmationButtons)
+        ? value.dataCollectionValidator.confirmationButtons.slice(0, 8).flatMap((button) => {
+          if (!isRecord(button)) return [];
+          const label = typeof button.label === "string" ? button.label.trim().slice(0, 60) : "";
+          const buttonValue = typeof button.value === "string" ? button.value.trim().slice(0, 500) : "";
+          const type: DataCollectionValidatorButton["type"] = button.type === "true" || button.type === "false"
+            ? button.type
+            : buttonValue.toLocaleLowerCase() === "true" ? "true" : "false";
+          return label && buttonValue && button.action === "reply" ? [{ label, value: buttonValue, action: "reply" as const, type }] : [];
+        })
+        : [],
+      reviewQuestion: typeof value.dataCollectionValidator.reviewQuestion === "string"
+        ? value.dataCollectionValidator.reviewQuestion.trim().slice(0, 1000)
+        : "",
+    }
     : undefined;
 
   return {
@@ -204,6 +303,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
       ? Math.max(1, Math.min(10, Math.round(value.webSearchMaxResults)))
       : undefined,
     dataCollectionQuestions,
+    dataCollectionValidator,
     knowledgeBases: Array.isArray(value.knowledgeBases)
       ? value.knowledgeBases.filter((item): item is string => typeof item === "string").slice(0, 20)
       : undefined,
@@ -241,7 +341,8 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     if (!isRecord(item) || typeof item.id !== "string" || !item.id || ids.has(item.id)) {
       return { success: false, error: "ID interaction tidak valid atau duplikat." };
     }
-    if (!BOT_INTERACTION_TYPES.includes(item.type as BotInteractionType)) {
+    const interactionType = item.type === "text_start" ? "text" : item.type;
+    if (!BOT_INTERACTION_TYPES.includes(interactionType as (typeof BOT_INTERACTION_TYPES)[number])) {
       return { success: false, error: "Tipe interaction tidak valid." };
     }
     if (!isRecord(item.position) || typeof item.position.x !== "number" || typeof item.position.y !== "number") {
@@ -256,7 +357,7 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     ids.add(item.id);
     interactions.push({
       id: item.id,
-      type: item.type as BotInteractionType,
+      type: interactionType as BotInteractionType,
       position: { x: item.position.x, y: item.position.y },
       config,
       nextAction,
@@ -296,7 +397,7 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
 
 export function createStarterBot(name = "Bot Baru"): BotDefinitionInput {
   const welcomeId = crypto.randomUUID();
-  const startId = crypto.randomUUID();
+  const textId = crypto.randomUUID();
   return {
     name,
     description: "",
@@ -314,11 +415,11 @@ export function createStarterBot(name = "Bot Baru"): BotDefinitionInput {
           footerText: "Pilih opsi atau kirim pesan untuk memulai.",
           quickButtons: [],
         },
-        nextAction: { type: "interaction", interactionId: startId },
+        nextAction: { type: "interaction", interactionId: textId },
       },
       {
-        id: startId,
-        type: "text_start",
+        id: textId,
+        type: "text",
         position: { x: 430, y: 100 },
         config: { text: "Halo! Ada yang bisa saya bantu?" },
         nextAction: { type: "end" },

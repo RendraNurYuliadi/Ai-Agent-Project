@@ -118,6 +118,7 @@ export async function POST(
           {
             entryInteractionId: botDocument.entryInteractionId,
             interactions: botDocument.interactions,
+            variables: botDocument.variables || [],
           },
           {
             currentInteractionId: conversation.currentInteractionId,

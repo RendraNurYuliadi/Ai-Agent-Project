@@ -51,7 +51,10 @@ import {
   type BotInteractionType,
   type BotNextAction,
   type BotQuickButton,
+  type DataCollectionComponent,
+  type DataCollectionComponentCard,
   type DataCollectionQuestion,
+  type DataCollectionValidator,
   type GuidedRouteOption,
 } from "@/lib/bot-flows";
 
@@ -105,7 +108,7 @@ const BOT_SYSTEM_VARIABLES = [
 ];
 
 const BOT_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection"];
-const BOT_INTERACTION_TYPES_GROUPED: BotInteractionType[] = ["welcome_message", "text", "text_start", "text_question"];
+const BOT_INTERACTION_TYPES_GROUPED: BotInteractionType[] = ["welcome_message", "text", "text_question"];
 
 function getBotVariableOptions(customVariables: BotCustomVariable[] = [], interactions: BotInteraction[] = [], interactionType?: BotInteractionType) {
   const dataCollectionVariables = [...new Set(interactions.flatMap((interaction) => interaction.type === "data_collection"
@@ -243,7 +246,7 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
     case "text_question":
       return { question: "Apa yang ingin Anda tanyakan?" };
     case "text_start":
-      return { text: "Halo! Ada yang bisa saya bantu?" };
+      return { text: "" };
     case "text":
       return { text: "" };
   }
@@ -396,7 +399,7 @@ function FlowEditor({ botId }: { botId: string }) {
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     const type = event.dataTransfer.getData("application/bot-interaction") as BotInteractionType;
-    if (!BOT_INTERACTION_TYPES.includes(type)) return;
+    if (!BOT_INTERACTION_TYPES.includes(type as Exclude<BotInteractionType, "text_start">)) return;
     addInteraction(type, screenToFlowPosition({ x: event.clientX, y: event.clientY }));
   };
 
@@ -855,6 +858,21 @@ function FlowEditor({ botId }: { botId: string }) {
                         updateConfig({ dataCollectionQuestions: questions });
                       }} onRemove={() => updateConfig({ dataCollectionQuestions: selectedInteraction.config.dataCollectionQuestions?.filter((_, itemIndex) => itemIndex !== index) })} />)}
                     </div>
+                    <div className="space-y-2 border-t border-neutral-900 pt-3">
+                      <label className="flex items-center gap-2 text-[10px] text-neutral-300">
+                        <input type="checkbox" checked={Boolean(selectedInteraction.config.dataCollectionValidator)} onChange={(event) => updateConfig({ dataCollectionValidator: event.target.checked ? {
+                          confirmationQuestion: "Apakah ada data yang ingin diubah?",
+                          confirmationButtons: [{ label: "Ya", action: "reply", value: "Ya", type: "true" }, { label: "Tidak", action: "reply", value: "Tidak", type: "false" }],
+                          reviewQuestion: "Pilih data yang ingin diubah.",
+                        } : undefined })} className="accent-white" />
+                        Aktifkan validator akhir
+                      </label>
+                      {selectedInteraction.config.dataCollectionValidator && <DataCollectionValidatorFields
+                        validator={selectedInteraction.config.dataCollectionValidator}
+                        variableOptions={availableVariableOptions}
+                        onChange={(dataCollectionValidator) => updateConfig({ dataCollectionValidator })}
+                      />}
+                    </div>
                   </div>
                 )}
 
@@ -1017,11 +1035,93 @@ function DataCollectionQuestionFields({ question, index, canRemove, variableOpti
   onChange: (patch: Partial<DataCollectionQuestion>) => void;
   onRemove: () => void;
 }) {
+  const [componentType, setComponentType] = useState<DataCollectionComponent["type"]>("reply_buttons");
+  const addComponent = () => {
+    const component: DataCollectionComponent = {
+      name: `Komponen ${(question.components?.length || 0) + 1}`,
+      type: componentType,
+      title: "",
+      subtitle: "",
+      buttons: [],
+      card: componentType === "card" ? emptyDataCard() : null,
+      cards: componentType === "carousel" ? [emptyDataCard()] : [],
+    };
+    onChange({ components: [...(question.components || []), component] });
+  };
   return <div className="space-y-2 rounded-md border border-neutral-900 bg-black p-2.5">
     <div className="flex items-center justify-between"><span className="text-[9px] font-medium uppercase text-neutral-600">Pertanyaan {index + 1}</span><button type="button" onClick={onRemove} disabled={!canRemove} aria-label={`Hapus pertanyaan ${index + 1}`} className="rounded p-1 text-neutral-600 hover:text-red-300 disabled:opacity-30"><Trash2 className="h-3 w-3" /></button></div>
     <TextField label="Nama pertanyaan" value={question.name} onChange={(value) => onChange({ name: value })} placeholder="nama_lengkap" />
     <TextAreaField label="Pertanyaan text" value={question.question} onChange={(value) => onChange({ question: value })} rows={2} variableOptions={variableOptions} />
     <TextField label="Variable jawaban" value={question.variable || question.name} onChange={(value) => onChange({ variable: value })} placeholder="nama_lengkap" />
+    <div className="space-y-2 border-t border-neutral-900 pt-2">
+      <span className="text-[9px] font-medium text-neutral-400">Komponen pertanyaan</span>
+      {(question.components || []).map((component, componentIndex) => <DataCollectionComponentFields key={`${index}-component-${componentIndex}`} component={component} variableOptions={variableOptions} onChange={(updated) => {
+        const components = [...(question.components || [])];
+        components[componentIndex] = updated;
+        onChange({ components });
+      }} onRemove={() => onChange({ components: question.components?.filter((_, itemIndex) => itemIndex !== componentIndex) })} />)}
+      <div className="flex gap-1.5">
+        <select value={componentType} onChange={(event) => setComponentType(event.target.value as DataCollectionComponent["type"])} className="min-w-0 flex-1 rounded-md border border-neutral-800 bg-black px-2 py-1.5 text-[10px] text-neutral-300">
+          <option value="reply_buttons">Reply buttons</option><option value="link_buttons">Link buttons</option><option value="card">Card</option><option value="carousel">Carousel</option>
+        </select>
+        <button type="button" onClick={addComponent} disabled={(question.components?.length || 0) >= 5} className="inline-flex items-center gap-1 rounded border border-neutral-800 px-2 py-1.5 text-[10px] text-neutral-300 disabled:opacity-40"><Plus className="h-3 w-3" />Tambah</button>
+      </div>
+    </div>
+  </div>;
+}
+
+function emptyDataCard(): DataCollectionComponentCard {
+  return { imageUrl: "", imageHeight: 128, title: "", subtitle: "", buttons: [] };
+}
+
+function DataCollectionComponentFields({ component, variableOptions, onChange, onRemove }: {
+  component: DataCollectionComponent;
+  variableOptions?: string[];
+  onChange: (component: DataCollectionComponent) => void;
+  onRemove: () => void;
+}) {
+  const updateButtons = (buttons: BotQuickButton[]) => onChange({ ...component, buttons });
+  const updateCard = (card: DataCollectionComponentCard) => onChange({ ...component, card });
+  return <div className="space-y-2 rounded border border-neutral-900 p-2">
+    <div className="flex items-center justify-between"><span className="text-[9px] uppercase text-neutral-500">{component.type.replaceAll("_", " ")}</span><button type="button" onClick={onRemove} aria-label="Hapus komponen pertanyaan" className="p-1 text-neutral-600 hover:text-red-300"><X className="h-3 w-3" /></button></div>
+    <TextField label="Nama komponen" value={component.name} onChange={(name) => onChange({ ...component, name })} />
+    {(component.type === "link_buttons") && <><TextField label="Judul" value={component.title} onChange={(title) => onChange({ ...component, title })} variableOptions={variableOptions} /><TextAreaField label="Deskripsi" value={component.subtitle} onChange={(subtitle) => onChange({ ...component, subtitle })} rows={2} variableOptions={variableOptions} /></>}
+    {(component.type === "reply_buttons" || component.type === "link_buttons") && <div className="space-y-2">
+      {component.buttons.map((button, index) => <QuickButtonFields key={index} button={button} onChange={(patch) => updateButtons(component.buttons.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch, action: component.type === "link_buttons" ? "link" : "reply" } : item))} onRemove={() => updateButtons(component.buttons.filter((_, itemIndex) => itemIndex !== index))} />)}
+      <button type="button" onClick={() => updateButtons([...component.buttons, { label: "", action: component.type === "link_buttons" ? "link" : "reply", value: "" }])} className="inline-flex items-center gap-1 text-[9px] text-neutral-400"><Plus className="h-3 w-3" />Tambah tombol</button>
+    </div>}
+    {component.type === "card" && component.card && <DataCollectionCardFields card={component.card} onChange={updateCard} />}
+    {component.type === "carousel" && <div className="space-y-2">
+      {component.cards.map((card, index) => <div key={index} className="space-y-1"><div className="flex justify-end"><button type="button" onClick={() => onChange({ ...component, cards: component.cards.filter((_, cardIndex) => cardIndex !== index) })} className="text-[9px] text-neutral-500 hover:text-red-300">Hapus card</button></div><DataCollectionCardFields card={card} onChange={(updated) => onChange({ ...component, cards: component.cards.map((item, cardIndex) => cardIndex === index ? updated : item) })} /></div>)}
+      <button type="button" onClick={() => onChange({ ...component, cards: [...component.cards, emptyDataCard()] })} disabled={component.cards.length >= 10} className="inline-flex items-center gap-1 text-[9px] text-neutral-400 disabled:opacity-40"><Plus className="h-3 w-3" />Tambah card</button>
+    </div>}
+  </div>;
+}
+
+function DataCollectionCardFields({ card, onChange }: { card: DataCollectionComponentCard; onChange: (card: DataCollectionComponentCard) => void }) {
+  return <div className="space-y-2 rounded border border-neutral-900 bg-[#080808] p-2">
+    <TextField label="Judul card" value={card.title} onChange={(title) => onChange({ ...card, title })} />
+    <TextAreaField label="Deskripsi card" value={card.subtitle} onChange={(subtitle) => onChange({ ...card, subtitle })} rows={2} />
+    <TextField label="URL gambar" value={card.imageUrl} onChange={(imageUrl) => onChange({ ...card, imageUrl })} placeholder="https://..." />
+    <div className="space-y-1">
+      {card.buttons.map((button, index) => <QuickButtonFields key={index} button={button} onChange={(patch) => onChange({ ...card, buttons: card.buttons.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item) })} onRemove={() => onChange({ ...card, buttons: card.buttons.filter((_, itemIndex) => itemIndex !== index) })} />)}
+      <button type="button" onClick={() => onChange({ ...card, buttons: [...card.buttons, { label: "", action: "reply", value: "" }] })} disabled={card.buttons.length >= 3} className="inline-flex items-center gap-1 text-[9px] text-neutral-400 disabled:opacity-40"><Plus className="h-3 w-3" />Tambah tombol card</button>
+    </div>
+  </div>;
+}
+
+function DataCollectionValidatorFields({ validator, variableOptions, onChange }: {
+  validator: DataCollectionValidator;
+  variableOptions?: string[];
+  onChange: (validator: DataCollectionValidator) => void;
+}) {
+  return <div className="space-y-2 rounded-md border border-neutral-900 p-2.5">
+    <TextAreaField label="Pertanyaan konfirmasi" value={validator.confirmationQuestion} onChange={(confirmationQuestion) => onChange({ ...validator, confirmationQuestion })} rows={2} variableOptions={variableOptions} />
+    <div className="space-y-2">
+      <div className="flex items-center justify-between"><span className="text-[9px] text-neutral-500">Tombol konfirmasi</span><button type="button" onClick={() => onChange({ ...validator, confirmationButtons: [...validator.confirmationButtons, { label: "", action: "reply", value: "", type: "false" }] })} disabled={validator.confirmationButtons.length >= 8} className="text-[9px] text-neutral-300 disabled:opacity-40"><Plus className="inline h-3 w-3" /> Tambah</button></div>
+      {validator.confirmationButtons.map((button, index) => <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-1.5"><input value={button.label} onChange={(event) => onChange({ ...validator, confirmationButtons: validator.confirmationButtons.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item) })} placeholder="Label tombol" aria-label="Label tombol konfirmasi" className="min-w-0 rounded border border-neutral-800 bg-black px-2 py-1.5 text-[10px] text-white" /><input value={button.value} onChange={(event) => onChange({ ...validator, confirmationButtons: validator.confirmationButtons.map((item, itemIndex) => itemIndex === index ? { ...item, value: event.target.value } : item) })} placeholder="Teks balasan di chat" aria-label="Teks balasan tombol konfirmasi" className="min-w-0 rounded border border-neutral-800 bg-black px-2 py-1.5 text-[10px] text-neutral-300" /><select value={button.type} onChange={(event) => onChange({ ...validator, confirmationButtons: validator.confirmationButtons.map((item, itemIndex) => itemIndex === index ? { ...item, type: event.target.value as "true" | "false" } : item) })} aria-label="Tipe internal tombol konfirmasi" className="rounded border border-neutral-800 bg-black px-1.5 py-1.5 text-[10px] text-neutral-300"><option value="true">true</option><option value="false">false</option></select><button type="button" onClick={() => onChange({ ...validator, confirmationButtons: validator.confirmationButtons.filter((_, itemIndex) => itemIndex !== index) })} aria-label="Hapus tombol konfirmasi" className="p-1 text-neutral-600 hover:text-red-300"><X className="h-3 w-3" /></button></div>)}
+    </div>
+    <TextAreaField label="Pertanyaan pemilihan data revisi" value={validator.reviewQuestion} onChange={(reviewQuestion) => onChange({ ...validator, reviewQuestion })} rows={2} variableOptions={variableOptions} />
   </div>;
 }
 
