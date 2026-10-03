@@ -112,6 +112,7 @@ export async function POST(
         ? await db.collection("bots").findOne({ _id: new ObjectId(botId) })
         : null;
       if (botDocument) {
+        const botTurnStartedAt = Date.now();
         const turn = await processBotTurn(
           db,
           {
@@ -121,16 +122,21 @@ export async function POST(
           {
             currentInteractionId: conversation.currentInteractionId,
             botStatus: conversation.botStatus,
+            dataCollectionState: conversation.dataCollectionState,
           },
           message.trim(),
           session
         );
+        if (turn.assistantMessage) {
+          turn.assistantMessage.generationDurationMs = Date.now() - botTurnStartedAt;
+        }
         const updatedAt = new Date();
         const isFirstMessage = !existingMessages.some((item) => item.role === "user");
         const setFields: Record<string, unknown> = {
           botId: botDocument._id.toString(),
           currentInteractionId: turn.currentInteractionId,
           botStatus: turn.botStatus,
+          dataCollectionState: turn.dataCollectionState,
           updatedAt,
         };
         if (isFirstMessage) {

@@ -3,6 +3,8 @@ export const BOT_INTERACTION_TYPES = [
   "guided_routing",
   "small_talk",
   "rag",
+  "web_search",
+  "data_collection",
   "text",
   "text_start",
   "text_question",
@@ -15,6 +17,8 @@ export const BOT_INTERACTION_LABELS: Record<BotInteractionType, string> = {
   guided_routing: "Guided Routing",
   small_talk: "Small Talk",
   rag: "RAG",
+  web_search: "Web Search",
+  data_collection: "Data Collection",
   text: "Text Interaction",
   text_start: "Text Start Interaction",
   text_question: "Text Question Interaction",
@@ -43,6 +47,12 @@ export interface GuidedRouteOption {
   targetInteractionId: string;
 }
 
+export interface DataCollectionQuestion {
+  name: string;
+  question: string;
+  variable: string;
+}
+
 export interface BotInteractionConfig {
   name?: string;
   title?: string;
@@ -60,6 +70,8 @@ export interface BotInteractionConfig {
   lmStudioUrl?: string;
   temperature?: number;
   maxTokens?: number;
+  webSearchMaxResults?: number;
+  dataCollectionQuestions?: DataCollectionQuestion[];
   knowledgeBases?: string[];
 }
 
@@ -71,11 +83,18 @@ export interface BotInteraction {
   nextAction: BotNextAction;
 }
 
+export interface BotCustomVariable {
+  id: string;
+  name: string;
+  value: string;
+}
+
 export interface BotDefinitionInput {
   name: string;
   description: string;
   entryInteractionId: string;
   interactions: BotInteraction[];
+  variables?: BotCustomVariable[];
 }
 
 export interface BotDefinition extends BotDefinitionInput {
@@ -141,6 +160,24 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
       return label && targetInteractionId ? [{ label, variable, prompt, targetInteractionId }] : [];
     })
     : undefined;
+  const dataCollectionQuestions = Array.isArray(value.dataCollectionQuestions)
+    ? value.dataCollectionQuestions.slice(0, 30).flatMap((item) => {
+      if (!isRecord(item)) return [];
+      const name = typeof item.name === "string" ? item.name.trim().slice(0, 80) : "";
+      const question = typeof item.question === "string" && item.question.trim()
+        ? item.question.trim().slice(0, 500)
+        : typeof item.prompt === "string" && item.prompt.trim()
+          ? item.prompt.trim().slice(0, 500)
+          : "";
+      const variable = typeof item.variable === "string" && item.variable.trim()
+        ? item.variable.trim().slice(0, 80)
+        : typeof item.name === "string" && item.name.trim()
+          ? item.name.trim()
+          : "";
+      if (!name || /[.$]/.test(name) || ["__proto__", "prototype", "constructor"].includes(name.toLocaleLowerCase()) || !question || !variable) return [];
+      return [{ name, question, variable }];
+    })
+    : undefined;
 
   return {
     name: typeof value.name === "string" ? value.name.trim().slice(0, 120) : undefined,
@@ -163,6 +200,10 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     maxTokens: typeof value.maxTokens === "number" && Number.isFinite(value.maxTokens)
       ? Math.max(64, Math.min(8192, Math.round(value.maxTokens)))
       : undefined,
+    webSearchMaxResults: typeof value.webSearchMaxResults === "number" && Number.isFinite(value.webSearchMaxResults)
+      ? Math.max(1, Math.min(10, Math.round(value.webSearchMaxResults)))
+      : undefined,
+    dataCollectionQuestions,
     knowledgeBases: Array.isArray(value.knowledgeBases)
       ? value.knowledgeBases.filter((item): item is string => typeof item === "string").slice(0, 20)
       : undefined,
@@ -180,6 +221,20 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     return { success: false, error: "Bot harus memiliki 1 sampai 100 interaction." };
   }
 
+  const variables = Array.isArray(value.variables)
+    ? value.variables.flatMap((item) => {
+        if (!isRecord(item)) return [];
+        const nameValue = typeof item.name === "string" ? item.name.trim() : "";
+        const valueText = typeof item.value === "string" ? item.value : "";
+        if (!nameValue || !/^\w+$/.test(nameValue) || nameValue.length > 40) return [];
+        return [{ id: typeof item.id === "string" ? item.id : crypto.randomUUID(), name: nameValue, value: valueText.slice(0, 2000) }];
+      })
+    : [];
+  const variableNames = variables.map((item) => item.name.toLocaleLowerCase());
+  if (new Set(variableNames).size !== variableNames.length) {
+    return { success: false, error: "Nama variabel custom harus unik." };
+  }
+
   const interactions: BotInteraction[] = [];
   const ids = new Set<string>();
   for (const item of value.interactions) {
@@ -195,6 +250,9 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     const config = parseConfig(item.config);
     const nextAction = parseNextAction(item.nextAction);
     if (!config || !nextAction) return { success: false, error: "Konfigurasi atau next action interaction tidak valid." };
+    if (item.type === "data_collection" && isRecord(item.config) && Array.isArray(item.config.dataCollectionQuestions) && config.dataCollectionQuestions?.length !== item.config.dataCollectionQuestions.length) {
+      return { success: false, error: "Semua pertanyaan Data Collection harus memiliki nama, tipe, dan prompt yang valid." };
+    }
     ids.add(item.id);
     interactions.push({
       id: item.id,
@@ -207,6 +265,13 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
 
   if (!ids.has(entryInteractionId)) return { success: false, error: "Entry interaction harus dipilih." };
   for (const interaction of interactions) {
+    if (interaction.type === "data_collection") {
+      const questions = interaction.config.dataCollectionQuestions || [];
+      if (questions.length === 0) return { success: false, error: "Data Collection harus memiliki minimal satu pertanyaan." };
+      if (questions.length > 30) return { success: false, error: "Data Collection maksimal memiliki 30 pertanyaan." };
+      const names = questions.map((question) => question.name.toLocaleLowerCase());
+      if (new Set(names).size !== names.length) return { success: false, error: "Nama pertanyaan Data Collection harus unik." };
+    }
     if (interaction.type === "guided_routing") {
       const options = interaction.config.options || [];
       if (options.length === 0) return { success: false, error: "Guided Routing harus memiliki minimal satu pilihan route." };
@@ -225,7 +290,7 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
 
   return {
     success: true,
-    data: { name, description, entryInteractionId, interactions },
+    data: { name, description, entryInteractionId, interactions, variables },
   };
 }
 
@@ -236,6 +301,7 @@ export function createStarterBot(name = "Bot Baru"): BotDefinitionInput {
     name,
     description: "",
     entryInteractionId: welcomeId,
+    variables: [],
     interactions: [
       {
         id: welcomeId,

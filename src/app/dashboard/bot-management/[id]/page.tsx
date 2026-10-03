@@ -26,7 +26,9 @@ import {
   Bot,
   Check,
   CircleHelp,
+  Globe,
   GitBranch,
+  ListChecks,
   Loader2,
   MessageSquare,
   PanelLeftClose,
@@ -42,12 +44,14 @@ import {
 import {
   BOT_INTERACTION_LABELS,
   BOT_INTERACTION_TYPES,
+  type BotCustomVariable,
   type BotDefinitionInput,
   type BotInteraction,
   type BotInteractionConfig,
   type BotInteractionType,
   type BotNextAction,
   type BotQuickButton,
+  type DataCollectionQuestion,
   type GuidedRouteOption,
 } from "@/lib/bot-flows";
 
@@ -87,12 +91,44 @@ const iconChoices = [
   { id: "help", label: "Help", Icon: CircleHelp },
 ];
 
+const BOT_SYSTEM_VARIABLES = [
+  "{question}",
+  "{fullName}",
+  "{email}",
+  "{username}",
+  "{role}",
+  "{year}",
+  "{month}",
+  "{date}",
+  "{day}",
+  "{time}",
+];
+
+const BOT_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection"];
+const BOT_INTERACTION_TYPES_GROUPED: BotInteractionType[] = ["welcome_message", "text", "text_start", "text_question"];
+
+function getBotVariableOptions(customVariables: BotCustomVariable[] = [], interactions: BotInteraction[] = [], interactionType?: BotInteractionType) {
+  const dataCollectionVariables = [...new Set(interactions.flatMap((interaction) => interaction.type === "data_collection"
+    ? (interaction.config.dataCollectionQuestions || []).map((item) => `{${(item.variable || item.name || "").trim()}}`).filter(Boolean)
+    : []))];
+  const customNames = customVariables.filter((item) => item.name.trim()).map((item) => `{${item.name.trim()}}`);
+  const systemVariables = [
+    ...BOT_SYSTEM_VARIABLES,
+    ...(interactionType === "rag" ? ["{context}"] : []),
+    ...dataCollectionVariables,
+  ];
+  return [...new Set(systemVariables), ...customNames];
+}
+
 function interactionDisplayName(interaction: Pick<BotInteraction, "type" | "config">): string {
+  if (interaction.type === "data_collection") return BOT_INTERACTION_LABELS[interaction.type];
   return interaction.config.name?.trim() || interaction.config.title?.trim() || interaction.config.question?.trim() || BOT_INTERACTION_LABELS[interaction.type];
 }
 
 function nodeSummary(interaction: BotInteraction): string {
   if (interaction.type === "guided_routing") return `${interaction.config.options?.length || 0} route · LLM`;
+  if (interaction.type === "web_search") return `${interaction.config.webSearchMaxResults || 5} sumber web · LLM`;
+  if (interaction.type === "data_collection") return `${interaction.config.dataCollectionQuestions?.length || 0} pertanyaan · Webhook`;
   if (interaction.nextAction.type === "interaction") return "Next interaction";
   return interaction.nextAction.type === "end" ? "End interaction" : "Close conversation";
 }
@@ -102,6 +138,10 @@ function InteractionNode({ data, selected }: NodeProps<FlowCanvasNode>) {
     ? Sparkles
     : data.interactionType === "rag"
       ? Bot
+      : data.interactionType === "web_search"
+        ? Globe
+        : data.interactionType === "data_collection"
+          ? ListChecks
       : data.interactionType === "guided_routing"
         ? GitBranch
         : MessageSquare;
@@ -193,9 +233,13 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
     case "guided_routing":
       return { text: "Pilih topik yang ingin dibahas.", promptId, options: [] };
     case "small_talk":
-      return { promptId, systemPrompt: "Kamu adalah asisten yang ramah dan ringkas." };
+      return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.8, maxTokens: 400, promptId, systemPrompt: "Kamu adalah asisten yang ramah dan ringkas." };
     case "rag":
       return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.7, maxTokens: 1024, knowledgeBases: [], promptId, systemPrompt: "Jawab berdasarkan knowledge context. Jika informasi tidak tersedia, sampaikan dengan jujur.\n\n{context}" };
+    case "web_search":
+      return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.7, maxTokens: 1024, webSearchMaxResults: 5 };
+    case "data_collection":
+      return { dataCollectionQuestions: [{ name: "nama_lengkap", question: "Siapa nama lengkap Anda?", variable: "nama_lengkap" }] };
     case "text_question":
       return { question: "Apa yang ingin Anda tanyakan?" };
     case "text_start":
@@ -211,6 +255,7 @@ function FlowEditor({ botId }: { botId: string }) {
   const [description, setDescription] = useState("");
   const [interactions, setInteractions] = useState<BotInteraction[]>([]);
   const [entryInteractionId, setEntryInteractionId] = useState("");
+  const [customVariables, setCustomVariables] = useState<BotCustomVariable[]>([]);
   const [activeBot, setActiveBot] = useState(false);
   const [skillCount, setSkillCount] = useState(0);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseOption[]>([]);
@@ -224,6 +269,7 @@ function FlowEditor({ botId }: { botId: string }) {
   const [ragProviderTest, setRagProviderTest] = useState<{ interactionId: string; status: "testing" | "success" | "error"; message: string; models: string[] } | null>(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [variableDraft, setVariableDraft] = useState({ name: "", value: "" });
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowCanvasNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const selectedInteraction = interactions.find((item) => item.id === selectedId) || null;
@@ -253,6 +299,7 @@ function FlowEditor({ botId }: { botId: string }) {
       const normalizedInteractions = normalizeGuidedRoutes(bot.interactions || []);
       setInteractions(normalizedInteractions);
       setEntryInteractionId(bot.entryInteractionId);
+      setCustomVariables(Array.isArray(bot.variables) ? bot.variables : []);
       setActiveBot(bot.isActive);
       setSkillCount(bot.skillCount || 0);
       setKnowledgeBases(bases.filter((base) => base.isActive !== false));
@@ -387,7 +434,7 @@ function FlowEditor({ botId }: { botId: string }) {
       const response = await fetch(`/api/bots/${botId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: botName, description, entryInteractionId, interactions: savedInteractions }),
+        body: JSON.stringify({ name: botName, description, entryInteractionId, interactions: savedInteractions, variables: customVariables }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Gagal menyimpan flow.");
@@ -453,6 +500,30 @@ function FlowEditor({ botId }: { botId: string }) {
 
   const nextAction = selectedInteraction?.nextAction || { type: "end" as const };
   const otherInteractions = interactions.filter((item) => item.id !== selectedId);
+
+  const addCustomVariable = () => {
+    const name = variableDraft.name.trim();
+    if (!name || !/^\w+$/.test(name) || name.length > 40) {
+      setError("Nama variabel custom harus berupa teks alfanumerik tanpa spasi, maksimal 40 karakter.");
+      return;
+    }
+    const normalizedName = name.replace(/\s+/g, "_");
+    if (BOT_SYSTEM_VARIABLES.includes(`{${normalizedName}}`) || customVariables.some((item) => item.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase())) {
+      setError("Nama variabel custom sudah dipakai atau bertabrakan dengan variabel bawaan.");
+      return;
+    }
+    setCustomVariables((items) => [...items, { id: crypto.randomUUID(), name: normalizedName, value: variableDraft.value }]);
+    setVariableDraft({ name: "", value: "" });
+    setError("");
+  };
+
+  const updateCustomVariable = (id: string, patch: Partial<BotCustomVariable>) => {
+    setCustomVariables((items) => items.map((item) => item.id === id ? { ...item, ...patch } : item));
+  };
+
+  const removeCustomVariable = (id: string) => {
+    setCustomVariables((items) => items.filter((item) => item.id !== id));
+  };
   const showConfiguration = configOpen && Boolean(selectedInteraction);
   const editorGridClass = showConfiguration
     ? interactionsOpen ? "xl:grid-cols-[190px_minmax(0,1fr)_310px]" : "xl:grid-cols-[42px_minmax(0,1fr)_310px]"
@@ -464,9 +535,11 @@ function FlowEditor({ botId }: { botId: string }) {
     : interactionsOpen
       ? "grid-rows-[auto_minmax(0,1fr)] xl:grid-rows-1"
       : "grid-rows-[minmax(0,1fr)] xl:grid-rows-1";
-  const visibleInteractionTypes = BOT_INTERACTION_TYPES.filter(
-    (type) => type !== "text_start",
-  );
+  const availableVariableOptions = getBotVariableOptions(customVariables, interactions, selectedInteraction?.type);
+  const groupedInteractionTypes = [
+    { label: "Tools", types: BOT_TOOL_TYPES },
+    { label: "Interaction", types: BOT_INTERACTION_TYPES_GROUPED },
+  ];
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 overflow-hidden">
@@ -496,20 +569,34 @@ function FlowEditor({ botId }: { botId: string }) {
               <dl className="space-y-2.5 text-[10px] leading-4">
                 <div>
                   <dt className="font-mono font-semibold text-neutral-200">{"{question}"} / {"{message}"}</dt>
-                  <dd className="mt-0.5 text-neutral-500">Teks pesan terbaru dari pengguna. Tersedia pada Guided Routing, Small Talk, dan RAG.</dd>
+                  <dd className="mt-0.5 text-neutral-500">Input user terbaru. Dinamis sesuai chat aktif.</dd>
                 </div>
                 <div>
                   <dt className="font-mono font-semibold text-neutral-200">{"{context}"}</dt>
-                  <dd className="mt-0.5 text-neutral-500">Konteks artikel hasil retrieval (maksimal Top 5). Tersedia pada node RAG; tidak diisi pada Guided Routing atau Small Talk.</dd>
+                  <dd className="mt-0.5 text-neutral-500">Hasil retrieval KB / data relevan yang sedang dipakai dalam node RAG.</dd>
                 </div>
                 <div>
                   <dt className="font-mono font-semibold text-neutral-200">{"{fullName}"}</dt>
-                  <dd className="mt-0.5 text-neutral-500">Nama lengkap pengguna, dengan fallback ke nama akun atau “User”.</dd>
+                  <dd className="mt-0.5 text-neutral-500">Nama lengkap user login.</dd>
                 </div>
                 <div>
-                  <dt className="font-mono font-semibold text-neutral-200">{"{name}"} / {"{email}"}</dt>
-                  <dd className="mt-0.5 text-neutral-500">Nama dan email pengguna dari profil sesi. Tersedia pada Guided Routing, Small Talk, dan RAG.</dd>
+                  <dt className="font-mono font-semibold text-neutral-200">{"{email}"}</dt>
+                  <dd className="mt-0.5 text-neutral-500">Email user login.</dd>
                 </div>
+                <div>
+                  <dt className="font-mono font-semibold text-neutral-200">{"{username}"}</dt>
+                  <dd className="mt-0.5 text-neutral-500">Username / nama akun user login.</dd>
+                </div>
+                <div>
+                  <dt className="font-mono font-semibold text-neutral-200">{"{role}"}</dt>
+                  <dd className="mt-0.5 text-neutral-500">Role user login saat ini, misalnya admin, manager, public_user.</dd>
+                </div>
+                {customVariables.length > 0 && <div className="rounded-md border border-neutral-800 bg-neutral-950/50 p-2">
+                  <dt className="mb-2 text-[9px] uppercase tracking-wide text-neutral-500">Variabel manual</dt>
+                  {customVariables.map((item) => (
+                    <dd key={item.id} className="mt-1 font-mono text-neutral-200">{`{${item.name}}`}</dd>
+                  ))}
+                </div>}
               </dl>
             </div>}
           </div>
@@ -543,21 +630,28 @@ function FlowEditor({ botId }: { botId: string }) {
               </div>
               <button type="button" onClick={() => setInteractionsOpen(false)} title="Minimalkan daftar interaction" aria-label="Minimalkan daftar interaction" className="rounded p-1 text-neutral-500 hover:bg-neutral-900 hover:text-white"><PanelLeftClose className="h-3.5 w-3.5" /></button>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-2 xl:flex-col xl:overflow-visible">
-              {visibleInteractionTypes.map((type) => (
-                <button
-                  key={type}
-                  type="button"
-                  draggable
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData("application/bot-interaction", type);
-                    event.dataTransfer.effectAllowed = "copy";
-                  }}
-                  onClick={() => addInteraction(type)}
-                  className="flex shrink-0 items-center gap-2 rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-left text-[10px] text-neutral-300 hover:border-neutral-600 hover:text-white xl:w-full"
-                >
-                  <Plus className="h-3 w-3 text-neutral-500" />{BOT_INTERACTION_LABELS[type]}
-                </button>
+            <div className="space-y-4">
+              {groupedInteractionTypes.map((group) => (
+                <div key={group.label} className="space-y-2">
+                  <p className="text-[9px] uppercase tracking-wide text-neutral-500">{group.label}</p>
+                  <div className="flex gap-2 overflow-x-auto pb-2 xl:flex-col xl:overflow-visible">
+                    {group.types.map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData("application/bot-interaction", type);
+                          event.dataTransfer.effectAllowed = "copy";
+                        }}
+                        onClick={() => addInteraction(type)}
+                        className="flex shrink-0 items-center gap-2 rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-left text-[10px] text-neutral-300 hover:border-neutral-600 hover:text-white xl:w-full"
+                      >
+                        <Plus className="h-3 w-3 text-neutral-500" />{BOT_INTERACTION_LABELS[type]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </> : <button type="button" onClick={() => setInteractionsOpen(true)} title="Tampilkan daftar interaction" aria-label="Tampilkan daftar interaction" className="flex w-full justify-center rounded-md p-2 text-neutral-400 hover:bg-neutral-900 hover:text-white"><PanelLeftOpen className="h-4 w-4" /></button>}
@@ -603,6 +697,29 @@ function FlowEditor({ botId }: { botId: string }) {
           </div>
 
           <div className="mt-4 space-y-4">
+            <div className="space-y-3 rounded-md border border-neutral-800 bg-[#090909] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[9px] uppercase tracking-wide text-neutral-500">Variabel lokal</p>
+                  <p className="mt-1 text-[10px] text-neutral-600">Manual / static, bukan dinamis dari user login.</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input value={variableDraft.name} onChange={(event) => setVariableDraft((current) => ({ ...current, name: event.target.value }))} placeholder="Nama variabel" className="rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-[10px] text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" />
+                <input value={variableDraft.value} onChange={(event) => setVariableDraft((current) => ({ ...current, value: event.target.value }))} placeholder="Nilai variabel" className="rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-[10px] text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" />
+              </div>
+              <button type="button" onClick={addCustomVariable} className="inline-flex items-center gap-1 text-[10px] text-neutral-300 hover:text-white"><Plus className="h-3 w-3" /> Tambah variabel</button>
+              {customVariables.length > 0 && <div className="space-y-2">
+                {customVariables.map((item) => (
+                  <div key={item.id} className="flex items-center gap-2 rounded-md border border-neutral-900 bg-black p-2">
+                    <span className="font-mono text-[9px] text-neutral-200">{`{${item.name}}`}</span>
+                    <input value={item.value} onChange={(event) => updateCustomVariable(item.id, { value: event.target.value })} className="min-w-0 flex-1 rounded border border-neutral-800 bg-[#080808] px-2 py-1 text-[10px] text-neutral-200 outline-none" />
+                    <button type="button" onClick={() => removeCustomVariable(item.id)} aria-label="Hapus variabel manual" className="rounded p-1 text-neutral-600 hover:text-red-300"><Trash2 className="h-3 w-3" /></button>
+                  </div>
+                ))}
+              </div>}
+            </div>
+
             <label className="block space-y-1.5 text-[10px] text-neutral-500">Entry interaction
               <select value={entryInteractionId} onChange={(event) => {
                 setEntryInteractionId(event.target.value);
@@ -636,9 +753,18 @@ function FlowEditor({ botId }: { botId: string }) {
                   </div>
                 )}
 
+                <div className="space-y-2 rounded-md border border-neutral-800 bg-neutral-950/40 p-2.5">
+                  <p className="text-[9px] uppercase tracking-wide text-neutral-500">Variabel tersedia</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableVariableOptions.map((variable) => (
+                      <span key={variable} className="rounded-full border border-neutral-800 bg-black px-2 py-1 font-mono text-[9px] text-neutral-300">{variable}</span>
+                    ))}
+                  </div>
+                </div>
+
                 {selectedInteraction.type === "guided_routing" && (
                   <div className="space-y-3">
-                    <PromptSelector type="guided_routing" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} />
+                    <PromptSelector type="guided_routing" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} variableOptions={availableVariableOptions} />
                     <div className="space-y-2 border-t border-neutral-900 pt-3">
                       <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-neutral-300">Pilihan route</span><button type="button" onClick={() => updateConfig({ options: [...(selectedInteraction.config.options || []), { label: "", variable: "", prompt: "", targetInteractionId: otherInteractions[0]?.id || "" }] })} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white"><Plus className="h-3 w-3" /> Tambah</button></div>
                       {(selectedInteraction.config.options || []).map((option, index) => <GuidedOptionFields key={`${selectedInteraction.id}-route-${index}`} option={option} interactions={otherInteractions} onChange={(patch) => setGuidedOption(index, patch)} onRemove={() => updateConfig({ options: selectedInteraction.config.options?.filter((_, itemIndex) => itemIndex !== index) })} />)}
@@ -647,7 +773,89 @@ function FlowEditor({ botId }: { botId: string }) {
                 )}
 
                 {selectedInteraction.type === "small_talk" && (
-                  <PromptSelector type="small_talk" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} />
+                  <div className="space-y-3">
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">LLM provider
+                      <select value={selectedInteraction.config.provider === "openrouter" ? "openrouter" : "lmstudio"} onChange={(event) => void selectRagProvider(event.target.value as "lmstudio" | "openrouter")} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                        <option value="lmstudio">LM Studio</option><option value="openrouter">OpenRouter</option>
+                      </select>
+                    </label>
+                    {selectedInteraction.config.provider !== "openrouter" && <div className="space-y-1.5">
+                      <label className="block text-[10px] text-neutral-500">Base URL LM Studio
+                        <input value={selectedInteraction.config.lmStudioUrl || "http://localhost:1234/v1"} onChange={(event) => updateConfig({ lmStudioUrl: event.target.value })} placeholder="http://localhost:1234/v1" className="mt-1.5 w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+                      </label>
+                      <button type="button" onClick={() => void selectRagProvider("lmstudio")} disabled={ragProviderTest?.status === "testing" && ragProviderTest.interactionId === selectedInteraction.id} className="inline-flex items-center gap-1.5 text-[10px] text-neutral-400 hover:text-white disabled:opacity-50">
+                        {ragProviderTest?.status === "testing" && ragProviderTest.interactionId === selectedInteraction.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Uji koneksi dan muat model
+                      </button>
+                    </div>}
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Model
+                      <select value={selectedInteraction.config.model || ""} onChange={(event) => updateConfig({ model: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                        {selectedInteraction.config.model && !ragProviderTest?.models.includes(selectedInteraction.config.model) && <option value={selectedInteraction.config.model}>{selectedInteraction.config.model} (tersimpan)</option>}
+                        {(ragProviderTest?.interactionId === selectedInteraction.id ? ragProviderTest.models : []).map((model) => <option key={model} value={model}>{model}</option>)}
+                        {!selectedInteraction.config.model && <option value="">Pilih model setelah uji koneksi</option>}
+                      </select>
+                    </label>
+                    {ragProviderTest?.interactionId === selectedInteraction.id && <p role={ragProviderTest.status === "error" ? "alert" : "status"} className={`text-[10px] ${ragProviderTest.status === "error" ? "text-red-300" : ragProviderTest.status === "success" ? "text-emerald-300" : "text-neutral-500"}`}>{ragProviderTest.message}</p>}
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Temperature: {selectedInteraction.config.temperature ?? 0.8}
+                      <input type="range" min="0" max="2" step="0.1" value={selectedInteraction.config.temperature ?? 0.8} onChange={(event) => updateConfig({ temperature: Number(event.target.value) })} className="w-full accent-white" />
+                    </label>
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Max output tokens
+                      <input type="number" min="64" max="8192" value={selectedInteraction.config.maxTokens ?? 400} onChange={(event) => updateConfig({ maxTokens: Math.max(64, Math.min(8192, Number(event.target.value) || 400)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+                    </label>
+                    <PromptSelector type="small_talk" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} variableOptions={availableVariableOptions} />
+                  </div>
+                )}
+
+                {selectedInteraction.type === "web_search" && (
+                  <div className="space-y-3">
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">LLM provider
+                      <select value={selectedInteraction.config.provider === "openrouter" ? "openrouter" : "lmstudio"} onChange={(event) => void selectRagProvider(event.target.value as "lmstudio" | "openrouter")} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                        <option value="lmstudio">LM Studio</option><option value="openrouter">OpenRouter</option>
+                      </select>
+                    </label>
+                    {selectedInteraction.config.provider !== "openrouter" && <div className="space-y-1.5">
+                      <label className="block text-[10px] text-neutral-500">Base URL LM Studio
+                        <input value={selectedInteraction.config.lmStudioUrl || "http://localhost:1234/v1"} onChange={(event) => updateConfig({ lmStudioUrl: event.target.value })} placeholder="http://localhost:1234/v1" className="mt-1.5 w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+                      </label>
+                      <button type="button" onClick={() => void selectRagProvider("lmstudio")} disabled={ragProviderTest?.status === "testing" && ragProviderTest.interactionId === selectedInteraction.id} className="inline-flex items-center gap-1.5 text-[10px] text-neutral-400 hover:text-white disabled:opacity-50">
+                        {ragProviderTest?.status === "testing" && ragProviderTest.interactionId === selectedInteraction.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                        Uji koneksi dan muat model
+                      </button>
+                    </div>}
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Model
+                      <select value={selectedInteraction.config.model || ""} onChange={(event) => updateConfig({ model: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                        {selectedInteraction.config.model && !ragProviderTest?.models.includes(selectedInteraction.config.model) && <option value={selectedInteraction.config.model}>{selectedInteraction.config.model} (tersimpan)</option>}
+                        {(ragProviderTest?.interactionId === selectedInteraction.id ? ragProviderTest.models : []).map((model) => <option key={model} value={model}>{model}</option>)}
+                        {!selectedInteraction.config.model && <option value="">Pilih model setelah uji koneksi</option>}
+                      </select>
+                    </label>
+                    {ragProviderTest?.interactionId === selectedInteraction.id && <p role={ragProviderTest.status === "error" ? "alert" : "status"} className={`text-[10px] ${ragProviderTest.status === "error" ? "text-red-300" : ragProviderTest.status === "success" ? "text-emerald-300" : "text-neutral-500"}`}>{ragProviderTest.message}</p>}
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Temperature: {selectedInteraction.config.temperature ?? 0.7}
+                      <input type="range" min="0" max="2" step="0.1" value={selectedInteraction.config.temperature ?? 0.7} onChange={(event) => updateConfig({ temperature: Number(event.target.value) })} className="w-full accent-white" />
+                    </label>
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Max output tokens
+                      <input type="number" min="64" max="8192" value={selectedInteraction.config.maxTokens ?? 1024} onChange={(event) => updateConfig({ maxTokens: Math.max(64, Math.min(8192, Number(event.target.value) || 1024)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+                    </label>
+                    <div className="border-t border-neutral-900 pt-3" />
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Jumlah sumber web
+                      <input type="number" min="1" max="10" value={selectedInteraction.config.webSearchMaxResults ?? 5} onChange={(event) => updateConfig({ webSearchMaxResults: Math.max(1, Math.min(10, Number(event.target.value) || 5)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+                    </label>
+                    <TextAreaField label="Instruksi jawaban" value={selectedInteraction.config.systemPrompt || ""} onChange={(value) => updateConfig({ systemPrompt: value })} rows={5} variableOptions={availableVariableOptions} />
+                    <p className="text-[10px] leading-4 text-neutral-600">Jawaban dibuat dari sumber web dan akan menyertakan tautan sitasi. Sebagian situs dapat membatasi akses otomatis.</p>
+                  </div>
+                )}
+
+                {selectedInteraction.type === "data_collection" && (
+                  <div className="space-y-3">
+                    <div className="space-y-2 border-t border-neutral-900 pt-3">
+                      <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-neutral-300">Daftar pertanyaan</span><button type="button" disabled={(selectedInteraction.config.dataCollectionQuestions?.length || 0) >= 30} onClick={() => updateConfig({ dataCollectionQuestions: [...(selectedInteraction.config.dataCollectionQuestions || []), { name: `pertanyaan_${(selectedInteraction.config.dataCollectionQuestions?.length || 0) + 1}`, question: "", variable: `jawaban_${(selectedInteraction.config.dataCollectionQuestions?.length || 0) + 1}` }] })} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white disabled:opacity-40"><Plus className="h-3 w-3" />Tambah</button></div>
+                      {(selectedInteraction.config.dataCollectionQuestions || []).map((question, index) => <DataCollectionQuestionFields key={`${selectedInteraction.id}-data-question-${index}`} question={question} index={index} canRemove={(selectedInteraction.config.dataCollectionQuestions?.length || 0) > 1} variableOptions={availableVariableOptions} onChange={(patch) => {
+                        const questions = [...(selectedInteraction.config.dataCollectionQuestions || [])];
+                        questions[index] = { ...questions[index], ...patch };
+                        updateConfig({ dataCollectionQuestions: questions });
+                      }} onRemove={() => updateConfig({ dataCollectionQuestions: selectedInteraction.config.dataCollectionQuestions?.filter((_, itemIndex) => itemIndex !== index) })} />)}
+                    </div>
+                  </div>
                 )}
 
                 {selectedInteraction.type === "rag" && (
@@ -680,7 +888,7 @@ function FlowEditor({ botId }: { botId: string }) {
                     <label className="block space-y-1.5 text-[10px] text-neutral-500">Max output tokens
                       <input type="number" min="64" max="8192" value={selectedInteraction.config.maxTokens ?? 1024} onChange={(event) => updateConfig({ maxTokens: Math.max(64, Math.min(8192, Number(event.target.value) || 1024)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
                     </label>
-                    <PromptSelector type="rag" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} />
+                    <PromptSelector type="rag" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} variableOptions={availableVariableOptions} />
                     <div className="space-y-2 border-t border-neutral-900 pt-3">
                       <p className="text-[10px] font-medium text-neutral-300">Knowledge Base aktif</p>
                       {knowledgeBases.length ? knowledgeBases.map((base) => {
@@ -694,12 +902,12 @@ function FlowEditor({ botId }: { botId: string }) {
                   </div>
                 )}
 
-                {(selectedInteraction.type === "text" || selectedInteraction.type === "text_start") && <TextAreaField label="Pesan" value={selectedInteraction.config.text || ""} onChange={(value) => updateConfig({ text: value })} rows={6} />}
-                <TextField label="Nama interaction" value={selectedInteraction.config.name || ""} onChange={(value) => updateConfig({ name: value })} placeholder="Masukkan nama interaction" />
+                {(selectedInteraction.type === "text" || selectedInteraction.type === "text_start") && <TextAreaField label="Pesan" value={selectedInteraction.config.text || ""} onChange={(value) => updateConfig({ text: value })} rows={6} variableOptions={availableVariableOptions} />}
+                {selectedInteraction.type !== "data_collection" && <TextField label="Nama interaction" value={selectedInteraction.config.name || ""} onChange={(value) => updateConfig({ name: value })} placeholder="Masukkan nama interaction" variableOptions={availableVariableOptions} />}
 
                 {selectedInteraction.type === "text_question" && (
                   <div className="space-y-3">
-                    <TextAreaField label="Pertanyaan" value={selectedInteraction.config.question || ""} onChange={(value) => updateConfig({ question: value })} rows={4} />
+                    <TextAreaField label="Pertanyaan" value={selectedInteraction.config.question || ""} onChange={(value) => updateConfig({ question: value })} rows={4} variableOptions={availableVariableOptions} />
                     <div className="space-y-2 border-t border-neutral-900 pt-3">
                       <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-neutral-300">Reply / Link button</span><button type="button" onClick={() => updateConfig({ quickButtons: [...(selectedInteraction.config.quickButtons || []), { label: "", action: "reply", value: "" }] })} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white"><Plus className="h-3 w-3" /> Tambah</button></div>
                       {(selectedInteraction.config.quickButtons || []).map((button, index) => <QuickButtonFields key={`${selectedInteraction.id}-quick-${index}`} button={button} onChange={(patch) => setQuickButton(index, patch)} onRemove={() => updateConfig({ quickButtons: selectedInteraction.config.quickButtons?.filter((_, itemIndex) => itemIndex !== index) })} />)}
@@ -733,7 +941,7 @@ function FlowEditor({ botId }: { botId: string }) {
   );
 }
 
-function PromptSelector({ type, prompts, value, onChange, onSave }: { type: "guided_routing" | "small_talk" | "rag"; prompts: PromptOption[]; value: string; onChange: (value: string) => void; onSave: (promptId: string, content: string) => Promise<void> }) {
+function PromptSelector({ type, prompts, value, onChange, onSave, variableOptions }: { type: "guided_routing" | "small_talk" | "rag"; prompts: PromptOption[]; value: string; onChange: (value: string) => void; onSave: (promptId: string, content: string) => Promise<void>; variableOptions?: string[] }) {
   const matchingPrompts = prompts.filter((prompt) => prompt.type === type);
   const selectedPrompt = matchingPrompts.find((prompt) => prompt.id === value);
   const [editing, setEditing] = useState(false);
@@ -766,6 +974,7 @@ function PromptSelector({ type, prompts, value, onChange, onSave }: { type: "gui
       </label>
       {selectedPrompt && !editing && <button type="button" onClick={() => { setDraft(selectedPrompt.content); setError(""); setEditing(true); }} className="text-[10px] text-neutral-400 underline hover:text-white">Edit prompt di sini</button>}
       {editing && <div className="space-y-2">
+        <VariableDropdown options={variableOptions || []} onInsert={(item) => setDraft((current) => `${current}${current.trim() ? " " : ""}${item}`)} />
         <textarea aria-label="Isi prompt template" value={draft} onChange={(event) => setDraft(event.target.value)} rows={8} className="w-full resize-y rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs leading-5 text-neutral-200 outline-none focus:border-neutral-600" />
         {error && <p role="alert" className="text-[10px] text-red-300">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -777,12 +986,47 @@ function PromptSelector({ type, prompts, value, onChange, onSave }: { type: "gui
   );
 }
 
-function TextField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
-  return <label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label>;
+function VariableDropdown({ options, onInsert }: { options: string[]; onInsert: (value: string) => void }) {
+  if (!options.length) return null;
+  return (
+    <label className="block space-y-1.5 text-[10px] text-neutral-500">
+      Variabel
+      <select value="" onChange={(event) => {
+        const selected = event.target.value;
+        if (selected) {
+          onInsert(selected);
+          event.target.value = "";
+        }
+      }} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+        <option value="">Sisipkan variabel...</option>
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>
+  );
 }
 
-function TextAreaField({ label, value, onChange, rows = 4 }: { label: string; value: string; onChange: (value: string) => void; rows?: number }) {
-  return <label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="w-full resize-y rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs leading-5 text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label>;
+function TextField({ label, value, onChange, placeholder, variableOptions }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; variableOptions?: string[] }) {
+  return <div className="space-y-1.5"><VariableDropdown options={variableOptions || []} onInsert={(item) => onChange(`${value}${value.trim() ? " " : ""}${item}`)} /><label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label></div>;
+}
+
+function DataCollectionQuestionFields({ question, index, canRemove, variableOptions, onChange, onRemove }: {
+  question: DataCollectionQuestion;
+  index: number;
+  canRemove: boolean;
+  variableOptions?: string[];
+  onChange: (patch: Partial<DataCollectionQuestion>) => void;
+  onRemove: () => void;
+}) {
+  return <div className="space-y-2 rounded-md border border-neutral-900 bg-black p-2.5">
+    <div className="flex items-center justify-between"><span className="text-[9px] font-medium uppercase text-neutral-600">Pertanyaan {index + 1}</span><button type="button" onClick={onRemove} disabled={!canRemove} aria-label={`Hapus pertanyaan ${index + 1}`} className="rounded p-1 text-neutral-600 hover:text-red-300 disabled:opacity-30"><Trash2 className="h-3 w-3" /></button></div>
+    <TextField label="Nama pertanyaan" value={question.name} onChange={(value) => onChange({ name: value })} placeholder="nama_lengkap" />
+    <TextAreaField label="Pertanyaan text" value={question.question} onChange={(value) => onChange({ question: value })} rows={2} variableOptions={variableOptions} />
+    <TextField label="Variable jawaban" value={question.variable || question.name} onChange={(value) => onChange({ variable: value })} placeholder="nama_lengkap" />
+  </div>;
+}
+
+function TextAreaField({ label, value, onChange, rows = 4, variableOptions }: { label: string; value: string; onChange: (value: string) => void; rows?: number; variableOptions?: string[] }) {
+  return <div className="space-y-1.5"><VariableDropdown options={variableOptions || []} onInsert={(item) => onChange(`${value}${value.trim() ? " " : ""}${item}`)} /><label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="w-full resize-y rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs leading-5 text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label></div>;
 }
 
 function QuickButtonFields({ button, onChange, onRemove }: { button: BotQuickButton; onChange: (patch: Partial<BotQuickButton>) => void; onRemove: () => void }) {

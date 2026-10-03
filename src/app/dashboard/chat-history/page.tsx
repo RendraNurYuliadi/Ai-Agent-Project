@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import {
   History,
   MessageSquare,
@@ -16,8 +17,15 @@ import {
   Calendar,
   CircleHelp,
   Sparkles,
+  UserRound,
+  ShieldCheck,
+  Layers3,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { FormattedMessage } from "@/components/formatted-message";
+import { ResponseMeta } from "@/components/response-meta";
 
 interface Conversation {
   id: string;
@@ -25,6 +33,41 @@ interface Conversation {
   messageCount: number;
   createdAt: string;
   updatedAt: string;
+  user?: ConversationUser | null;
+  bot?: ConversationBot | null;
+  botUser?: ConversationUser | null;
+  skill?: ConversationSkill | null;
+}
+
+interface ConversationUser {
+  id: string;
+  name: string;
+  fullName: string;
+  email: string;
+  role: string;
+  userType: "human" | "bot";
+  createdAt?: string | null;
+}
+
+interface ConversationBot {
+  id: string;
+  name: string;
+  description: string;
+  isActive: boolean;
+  interactionCount: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+interface ConversationSkill {
+  id: string;
+  name: string;
+  description: string;
+}
+
+interface FilterOption {
+  id: string;
+  name: string;
 }
 
 interface Message {
@@ -33,6 +76,16 @@ interface Message {
   content: string;
   messageType?: string;
   lmStudioAvailable?: boolean;
+  generationDurationMs?: number;
+  topArticles?: Array<{
+    id: string;
+    title: string;
+    collectionName?: string;
+    category?: string;
+    score: number;
+    matchedKeywords?: string[];
+  }>;
+  webSources?: Array<{ id: string; title: string; url: string; score: number; publishedDate?: string }>;
   uiComponents?: AssistantComponent[];
   botInteraction?: {
     type: "welcome_message" | "guided_routing" | "text_question";
@@ -194,16 +247,6 @@ function HistoryBotInteractionPreview({ data }: { data: NonNullable<Message["bot
   );
 }
 
-function formatTime(ts: string): string {
-  if (!ts) return "";
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function formatDate(d: string): string {
   try {
     return new Date(d).toLocaleString("id-ID", {
@@ -238,7 +281,27 @@ function getAvatarGradient(role: string): string {
   }
 }
 
+function ProfileSection({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
+  return <section className="rounded-lg border border-neutral-800 bg-[#080808] p-3.5">
+    <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold text-neutral-200">{icon}{title}</h2>
+    {children}
+  </section>;
+}
+
+function ProfileFields({ fields }: { fields: Array<[string, string]> }) {
+  return <dl className="space-y-2.5">{fields.map(([label, value]) => <div key={label} className="min-w-0">
+    <dt className="text-[9px] uppercase text-neutral-600">{label}</dt>
+    <dd className="mt-0.5 break-words text-[11px] text-neutral-300">{value || "-"}</dd>
+  </div>)}</dl>;
+}
+
+function ProfileEmpty() {
+  return <p className="text-[10px] text-neutral-600">Data tidak tersedia.</p>;
+}
+
 export default function ChatHistoryPage() {
+  const pathname = usePathname();
+  const isAllConversationsRoute = pathname === "/dashboard/all-conversations";
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -246,46 +309,86 @@ export default function ChatHistoryPage() {
     id: string;
     title: string;
     messages: Message[];
+    user?: ConversationUser | null;
+    bot?: ConversationBot | null;
+    botUser?: ConversationUser | null;
+    skill?: ConversationSkill | null;
   } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isStaff, setIsStaff] = useState(false);
+  const [selectedConversationId, setSelectedConversationId] = useState("");
+  const [error, setError] = useState("");
+  const [botFilter, setBotFilter] = useState("");
+  const [skillFilter, setSkillFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState({ search: "", botId: "", skillId: "", dateFrom: "", dateTo: "" });
+  const [botOptions, setBotOptions] = useState<FilterOption[]>([]);
+  const [skillOptions, setSkillOptions] = useState<FilterOption[]>([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+  const [refreshCount, setRefreshCount] = useState(0);
 
   useEffect(() => {
-    fetchHistory();
-    fetchUserProfile();
+    let current = true;
+    fetch("/api/auth/me").then((response) => response.json()).then((profileData) => {
+      if (!current) return;
+      if (profileData.user) {
+        const profile = profileData.user;
+        setIsStaff(profile.role === "admin" || profile.role === "manager");
+        setUserProfile({
+          name: profile.name || "User",
+          fullName: profile.fullName || profile.name || "User",
+          email: profile.email || "",
+          role: profile.role || "public_user",
+        });
+      }
+    });
+    return () => { current = false; };
   }, []);
 
-  const fetchUserProfile = async () => {
-    try {
-      const res = await fetch("/api/auth/me");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.user) {
-          setUserProfile({
-            name: data.user.name || "User",
-            fullName: data.user.fullName || data.user.name || "User",
-            email: data.user.email || "",
-            role: data.user.role || "public_user",
-          });
-        }
+  useEffect(() => {
+    let current = true;
+    const query = new URLSearchParams();
+    if (isAllConversationsRoute) {
+      query.set("scope", "all");
+      query.set("page", String(page));
+      if (appliedFilters.search) query.set("search", appliedFilters.search);
+      if (appliedFilters.botId) query.set("botId", appliedFilters.botId);
+      if (appliedFilters.skillId) query.set("skillId", appliedFilters.skillId);
+      if (appliedFilters.dateFrom) query.set("dateFrom", appliedFilters.dateFrom);
+      if (appliedFilters.dateTo) query.set("dateTo", appliedFilters.dateTo);
+    }
+    fetch(`/api/conversations${query.size ? `?${query}` : ""}`).then(async (response) => {
+      const data = await response.json();
+      if (!current) return;
+      if (!response.ok) {
+        setError(data.error || "Gagal memuat percakapan.");
+        return;
       }
-    } catch { }
-  };
+      setConversations(data.conversations || []);
+      setPagination(data.pagination || { page: 1, pageSize: 20, total: data.conversations?.length || 0, totalPages: 1 });
+      setBotOptions(data.filters?.bots || []);
+      setSkillOptions(data.filters?.skills || []);
+      setError("");
+    }).catch(() => {
+      if (current) setError("Gagal memuat percakapan.");
+    }).finally(() => {
+      if (current) setLoading(false);
+    });
+    return () => { current = false; };
+  }, [isAllConversationsRoute, page, appliedFilters, refreshCount]);
 
-  const fetchHistory = async () => {
+  const fetchHistory = () => {
     setLoading(true);
-    try {
-      const res = await fetch("/api/conversations");
-      if (res.ok) {
-        const data = await res.json();
-        setConversations(data.conversations || []);
-      }
-    } catch { }
-    setLoading(false);
+    setRefreshCount((count) => count + 1);
   };
 
   const viewConversation = async (conv: Conversation) => {
+    setSelectedConversationId(conv.id);
     setLoadingDetail(true);
+    setError("");
     try {
       const res = await fetch(`/api/conversations/${conv.id}`);
       if (res.ok) {
@@ -294,9 +397,18 @@ export default function ChatHistoryPage() {
           id: conv.id,
           title: conv.title,
           messages: data.conversation.messages || [],
+          user: data.conversation.user || conv.user || null,
+          bot: data.conversation.bot || conv.bot || null,
+          botUser: data.conversation.botUser || conv.botUser || null,
+          skill: data.conversation.skill || conv.skill || null,
         });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Gagal memuat detail percakapan.");
       }
-    } catch { }
+    } catch {
+      setError("Gagal memuat detail percakapan.");
+    }
     setLoadingDetail(false);
   };
 
@@ -307,9 +419,143 @@ export default function ChatHistoryPage() {
     if (viewConv?.id === id) setViewConv(null);
   };
 
-  const filtered = conversations.filter((c) =>
-    c.title.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = isAllConversationsRoute
+    ? conversations
+    : conversations.filter((conversation) => conversation.title.toLowerCase().includes(search.toLowerCase()));
+
+  if (isStaff && isAllConversationsRoute) {
+    const selectedConversation = conversations.find((item) => item.id === selectedConversationId);
+    const selectedUser = viewConv?.user || selectedConversation?.user;
+    const selectedBot = viewConv?.bot || selectedConversation?.bot;
+    const selectedBotUser = viewConv?.botUser || selectedConversation?.botUser;
+    const selectedSkill = viewConv?.skill || selectedConversation?.skill;
+
+    return <div className="space-y-5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Admin workspace</p>
+          <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white"><History className="h-6 w-6" />All Conversations</h1>
+          <p className="mt-1 text-sm text-neutral-500">Semua percakapan user, beserta detail user dan bot yang digunakan.</p>
+        </div>
+        <button type="button" onClick={() => void fetchHistory()} disabled={loading} className="inline-flex w-fit items-center gap-2 rounded-md border border-neutral-800 px-3 py-2 text-xs text-neutral-300 hover:bg-neutral-900 disabled:opacity-50">
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />Muat ulang
+        </button>
+      </header>
+
+      <form onSubmit={(event) => {
+        event.preventDefault();
+        setLoading(true);
+        setPage(1);
+        setViewConv(null);
+        setSelectedConversationId("");
+        setAppliedFilters({ search, botId: botFilter, skillId: skillFilter, dateFrom, dateTo });
+      }} className="grid gap-3 rounded-lg border border-neutral-800 bg-[#080808] p-3 sm:grid-cols-2 xl:grid-cols-6">
+        <label className="space-y-1.5 text-[10px] text-neutral-500 xl:col-span-2">Username, nama lengkap, email, atau judul
+          <span className="relative block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-600" /><input type="search" placeholder="Cari user atau percakapan..." value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-md border border-neutral-800 bg-black py-2 pl-9 pr-3 text-xs text-white placeholder-neutral-600 outline-none focus:border-neutral-600" /></span>
+        </label>
+        <label className="space-y-1.5 text-[10px] text-neutral-500">Bot Management
+          <select value={botFilter} onChange={(event) => setBotFilter(event.target.value)} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600"><option value="">Semua bot</option>{botOptions.map((bot) => <option key={bot.id} value={bot.id}>{bot.name}</option>)}</select>
+        </label>
+        <label className="space-y-1.5 text-[10px] text-neutral-500">Skill
+          <select value={skillFilter} onChange={(event) => setSkillFilter(event.target.value)} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600"><option value="">Semua skill</option>{skillOptions.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}</select>
+        </label>
+        <label className="space-y-1.5 text-[10px] text-neutral-500">Dari tanggal<input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} className="block w-full rounded-md border border-neutral-800 bg-black px-2 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" /></label>
+        <label className="space-y-1.5 text-[10px] text-neutral-500">Sampai tanggal<input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} className="block w-full rounded-md border border-neutral-800 bg-black px-2 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" /></label>
+        <div className="flex items-end gap-2 sm:col-span-2 xl:col-span-6">
+          <button type="submit" className="rounded-md bg-white px-3 py-2 text-xs font-semibold text-black hover:bg-neutral-200">Terapkan filter</button>
+          <button type="button" onClick={() => {
+            setLoading(true);
+            setSearch(""); setBotFilter(""); setSkillFilter(""); setDateFrom(""); setDateTo(""); setPage(1); setViewConv(null); setSelectedConversationId("");
+            setAppliedFilters({ search: "", botId: "", skillId: "", dateFrom: "", dateTo: "" });
+          }} className="rounded-md border border-neutral-800 px-3 py-2 text-xs text-neutral-400 hover:text-white">Reset</button>
+        </div>
+      </form>
+      {error && <div role="alert" className="rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-200">{error}</div>}
+
+      <div className="grid min-h-[620px] grid-cols-1 gap-3 xl:grid-cols-[minmax(250px,0.85fr)_minmax(340px,1.5fr)_minmax(230px,0.8fr)]">
+        <section className="flex min-h-[360px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-[#080808] xl:max-h-[calc(100vh-250px)]">
+          <div className="flex items-center justify-between border-b border-neutral-800 px-3.5 py-3">
+            <h2 className="text-xs font-semibold text-neutral-200">Percakapan</h2>
+            <span className="text-[10px] text-neutral-600">{pagination.total} percakapan</span>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {loading ? <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-neutral-500" /></div> : filtered.length === 0 ? <p className="px-4 py-12 text-center text-xs text-neutral-600">{search ? "Tidak ada hasil yang cocok." : "Belum ada percakapan."}</p> : filtered.map((conversation) => {
+              const active = selectedConversationId === conversation.id;
+              return <button key={conversation.id} type="button" onClick={() => void viewConversation(conversation)} className={`w-full border-b border-neutral-900 px-3.5 py-3 text-left transition-colors last:border-0 ${active ? "bg-neutral-900" : "hover:bg-neutral-950"}`}>
+                <span className="flex items-start justify-between gap-2">
+                  <span className="line-clamp-2 text-xs font-medium text-neutral-200">{conversation.title}</span>
+                  <span className="shrink-0 text-[9px] text-neutral-600">{conversation.messageCount} pesan</span>
+                </span>
+                <span className="mt-1.5 block truncate text-[10px] text-neutral-500">{conversation.user?.fullName || conversation.user?.name || "User tidak ditemukan"}{conversation.user?.email ? ` · ${conversation.user.email}` : ""}</span>
+                <span className="mt-1 flex items-center justify-between gap-2 text-[9px] text-neutral-600"><span className="truncate">{conversation.bot?.name || "Tanpa bot"}{conversation.skill ? ` · ${conversation.skill.name}` : ""}</span><span className="shrink-0">{formatDate(conversation.updatedAt)}</span></span>
+              </button>;
+            })}
+          </div>
+          <footer className="flex items-center justify-between border-t border-neutral-800 px-3 py-2.5">
+            <span className="text-[9px] text-neutral-600">{pagination.total === 0 ? "0 hasil" : `${(pagination.page - 1) * pagination.pageSize + 1}-${Math.min(pagination.page * pagination.pageSize, pagination.total)} dari ${pagination.total}`}</span>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => { setLoading(true); setPage((current) => Math.max(1, current - 1)); }} disabled={page <= 1 || loading} aria-label="Halaman sebelumnya" title="Halaman sebelumnya" className="rounded p-1.5 text-neutral-400 hover:bg-neutral-900 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
+              <span className="min-w-12 text-center text-[10px] text-neutral-500">{pagination.page} / {pagination.totalPages}</span>
+              <button type="button" onClick={() => { setLoading(true); setPage((current) => Math.min(pagination.totalPages, current + 1)); }} disabled={page >= pagination.totalPages || loading} aria-label="Halaman berikutnya" title="Halaman berikutnya" className="rounded p-1.5 text-neutral-400 hover:bg-neutral-900 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
+            </div>
+          </footer>
+        </section>
+
+        <section className="flex min-h-[460px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-black xl:max-h-[calc(100vh-250px)]">
+          {viewConv ? <>
+            <header className="flex items-center justify-between gap-3 border-b border-neutral-800 bg-[#080808] px-4 py-3">
+              <div className="min-w-0"><h2 className="truncate text-sm font-semibold text-white">{viewConv.title}</h2><p className="mt-1 text-[10px] text-neutral-600">{viewConv.messages.length} pesan · {formatDate(selectedConversation?.createdAt || "")}</p></div>
+              <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] ${selectedBot?.isActive ? "border-emerald-900/70 text-emerald-300" : "border-neutral-800 text-neutral-500"}`}>{selectedBot?.isActive ? "Bot aktif" : "Bot tidak tersedia"}</span>
+            </header>
+            <div className="flex-1 space-y-5 overflow-y-auto p-4">
+              {loadingDetail && <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-neutral-500" /></div>}
+              {!loadingDetail && viewConv.messages.length === 0 && <p className="py-12 text-center text-xs text-neutral-600">Belum ada pesan di percakapan ini.</p>}
+              {!loadingDetail && viewConv.messages.map((message, index) => {
+                const isUser = message.role === "user";
+                return <div key={message.id || index} className={`flex items-start gap-2 ${isUser ? "flex-row-reverse" : ""}`}>
+                  <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${isUser ? "bg-neutral-300 text-black" : "bg-white text-black"}`} title={isUser ? selectedUser?.fullName : selectedBot?.name}>
+                    {isUser ? <span className="text-[9px] font-semibold">{getInitials(selectedUser?.fullName || "", selectedUser?.name || "U")}</span> : <Bot className="h-3.5 w-3.5" />}
+                  </span>
+                  <div className={`flex min-w-0 max-w-[86%] flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
+                    <span className="px-1 text-[9px] text-neutral-600">{isUser ? selectedUser?.fullName || "User" : selectedBot?.name || "Bot"}</span>
+                    {message.content && <div className={`rounded-xl px-3 py-2.5 text-xs leading-relaxed ${isUser ? "rounded-tr-sm bg-white text-black" : "rounded-tl-sm border border-neutral-800 bg-[#111] text-neutral-300"}`}><FormattedMessage content={message.content} isUser={isUser} /></div>}
+                    {!isUser && message.botInteraction && <HistoryBotInteractionPreview data={message.botInteraction} />}
+                    {!isUser && message.uiComponents?.map((component) => <HistoryComponentPreview key={component.id} component={component} />)}
+                    <ResponseMeta
+                      timestamp={message.timestamp}
+                      generationDurationMs={isUser ? undefined : message.generationDurationMs}
+                      showRetrieval={!isUser && (message.messageType === "FAQ" || message.messageType === "RAG" || message.messageType === "WEB_SEARCH")}
+                      webSearch={!isUser && message.messageType === "WEB_SEARCH"}
+                      topArticles={message.topArticles}
+                      uiComponents={message.uiComponents}
+                      webSources={message.webSources}
+                    />
+                  </div>
+                </div>;
+              })}
+            </div>
+          </> : <div className="flex flex-1 flex-col items-center justify-center px-6 text-center"><MessageSquare className="h-8 w-8 text-neutral-700" /><p className="mt-3 text-sm font-medium text-neutral-400">Pilih percakapan</p><p className="mt-1 text-xs text-neutral-600">Preview chat akan tampil di sini.</p></div>}
+        </section>
+
+        <aside className="space-y-3 xl:max-h-[calc(100vh-250px)] xl:overflow-y-auto">
+          <ProfileSection icon={<UserRound className="h-4 w-4" />} title="Biodata user">
+            {selectedUser ? <ProfileFields fields={[["Nama lengkap", selectedUser.fullName], ["Username", selectedUser.name], ["Email", selectedUser.email], ["Role", selectedUser.role], ["Tipe", selectedUser.userType], ["Terdaftar", selectedUser.createdAt ? formatDate(selectedUser.createdAt) : "-"], ["User ID", selectedUser.id]]} /> : <ProfileEmpty />}
+          </ProfileSection>
+          <ProfileSection icon={<Bot className="h-4 w-4" />} title="Biodata bot">
+            {selectedBot ? <>
+              <ProfileFields fields={[["Nama bot", selectedBot.name], ["Status", selectedBot.isActive ? "Aktif" : "Tidak aktif"], ["Jumlah interaction", String(selectedBot.interactionCount)], ["Bot ID", selectedBot.id], ["Dibuat", selectedBot.createdAt ? formatDate(selectedBot.createdAt) : "-"], ["Diperbarui", selectedBot.updatedAt ? formatDate(selectedBot.updatedAt) : "-"]]} />
+              <p className="mt-3 whitespace-pre-wrap text-[10px] leading-4 text-neutral-500">{selectedBot.description || "Tidak ada deskripsi bot."}</p>
+            </> : <ProfileEmpty />}
+          </ProfileSection>
+          {(selectedBotUser || selectedSkill) && <ProfileSection icon={<Layers3 className="h-4 w-4" />} title="Relasi">
+            {selectedBotUser && <div className="mb-3"><p className="text-[9px] uppercase text-neutral-600">User bot</p><p className="mt-1 text-xs text-neutral-300">{selectedBotUser.fullName || selectedBotUser.name}</p><p className="mt-0.5 break-all text-[10px] text-neutral-600">{selectedBotUser.email}</p></div>}
+            {selectedSkill && <div><p className="text-[9px] uppercase text-neutral-600">Skill</p><p className="mt-1 text-xs text-neutral-300">{selectedSkill.name}</p><p className="mt-0.5 whitespace-pre-wrap text-[10px] leading-4 text-neutral-600">{selectedSkill.description || "Tanpa deskripsi"}</p></div>}
+          </ProfileSection>}
+          {viewConv && <div className="flex items-start gap-2 px-1 text-[9px] text-neutral-700"><ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" /><span className="break-all">Conversation ID: {viewConv.id}</span></div>}
+        </aside>
+      </div>
+    </div>;
+  }
 
   const userInitials = userProfile
     ? getInitials(userProfile.fullName, userProfile.name)
@@ -570,10 +816,15 @@ export default function ChatHistoryPage() {
                           </div>
                         ))}
 
-                        {/* Timestamp */}
-                        <span className="text-[10px] text-neutral-600 px-1 select-none">
-                          {formatTime(msg.timestamp)}
-                        </span>
+                        <ResponseMeta
+                          timestamp={msg.timestamp}
+                          generationDurationMs={isUser ? undefined : msg.generationDurationMs}
+                          showRetrieval={!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG" || msg.messageType === "WEB_SEARCH")}
+                          webSearch={!isUser && msg.messageType === "WEB_SEARCH"}
+                          topArticles={msg.topArticles}
+                          uiComponents={msg.uiComponents}
+                          webSources={msg.webSources}
+                        />
                       </div>
                     </div>
                   );

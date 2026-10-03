@@ -89,6 +89,13 @@ export default function DashboardShell({
       current: pathname.startsWith("/dashboard/chat-history"),
     },
     {
+      name: "All Conversations",
+      href: "/dashboard/all-conversations",
+      icon: History,
+      current: pathname.startsWith("/dashboard/all-conversations"),
+      roles: ["admin", "manager"],
+    },
+    {
       name: "Knowledge Base",
       href: "/dashboard/knowledge-base",
       icon: Database,
@@ -157,7 +164,7 @@ export default function DashboardShell({
   const RoleIcon = roleInfo.icon;
 
   const mainNav = visibleNav.filter((n) =>
-    ["Dashboard", "Chatbot", "Chat History", "LLM Gateway"].includes(n.name)
+    ["Dashboard", "Chatbot", "Chat History", "All Conversations", "LLM Gateway"].includes(n.name)
   );
 
   const adminNav = visibleNav.filter((n) =>

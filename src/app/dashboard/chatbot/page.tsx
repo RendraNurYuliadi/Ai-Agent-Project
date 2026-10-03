@@ -23,6 +23,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { FormattedMessage } from "@/components/formatted-message";
+import { ResponseMeta } from "@/components/response-meta";
 
 interface SpeechRecognitionResultEventLike {
   resultIndex: number;
@@ -70,6 +71,7 @@ interface Message {
     score: number;
     matchedKeywords: string[];
   }>;
+  webSources?: Array<{ id: string; title: string; url: string; score: number; publishedDate?: string }>;
   uiComponents?: AssistantComponent[];
   botInteraction?: BotInteractionCardData;
   timestamp: string;
@@ -349,17 +351,6 @@ function ComponentCarousel({
       )}
     </div>
   );
-}
-
-function formatTime(ts: string): string {
-  if (!ts) return "";
-  const d = new Date(ts);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDuration(ms: number): string {
-  return `${(ms / 1000).toFixed(1)} dtk`;
 }
 
 function getInitials(fullName: string, name: string): string {
@@ -1269,57 +1260,16 @@ export default function ChatbotPage() {
                         </div>
                       ))}
 
-                      {/* Timestamp and FAQ retrieval debug */}
-                      <div className="flex flex-wrap items-center gap-2 px-1">
-                        <span className="text-[10px] text-neutral-600 select-none">
-                          {formatTime(msg.timestamp)}
-                        </span>
-                        {!isUser && typeof msg.generationDurationMs === "number" && (
-                          <span className="text-[10px] text-neutral-600" title="Waktu proses respons">
-                            {formatDuration(msg.generationDurationMs)}
-                          </span>
-                        )}
-                        {!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG") && (
-                          <details className="relative text-[10px] text-neutral-500">
-                            <summary className="cursor-pointer list-none select-none hover:text-neutral-300">
-                              Debug retrieval ({msg.topArticles?.length ?? 0})
-                            </summary>
-                            <div className="absolute left-0 top-full z-20 mt-2 w-72 max-w-[calc(100vw-5rem)] rounded-lg border border-neutral-700 bg-[#0a0a0a] p-3 shadow-xl">
-                              <p className="mb-2 font-medium text-neutral-300">
-                                Artikel yang diambil
-                              </p>
-                              {msg.topArticles?.length ? (
-                                <ul className="space-y-2">
-                                  {msg.topArticles.map((article) => (
-                                    <li key={article.id} className="border-t border-neutral-800 pt-2 first:border-0 first:pt-0">
-                                      <p className="text-neutral-200">{article.title}</p>
-                                      <p className="mt-0.5 text-neutral-500">
-                                        {article.collectionName || article.category || "Tanpa kategori"} · Skor {article.score}
-                                      </p>
-                                      {article.matchedKeywords.length > 0 && (
-                                        <p className="mt-0.5 break-words text-neutral-500">
-                                          Keyword: {article.matchedKeywords.join(", ")}
-                                        </p>
-                                      )}
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="text-neutral-500">Tidak ada artikel yang cocok.</p>
-                              )}
-                              {msg.uiComponents?.map((component) => (
-                                <div key={component.id} className="mt-3 border-t border-neutral-800 pt-2">
-                                  <p className="font-medium text-neutral-300">Komponen dipicu: {component.name}</p>
-                                  {component.triggeredBy?.map((article) => (
-                                    <p key={`${component.id}-${article.collectionName}-${article.articleId}`} className="mt-1 text-neutral-500">
-                                      {article.title} · Skor {article.score}
-                                    </p>
-                                  ))}
-                                </div>
-                              ))}
-                            </div>
-                          </details>
-                        )}
+                      <ResponseMeta
+                        timestamp={msg.timestamp}
+                        generationDurationMs={isUser ? undefined : msg.generationDurationMs}
+                        showRetrieval={!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG" || msg.messageType === "WEB_SEARCH")}
+                        webSearch={!isUser && msg.messageType === "WEB_SEARCH"}
+                        topArticles={msg.topArticles}
+                        uiComponents={msg.uiComponents}
+                        webSources={msg.webSources}
+                      />
+                      <div className="flex flex-wrap items-center justify-end gap-2 px-1">
                         <button
                           type="button"
                           onClick={() => void copyMessage(msg)}

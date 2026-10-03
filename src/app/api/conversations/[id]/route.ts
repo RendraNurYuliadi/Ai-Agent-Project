@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
+import { getConversationRelations } from "@/lib/conversation-details";
 
 // GET /api/conversations/[id] — get full conversation with messages
 export async function GET(
@@ -16,9 +17,10 @@ export async function GET(
 
   try {
     const db = await getDatabase();
+    const isStaff = session.role === "admin" || session.role === "manager";
     const conversation = await db.collection("conversations").findOne({
       _id: new ObjectId(id),
-      userId: session.id,
+      ...(isStaff ? {} : { userId: session.id }),
     });
 
     if (!conversation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
@@ -30,6 +32,7 @@ export async function GET(
         : message.content,
     }));
 
+    const relations = isStaff ? await getConversationRelations(db, conversation) : {};
     return NextResponse.json({
       conversation: {
         id: conversation._id.toString(),
@@ -39,6 +42,7 @@ export async function GET(
         botStatus: conversation.botStatus || "active",
         createdAt: conversation.createdAt,
         updatedAt: conversation.updatedAt,
+        ...relations,
       },
     });
   } catch (err) {
