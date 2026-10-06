@@ -176,7 +176,7 @@ export default function DashboardShell({
   );
 
   return (
-    <div className={`${isBotFlowEditor ? "h-dvh w-full overflow-hidden" : "min-h-screen"} bg-black flex flex-col md:flex-row text-neutral-100`}>
+    <div className={`${isBotFlowEditor ? "h-dvh w-full overflow-hidden" : "min-h-screen w-full max-w-[100vw] overflow-x-clip"} bg-black flex flex-col md:flex-row text-neutral-100`}>
 
       {/* Mobile Top Header */}
       <div
@@ -466,8 +466,8 @@ export default function DashboardShell({
       </aside>
 
       {/* Main Content */}
-      <main className={`${isBotFlowEditor ? "h-[calc(100dvh-60px)] min-h-0 md:h-screen" : "min-h-screen"} flex flex-1 min-w-0 flex-col bg-black`}>
-        <div className={`${isBotFlowEditor ? "w-full min-w-0 max-w-none flex-1 min-h-0 overflow-hidden p-2 md:p-3" : "mx-auto w-full max-w-7xl flex-1 p-5 md:p-7"}`}>
+      <main className={`${isBotFlowEditor ? "h-[calc(100dvh-60px)] min-h-0 md:h-screen" : "min-h-screen w-full md:w-auto"} flex flex-1 min-w-0 flex-col bg-black`}>
+        <div className={`${isBotFlowEditor ? "w-full min-w-0 max-w-none flex-1 min-h-0 overflow-hidden p-2 md:p-3" : "mx-auto w-full min-w-0 max-w-7xl flex-1 p-5 md:p-7"}`}>
           {children}
         </div>
       </main>

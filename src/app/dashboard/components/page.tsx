@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
+import Image from "next/image";
 import {
   Blocks,
   Loader2,
@@ -20,6 +21,7 @@ import type {
   ComponentType,
   StaticComponentCard,
 } from "@/lib/component-templates";
+import { getImageProxyUrl } from "@/lib/image-proxy-url";
 
 interface ArticleOption extends ComponentArticleReference {
   kbName: string;
@@ -593,6 +595,9 @@ export default function ComponentsPage() {
                       <div className="flex justify-center py-6"><Loader2 className="h-4 w-4 animate-spin text-neutral-500" /></div>
                     ) : filteredArticles.length ? filteredArticles.map((article) => {
                       const checked = form.articleRefs.some((item) => item.collectionName === article.collectionName && item.articleId === article.articleId);
+                      const usedBy = templates
+                        .filter((template) => template.articleRefs.some((item) => item.collectionName === article.collectionName && item.articleId === article.articleId))
+                        .map((template) => template.name);
                       const key = `${article.collectionName}:${article.articleId}`;
                       return (
                         <label key={key} className="flex cursor-pointer items-start gap-2.5 border-b border-neutral-900 px-3 py-2.5 last:border-0 hover:bg-neutral-950">
@@ -600,6 +605,9 @@ export default function ComponentsPage() {
                           <span className="min-w-0">
                             <span className="block truncate text-[11px] text-neutral-200">{article.title}</span>
                             <span className="mt-0.5 block truncate text-[9px] text-neutral-600">{article.kbName}{article.category ? ` · ${article.category}` : ""}</span>
+                            <span className={`mt-1 block line-clamp-2 text-[9px] ${usedBy.length ? "text-emerald-500" : "text-neutral-500"}`} title={usedBy.join(", ")}>
+                              {usedBy.length ? `Dipakai oleh: ${usedBy.join(", ")}` : "Belum dipakai komponen"}
+                            </span>
                           </span>
                         </label>
                       );
@@ -614,7 +622,7 @@ export default function ComponentsPage() {
                       <div className="flex gap-2 overflow-x-auto pb-1">
                         {(form.type === "card" ? [form.card] : form.cards).map((card, index) => (
                           <div key={index} className="w-48 shrink-0 overflow-hidden rounded-md border border-neutral-800 bg-black">
-                            {card.imageUrl && <img src={card.imageUrl} alt="" style={{ height: `${card.imageHeight}px` }} className="w-full object-cover" />}
+                            {card.imageUrl && <Image src={getImageProxyUrl(card.imageUrl)} alt={card.title} width={384} height={card.imageHeight} unoptimized style={{ height: `${card.imageHeight}px` }} className="w-full object-cover" />}
                             <div className="p-2.5">
                               <p className="text-xs font-semibold text-white">{card.title || "Judul card"}</p>
                               <p className="mt-1 line-clamp-2 text-[10px] text-neutral-500">{card.subtitle || "Subtitle"}</p>

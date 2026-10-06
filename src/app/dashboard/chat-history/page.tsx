@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import { usePathname } from "next/navigation";
 import {
   History,
@@ -154,7 +155,7 @@ function HistoryComponentPreview({ component }: { component: AssistantComponent 
     >
       {card.imageUrl && (
         <Image
-          src={card.imageUrl}
+          src={getImageProxyUrl(card.imageUrl)}
           alt={card.title}
           width={520}
           height={card.imageHeight ?? 128}

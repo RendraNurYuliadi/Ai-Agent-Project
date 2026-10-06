@@ -302,13 +302,23 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
       if (!current) return;
       setBotName(bot.name);
       setDescription(bot.description || "");
-      const normalizedInteractions = normalizeGuidedRoutes(bot.interactions || []);
+      const activeKnowledgeBases = bases.filter((base) => base.isActive !== false);
+      const activeCollectionNames = new Set(activeKnowledgeBases.map((base) => base.collectionName));
+      const botInteractions = normalizeGuidedRoutes(bot.interactions || []);
+      const staleKnowledgeBaseCount = botInteractions
+        .filter((item) => item.type === "rag")
+        .flatMap((item) => item.config.knowledgeBases || [])
+        .filter((collectionName) => !activeCollectionNames.has(collectionName)).length;
+      const normalizedInteractions = botInteractions.map((item) => item.type === "rag"
+        ? { ...item, config: { ...item.config, knowledgeBases: (item.config.knowledgeBases || []).filter((collectionName) => activeCollectionNames.has(collectionName)) } }
+        : item);
       setInteractions(normalizedInteractions);
       setEntryInteractionId(bot.entryInteractionId);
       setCustomVariables(Array.isArray(bot.variables) ? bot.variables : []);
       setActiveBot(bot.isActive);
       setSkillCount(bot.skillCount || 0);
-      setKnowledgeBases(bases.filter((base) => base.isActive !== false));
+      setKnowledgeBases(activeKnowledgeBases);
+      if (staleKnowledgeBaseCount) setNotice("Referensi ke Knowledge Base yang sudah tidak tersedia dilepas. Simpan flow untuk menerapkan perubahan.");
       setPrompts(promptOptions);
       setNodes(normalizedInteractions.map((item) => toCanvasNode(item, bot.entryInteractionId)));
       setEdges(toEdges(normalizedInteractions));

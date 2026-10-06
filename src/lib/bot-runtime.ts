@@ -390,29 +390,29 @@ export async function processBotTurn(
         .find({ isActive: true })
         .sort({ updatedAt: -1 })
         .toArray();
-      const matchingComponent = activeComponents.find((component) =>
+      const matchingComponents = activeComponents.filter((component) =>
         Array.isArray(component.articleRefs) && component.articleRefs.some((reference: {
           collectionName: string;
           articleId: string;
         }) => reference.collectionName === triggerArticle.collectionName && reference.articleId === triggerArticle.id)
       );
-      if (matchingComponent) {
-        uiComponents = [{
-          id: matchingComponent._id.toString(),
-          name: matchingComponent.name,
-          type: matchingComponent.type,
-          title: matchingComponent.title || "",
-          subtitle: matchingComponent.subtitle || "",
-          buttons: matchingComponent.buttons || [],
-          card: matchingComponent.card || null,
-          cards: matchingComponent.cards || [],
+      if (matchingComponents.length) {
+        uiComponents = matchingComponents.map((component) => ({
+          id: component._id.toString(),
+          name: component.name,
+          type: component.type,
+          title: component.title || "",
+          subtitle: component.subtitle || "",
+          buttons: component.buttons || [],
+          card: component.card || null,
+          cards: component.cards || [],
           triggeredBy: [{
             collectionName: triggerArticle.collectionName,
             articleId: triggerArticle.id,
             title: triggerArticle.title,
             score: triggerArticle.score,
           }],
-        }];
+        }));
       }
     }
     if (activeCollections.length === 0) {

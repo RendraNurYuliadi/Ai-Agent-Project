@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import Image from "next/image";
+import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import {
   Bot,
   Send,
@@ -210,7 +211,7 @@ function ComponentCardView({
     <article className="w-full min-w-0 overflow-hidden rounded-xl border border-neutral-800 bg-[#101010]">
       {card.imageUrl && (
         <Image
-          src={card.imageUrl}
+          src={getImageProxyUrl(card.imageUrl)}
           alt={card.title}
           width={520}
           height={card.imageHeight ?? 128}
@@ -284,6 +285,40 @@ function AssistantComponents({
     return <ComponentCarousel component={component} onReply={onReply} disabled={disabled} />;
   }
   return null;
+}
+
+function RotatingAssistantComponents({
+  components,
+  onReply,
+  disabled,
+}: {
+  components: AssistantComponent[];
+  onReply: (value: string) => void;
+  disabled: boolean;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const componentCount = components.length;
+
+  useEffect(() => {
+    if (componentCount < 2) return;
+    const intervalId = window.setInterval(() => {
+      setCurrentIndex((index) => (index + 1) % componentCount);
+    }, 10_000);
+    return () => window.clearInterval(intervalId);
+  }, [componentCount]);
+
+  if (componentCount === 0) return null;
+  const component = components[currentIndex % componentCount];
+
+  return (
+    <div key={component.id} className="chat-component-enter w-full min-w-0 pl-1">
+      <AssistantComponents
+        component={component}
+        onReply={onReply}
+        disabled={disabled}
+      />
+    </div>
+  );
 }
 
 function ComponentCarousel({
@@ -423,7 +458,7 @@ function BotInteractionCard({
 
   if (data.type === "text_question") {
     return (
-      <article className="w-full max-w-[360px] rounded-xl border border-neutral-800 bg-[#101010] p-3.5">
+      <article className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-neutral-800 bg-[#101010] p-3.5 sm:max-w-[360px]">
         {buttons.length > 0 && (
           <div className="flex flex-wrap items-start gap-2">
             {buttons.map((button, index) => button.action === "link" ? (
@@ -440,7 +475,7 @@ function BotInteractionCard({
   }
 
   return (
-    <article className="w-full max-w-[360px] rounded-xl border border-neutral-800 bg-[#101010] p-3.5">
+    <article className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-neutral-800 bg-[#101010] p-3.5 sm:max-w-[360px]">
       {data.type === "welcome_message" && data.title && (
         <div className="mb-2 flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black"><Icon className="h-4 w-4" /></span>
@@ -468,6 +503,7 @@ export default function ChatbotPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [enteringMessageId, setEnteringMessageId] = useState<string | null>(null);
   const [skills, setSkills] = useState<ChatSkill[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [selectedSkillId, setSelectedSkillId] = useState("");
@@ -766,6 +802,7 @@ export default function ChatbotPage() {
       };
 
     if (userMsg) {
+      setEnteringMessageId(userMsg.id);
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
     }
@@ -789,6 +826,7 @@ export default function ChatbotPage() {
       if (data.botStatus) setConversationStatus(data.botStatus);
 
       if (options.editUserMessageId) {
+        if (data.assistantMessage) setEnteringMessageId(data.assistantMessage.id);
         setMessages((prev) => prev.map((item) => {
           if (item.id === options.editUserMessageId) return data.userMessage;
           if (data.assistantMessage && item.id === data.assistantMessage.id) return data.assistantMessage;
@@ -798,11 +836,13 @@ export default function ChatbotPage() {
         setEditingText("");
       } else if (options.regenerateAssistantId) {
         if (data.assistantMessage) {
+          setEnteringMessageId(data.assistantMessage.id);
           setMessages((prev) => prev.map((item) =>
             item.id === options.regenerateAssistantId ? data.assistantMessage : item
           ));
         }
       } else {
+        if (data.assistantMessage) setEnteringMessageId(data.assistantMessage.id);
         setMessages((prev) => {
           const updated = prev.map((item) => item.id === userMsg!.id ? data.userMessage : item);
           return data.assistantMessage ? [...updated, data.assistantMessage] : updated;
@@ -827,6 +867,7 @@ export default function ChatbotPage() {
         content: "Maaf, terjadi kesalahan saat memproses pesan Anda.",
         timestamp: new Date().toISOString(),
       };
+      setEnteringMessageId(errorMsg.id);
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
       setSending(false);
@@ -862,7 +903,7 @@ export default function ChatbotPage() {
   );
 
   return (
-    <div className="h-[calc(100vh-5rem)] flex rounded-2xl overflow-hidden border border-neutral-800 bg-black">
+    <div className="h-[calc(100vh-5rem)] w-full min-w-0 flex rounded-2xl overflow-hidden border border-neutral-800 bg-black">
       {/* Sidebar */}
       <div
         className={`${sidebarOpen ? "w-72" : "w-0"
@@ -1002,18 +1043,20 @@ export default function ChatbotPage() {
       {/* Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-black">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-neutral-900 flex items-center justify-between bg-[#080808] shrink-0">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-900 bg-[#080808] px-2.5 py-2.5 sm:flex-nowrap sm:px-4 sm:py-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-1.5 rounded-xl text-neutral-300 hover:text-white hover:bg-neutral-900 border border-neutral-800 transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
+              aria-label={sidebarOpen ? "Tutup percakapan" : "Buka percakapan"}
+              title={sidebarOpen ? "Tutup percakapan" : "Buka percakapan"}
+              className="hidden h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-neutral-800 px-2 text-neutral-300 shadow-sm transition-all hover:bg-neutral-900 hover:text-white sm:flex"
             >
               {sidebarOpen ? (
                 <ChevronLeft className="w-4 h-4 text-white" />
               ) : (
                 <>
                   <MessageSquare className="w-4 h-4 text-white" />
-                  <span className="text-xs font-medium text-neutral-300">
+                  <span className="hidden text-xs font-medium text-neutral-300 sm:inline">
                     Percakapan ({conversations.length})
                   </span>
                 </>
@@ -1025,12 +1068,12 @@ export default function ChatbotPage() {
                 <Bot className="w-4 h-4 text-black" />
               </div>
 
-              <div>
-                <h2 className="text-sm font-semibold text-white">
+              <div className="min-w-0">
+                <h2 className="truncate text-sm font-semibold text-white">
                   {activeBot?.name || "GenAI Chatbot"}
                 </h2>
 
-                <p className="text-[10px] text-neutral-500 flex items-center gap-1">
+                <p className="flex max-w-36 items-center gap-1 truncate text-[10px] text-neutral-500 sm:max-w-64">
                   <Cpu className="w-2.5 h-2.5" />
                   {selectedSkill ? `${selectedSkill.name} · ${selectedSkill.botUser?.fullName || selectedSkill.botUser?.name || "Bot"}` : activeBot ? "Bot flow aktif (fallback)" : `${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • ${chatModel}`}
                 </p>
@@ -1038,7 +1081,7 @@ export default function ChatbotPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             {skills.length > 0 && <select
               value={selectedSkillId}
               onChange={(event) => {
@@ -1049,7 +1092,7 @@ export default function ChatbotPage() {
               }}
               disabled={skillsLoading || sending}
               aria-label="Pilih skill chatbot"
-              className="h-9 max-w-40 truncate rounded-lg border border-neutral-800 bg-black px-2 text-[11px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 sm:max-w-56"
+              className="h-9 max-w-24 truncate rounded-lg border border-neutral-800 bg-black px-1.5 text-[10px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 sm:max-w-56 sm:px-2 sm:text-[11px]"
             >
               <option value="">Pilih skill</option>
               {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
@@ -1154,8 +1197,13 @@ export default function ChatbotPage() {
                 return (
                   <div
                     key={msg.id}
-                    className={`flex items-start gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"
-                      }`}
+                    onAnimationEnd={(event) => {
+                      if (event.target === event.currentTarget) {
+                        setEnteringMessageId((current) => current === msg.id ? null : current);
+                      }
+                    }}
+                    className={`flex w-full min-w-0 items-start gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"
+                      } ${enteringMessageId === msg.id ? "chat-message-enter" : ""}`}
                   >
                     {/* Avatar */}
                     {isUser ? (
@@ -1173,7 +1221,7 @@ export default function ChatbotPage() {
 
                     {/* Bubble + meta */}
                     <div
-                      className={`flex flex-col gap-1 max-w-[80%] sm:max-w-[68%] ${isUser ? "items-end" : "items-start"
+                      className={`flex w-full min-w-0 max-w-[calc(100%-2.625rem)] flex-col gap-1 ${isUser ? "items-end sm:max-w-[min(80%,42rem)]" : "items-start sm:max-w-[min(68%,42rem)]"
                         }`}
                     >
                       {/* Badges (assistant only, above bubble) */}
@@ -1204,7 +1252,7 @@ export default function ChatbotPage() {
 
                       {/* Bubble */}
                       {(msg.content || isEditing) && <div
-                        className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser
+                        className={`w-fit min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser
                           ? "bg-white text-black rounded-tr-sm shadow-lg font-medium"
                           : "bg-[#111111] text-neutral-300 border border-neutral-800 rounded-tl-sm shadow-md"
                           }`}
@@ -1263,15 +1311,13 @@ export default function ChatbotPage() {
                         />
                       )}
 
-                      {!isUser && msg.uiComponents?.map((component) => (
-                        <div key={component.id} className="w-full pl-1">
-                          <AssistantComponents
-                            component={component}
-                            onReply={(value) => void submitMessage(value)}
-                            disabled={sending}
-                          />
-                        </div>
-                      ))}
+                      {!isUser && msg.uiComponents && msg.uiComponents.length > 0 && (
+                        <RotatingAssistantComponents
+                          components={msg.uiComponents}
+                          onReply={(value) => void submitMessage(value)}
+                          disabled={sending}
+                        />
+                      )}
 
                       <ResponseMeta
                         timestamp={msg.timestamp}
@@ -1349,22 +1395,15 @@ export default function ChatbotPage() {
         </div>
 
         {/* Input Bar */}
-        <div className="p-3 border-t border-neutral-900 bg-[#080808] shrink-0">
-          <form onSubmit={sendMessage} className="flex items-center gap-2">
-            <div
-              className={`w-8 h-8 rounded-full bg-gradient-to-tr ${avatarGradient} flex items-center justify-center text-[11px] font-bold text-black select-none shrink-0 shadow`}
-              title={userProfile?.fullName || "User"}
-            >
-              {userInitials}
-            </div>
-
+        <div className="shrink-0 border-t border-neutral-900 bg-[#080808] px-2 py-2 sm:p-3">
+          <form onSubmit={sendMessage} className="flex min-w-0 items-center gap-1.5 sm:gap-2">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={conversationStatus === "closed" ? "Percakapan sudah ditutup" : skillSelectionRequired ? "Pilih skill untuk memulai..." : "Ketik pesan Anda di sini..."}
               disabled={sending || conversationStatus === "closed" || skillSelectionRequired}
-              className="flex-1 px-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-sm text-white placeholder-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:border-neutral-600 disabled:opacity-50"
+              className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-800 bg-black px-3 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50 sm:px-4"
             />
 
             {!activeBot && <select
@@ -1373,7 +1412,7 @@ export default function ChatbotPage() {
               disabled={loadingChatModels || availableChatModels.length === 0}
               aria-label={`Model ${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"}`}
               title={`${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"}: ${chatModel}`}
-              className="h-10 w-28 shrink-0 truncate rounded-xl border border-neutral-800 bg-black px-2 text-[11px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50 sm:w-48"
+              className="hidden h-10 w-28 shrink-0 truncate rounded-xl border border-neutral-800 bg-black px-2 text-[11px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50 sm:block sm:w-48"
             >
               {chatModel && !availableChatModels.includes(chatModel) && (
                 <option value={chatModel}>{chatModel} (aktif)</option>
@@ -1388,7 +1427,7 @@ export default function ChatbotPage() {
               onChange={(e) => setSpeechLanguage(e.target.value)}
               disabled={sending || isListening || conversationStatus === "closed"}
               aria-label="Bahasa input suara"
-              className="h-10 bg-black border border-neutral-800 rounded-xl px-2 text-[11px] text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50"
+              className="h-10 w-12 shrink-0 rounded-xl border border-neutral-800 bg-black px-1 text-center text-[10px] text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50 sm:w-auto sm:px-2 sm:text-[11px]"
             >
               <option value="id-ID">ID</option>
               <option value="en-US">EN</option>
@@ -1406,7 +1445,7 @@ export default function ChatbotPage() {
                     : "Input suara"
                   : "Input suara tidak didukung browser ini"
               }
-              className={`p-2.5 rounded-xl border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${isListening
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${isListening
                 ? "bg-red-500/15 border-red-400/50 text-red-300"
                 : "bg-neutral-900 border-neutral-800 text-neutral-300 hover:text-white hover:bg-neutral-800"
                 }`}
@@ -1417,7 +1456,7 @@ export default function ChatbotPage() {
             <button
               type="submit"
               disabled={sending || !input.trim() || conversationStatus === "closed"}
-              className="p-2.5 bg-white hover:bg-neutral-200 text-black rounded-xl disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-md"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-black shadow-md transition-all hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Send className="w-4 h-4" />
             </button>

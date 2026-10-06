@@ -261,24 +261,23 @@ export async function POST(
           })
           .filter((template) => template !== null);
 
-        const selectedComponent = matchingComponents[0];
-        if (selectedComponent) {
-          uiComponents = [{
-            id: selectedComponent._id.toString(),
-            name: selectedComponent.name,
-            type: selectedComponent.type,
-            title: selectedComponent.title || "",
-            subtitle: selectedComponent.subtitle || "",
-            buttons: selectedComponent.buttons || [],
-            card: selectedComponent.card || null,
-            cards: selectedComponent.cards || [],
+        if (matchingComponents.length) {
+          uiComponents = matchingComponents.map((component) => ({
+            id: component._id.toString(),
+            name: component.name,
+            type: component.type,
+            title: component.title || "",
+            subtitle: component.subtitle || "",
+            buttons: component.buttons || [],
+            card: component.card || null,
+            cards: component.cards || [],
             triggeredBy: [{
               collectionName: triggerArticle.collectionName,
               articleId: triggerArticle.id,
               title: triggerArticle.title,
               score: triggerArticle.score,
             }],
-          }];
+          }));
         }
     }
 
