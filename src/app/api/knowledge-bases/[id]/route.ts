@@ -50,12 +50,29 @@ export async function PATCH(
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
 
   try {
-    const { displayName, description, isActive } = await req.json();
+    const body = await req.json();
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Data Knowledge Base tidak valid" }, { status: 400 });
+    }
     const db = await getDatabase();
     const updates: Record<string, unknown> = { updatedAt: new Date() };
-    if (typeof displayName === "string") updates.displayName = displayName.trim();
-    if (typeof description === "string") updates.description = description.trim();
-    if (typeof isActive === "boolean") updates.isActive = isActive;
+    if (Object.prototype.hasOwnProperty.call(body, "displayName")) {
+      const displayName = typeof body.displayName === "string" ? body.displayName.trim() : "";
+      if (!displayName || displayName.length > 100) {
+        return NextResponse.json({ error: "Nama Knowledge Base wajib diisi (maksimal 100 karakter)" }, { status: 400 });
+      }
+      const duplicate = await db.collection("knowledgeBases").findOne(
+        { displayName, _id: { $ne: new ObjectId(id) } },
+        { projection: { _id: 1 } }
+      );
+      if (duplicate) return NextResponse.json({ error: "Nama Knowledge Base sudah digunakan" }, { status: 409 });
+      updates.displayName = displayName;
+    }
+    if (typeof body.description === "string") updates.description = body.description.trim();
+    if (typeof body.isActive === "boolean") updates.isActive = body.isActive;
+    if (Object.keys(updates).length === 1) {
+      return NextResponse.json({ error: "Tidak ada perubahan Knowledge Base yang valid" }, { status: 400 });
+    }
 
     const result = await db.collection("knowledgeBases").updateOne(
       { _id: new ObjectId(id) },

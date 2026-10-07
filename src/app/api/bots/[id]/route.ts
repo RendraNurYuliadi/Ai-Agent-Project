@@ -93,8 +93,34 @@ export async function PATCH(
 
   try {
     const db = await getDatabase();
-    const body = await req.json().catch(() => ({}));
-    const isActive = typeof body.isActive === "boolean" ? body.isActive : true;
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return NextResponse.json({ error: "Data perubahan bot tidak valid." }, { status: 400 });
+    }
+
+    if (Object.keys(body).length === 1 && typeof body.name === "string") {
+      const name = body.name.trim();
+      if (!name || name.length > 100) {
+        return NextResponse.json({ error: "Nama bot wajib diisi (maksimal 100 karakter)." }, { status: 400 });
+      }
+      const duplicate = await db.collection("bots").findOne(
+        { name, _id: { $ne: new ObjectId(id) } },
+        { projection: { _id: 1 } }
+      );
+      if (duplicate) return NextResponse.json({ error: "Nama bot sudah digunakan." }, { status: 409 });
+
+      const result = await db.collection("bots").updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { name, updatedBy: { id: session.id, name: session.name }, updatedAt: new Date() } }
+      );
+      if (!result.matchedCount) return NextResponse.json({ error: "Bot tidak ditemukan." }, { status: 404 });
+      return NextResponse.json({ success: true, name });
+    }
+
+    if (Object.keys(body).length !== 1 || typeof body.isActive !== "boolean") {
+      return NextResponse.json({ error: "Perubahan bot hanya boleh berupa nama atau status." }, { status: 400 });
+    }
+    const isActive = body.isActive;
     if (!isActive && await db.collection("skills").findOne({ botId: id }, { projection: { _id: 1 } })) {
       return NextResponse.json({ error: "Bot masih dipakai skill. Pindahkan atau hapus skill terlebih dahulu." }, { status: 409 });
     }

@@ -90,6 +90,9 @@ export default function KnowledgeBasePage() {
   // New KB form
   const [newKbName, setNewKbName] = useState("");
   const [newKbDesc, setNewKbDesc] = useState("");
+  const [editingKb, setEditingKb] = useState<KnowledgeBase | null>(null);
+  const [editKbName, setEditKbName] = useState("");
+  const [savingKbName, setSavingKbName] = useState(false);
   const [pendingDeleteKb, setPendingDeleteKb] = useState<KnowledgeBase | null>(null);
   const [deletingKb, setDeletingKb] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
@@ -138,7 +141,7 @@ export default function KnowledgeBasePage() {
       .catch(() => { });
   }, []);
 
-  const fetchKBs = async () => {
+  async function fetchKBs() {
     setLoading(true);
     try {
       const res = await fetch("/api/knowledge-bases");
@@ -148,7 +151,7 @@ export default function KnowledgeBasePage() {
       }
     } catch { }
     setLoading(false);
-  };
+  }
 
   const openKb = async (kb: KnowledgeBase) => {
     setActiveKb(kb);
@@ -261,6 +264,37 @@ export default function KnowledgeBasePage() {
       notify("error", error instanceof Error ? error.message : "Gagal mengubah status RAG.");
     } finally {
       setSavingKbStatusId(null);
+    }
+  };
+
+  const openEditKb = (event: React.MouseEvent, kb: KnowledgeBase) => {
+    event.stopPropagation();
+    setEditingKb(kb);
+    setEditKbName(kb.displayName);
+  };
+
+  const updateKbName = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!editingKb) return;
+    const displayName = editKbName.trim();
+    if (!displayName) return;
+    setSavingKbName(true);
+    try {
+      const response = await fetch(`/api/knowledge-bases/${editingKb.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal mengubah nama Knowledge Base.");
+      setKbs((items) => items.map((item) => item.id === editingKb.id ? { ...item, displayName } : item));
+      setActiveKb((item) => item?.id === editingKb.id ? { ...item, displayName } : item);
+      setEditingKb(null);
+      notify("success", "Nama Knowledge Base berhasil diperbarui.");
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal mengubah nama Knowledge Base.");
+    } finally {
+      setSavingKbName(false);
     }
   };
 
@@ -555,6 +589,14 @@ export default function KnowledgeBasePage() {
                               <span className={`absolute left-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${kb.isActive ? "translate-x-4" : "translate-x-0"}`} />
                             </span>
                             <span className="shrink-0">RAG {kb.isActive ? "Aktif" : "Nonaktif"}</span>
+                          </button>
+                          <button
+                            onClick={(event) => openEditKb(event, kb)}
+                            className="text-neutral-600 hover:text-white p-1.5 rounded-lg hover:bg-neutral-900 transition-colors cursor-pointer"
+                            title="Edit nama Knowledge Base"
+                            aria-label={`Edit nama Knowledge Base ${kb.displayName}`}
+                          >
+                            <Edit3 className="w-4 h-4" />
                           </button>
                           <button
                             onClick={(e) => {
@@ -966,6 +1008,26 @@ export default function KnowledgeBasePage() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {editingKb && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <form onSubmit={updateKbName} className="w-full max-w-md space-y-4 rounded-2xl border border-neutral-800 bg-[#0a0a0a] p-6 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div><h3 className="text-base font-semibold text-white">Edit identitas Knowledge Base</h3><p className="mt-1 text-xs text-neutral-500">Hanya nama tampilan yang berubah; artikel dan collection tetap.</p></div>
+              <button type="button" onClick={() => setEditingKb(null)} aria-label="Tutup" className="rounded p-1 text-neutral-500 hover:text-white"><X className="h-4 w-4" /></button>
+            </div>
+            <label className="block space-y-1.5 text-xs text-neutral-400">Nama Knowledge Base
+              <input required maxLength={100} autoFocus value={editKbName} onChange={(event) => setEditKbName(event.target.value)} className="w-full rounded-xl border border-neutral-800 bg-black px-3.5 py-2.5 text-sm text-white outline-none focus:border-neutral-600" />
+            </label>
+            <div className="flex justify-end gap-2 border-t border-neutral-900 pt-4">
+              <button type="button" onClick={() => setEditingKb(null)} className="rounded-md border border-neutral-800 px-3 py-2 text-xs text-neutral-400 hover:text-white">Batal</button>
+              <button type="submit" disabled={savingKbName || !editKbName.trim()} className="inline-flex items-center gap-2 rounded-md bg-white px-3.5 py-2 text-xs font-semibold text-black disabled:opacity-40">
+                {savingKbName && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Simpan nama
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
