@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
+import { generateUniqueName } from "@/lib/duplicate-name";
 
 // GET /api/prompts?type=faq|small_talk|route|guided_routing|rag
 export async function GET(req: NextRequest) {
@@ -38,7 +40,30 @@ export async function POST(req: NextRequest) {
   if (session.role === "public_user") return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
 
   try {
-    const { type, name, content, isActive } = await req.json();
+    const body = await req.json();
+    const duplicateFromId = typeof body.duplicateFromId === "string" ? body.duplicateFromId.trim() : "";
+    const db = await getDatabase();
+
+    if (duplicateFromId) {
+      const source = await db.collection("prompts").findOne({ _id: new ObjectId(duplicateFromId) });
+      if (!source) return NextResponse.json({ error: "Prompt sumber tidak ditemukan." }, { status: 404 });
+
+      const existing = await db.collection("prompts").find({}, { projection: { name: 1 } }).toArray();
+      const newName = generateUniqueName(source.name, existing.map((item) => item.name));
+      const now = new Date();
+      const { _id, createdAt, updatedAt, createdBy, ...rest } = source;
+      const inserted = await db.collection("prompts").insertOne({
+        ...rest,
+        name: newName,
+        isActive: Boolean(source.isActive),
+        createdBy: { id: session.id, name: session.name },
+        createdAt: now,
+        updatedAt: now,
+      });
+      return NextResponse.json({ success: true, id: inserted.insertedId.toString(), name: newName }, { status: 201 });
+    }
+
+    const { type, name, content, isActive } = body;
     if (!type || !name || !content) {
       return NextResponse.json({ error: "Type, nama, dan konten prompt wajib diisi" }, { status: 400 });
     }
@@ -47,9 +72,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Type tidak valid." }, { status: 400 });
     }
 
-    const db = await getDatabase();
-
-    // If activating this prompt, deactivate others of same type
     if (isActive) {
       await db.collection("prompts").updateMany({ type }, { $set: { isActive: false } });
     }

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import Image from "next/image";
 import {
   Blocks,
+  Copy,
   Loader2,
   Pencil,
   Plus,
@@ -325,6 +326,22 @@ export default function ComponentsPage() {
     notify("success", `Template ${template.isActive ? "dinonaktifkan" : "diaktifkan"}.`);
   };
 
+  const duplicateTemplate = async (template: ComponentTemplate) => {
+    try {
+      const response = await fetch("/api/components", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duplicateFromId: template.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menduplikasi template.");
+      await loadData();
+      notify("success", `Template "${template.name}" berhasil diduplikat${data.name ? ` sebagai "${data.name}"` : ""}.`);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menduplikasi template.");
+    }
+  };
+
   const deleteTemplate = async () => {
     if (!pendingDelete) return;
     setDeleting(true);
@@ -454,6 +471,9 @@ export default function ComponentsPage() {
                 className={`rounded px-2 py-1 text-[10px] ${template.isActive ? "bg-white/10 text-white" : "bg-neutral-900 text-neutral-500 hover:text-neutral-300"}`}
               >
                 {template.isActive ? "Aktif" : "Nonaktif"}
+              </button>
+              <button type="button" onClick={() => void duplicateTemplate(template)} title="Duplikat" aria-label={`Duplikat ${template.name}`} className="rounded p-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-white">
+                <Copy className="h-3.5 w-3.5" />
               </button>
               <button type="button" onClick={() => openEdit(template)} title="Edit" aria-label={`Edit ${template.name}`} className="rounded p-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-white">
                 <Pencil className="h-3.5 w-3.5" />

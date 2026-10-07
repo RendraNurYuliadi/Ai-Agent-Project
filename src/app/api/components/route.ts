@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import { validateComponentTemplate } from "@/lib/component-templates";
+import { generateUniqueName } from "@/lib/duplicate-name";
 
 function canManage(role: string): boolean {
   return role === "admin" || role === "manager";
@@ -48,10 +49,32 @@ export async function POST(req: NextRequest) {
   if (!canManage(session.role)) return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
 
   try {
-    const validation = validateComponentTemplate(await req.json());
-    if (!validation.success) return NextResponse.json({ error: validation.error }, { status: 400 });
+    const body = await req.json();
+    const duplicateFromId = typeof body.duplicateFromId === "string" ? body.duplicateFromId.trim() : "";
 
     const db = await getDatabase();
+
+    if (duplicateFromId) {
+      const source = await db.collection("components").findOne({ _id: new ObjectId(duplicateFromId) });
+      if (!source) return NextResponse.json({ error: "Component template sumber tidak ditemukan." }, { status: 404 });
+
+      const existing = await db.collection("components").find({}, { projection: { name: 1 } }).toArray();
+      const newName = generateUniqueName(source.name, existing.map((item) => item.name));
+      const now = new Date();
+      const { _id, createdAt, updatedAt, createdBy, updatedBy, ...rest } = source;
+      const result = await db.collection("components").insertOne({
+        ...rest,
+        name: newName,
+        createdBy: { id: session.id, name: session.name },
+        createdAt: now,
+        updatedAt: now,
+      });
+      return NextResponse.json({ success: true, id: result.insertedId.toString(), name: newName }, { status: 201 });
+    }
+
+    const validation = validateComponentTemplate(body);
+    if (!validation.success) return NextResponse.json({ error: validation.error }, { status: 400 });
+
     if (!await validateArticleReferences(db, validation.data.articleRefs)) {
       return NextResponse.json({ error: "Satu atau lebih artikel Knowledge Base tidak ditemukan." }, { status: 400 });
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
+import { generateUniqueName } from "@/lib/duplicate-name";
 
 function canManage(role: string): boolean {
   return role === "admin" || role === "manager";
@@ -86,7 +87,29 @@ export async function POST(req: NextRequest) {
   if (!canManage(session.role)) return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
 
   try {
-    const { name, description, botUserId, botId } = await req.json();
+    const body = await req.json();
+    const duplicateFromId = typeof body.duplicateFromId === "string" ? body.duplicateFromId.trim() : "";
+    const db = await getDatabase();
+
+    if (duplicateFromId) {
+      const source = await db.collection("skills").findOne({ _id: new ObjectId(duplicateFromId) });
+      if (!source) return NextResponse.json({ error: "Skill sumber tidak ditemukan." }, { status: 404 });
+
+      const existing = await db.collection("skills").find({}, { projection: { name: 1 } }).toArray();
+      const newName = generateUniqueName(source.name, existing.map((item) => item.name));
+      const now = new Date();
+      const { _id, createdAt, updatedAt, createdBy, ...rest } = source;
+      const result = await db.collection("skills").insertOne({
+        ...rest,
+        name: newName,
+        createdBy: { id: session.id, name: session.name },
+        createdAt: now,
+        updatedAt: now,
+      });
+      return NextResponse.json({ success: true, id: result.insertedId.toString(), name: newName }, { status: 201 });
+    }
+
+    const { name, description, botUserId, botId } = body;
     const cleanName = typeof name === "string" ? name.trim() : "";
     const normalizedBotUserId = typeof botUserId === "string" ? botUserId.trim() : "";
     const normalizedBotId = typeof botId === "string" ? botId.trim() : "";
@@ -99,7 +122,6 @@ export async function POST(req: NextRequest) {
     if (!normalizedBotUserId) {
       return NextResponse.json({ error: "Pilih user yang valid untuk skill." }, { status: 400 });
     }
-    const db = await getDatabase();
     const user = await resolveOptionalSkillUser(db, normalizedBotUserId);
     if (!user) return NextResponse.json({ error: "User yang dipilih tidak valid." }, { status: 400 });
 

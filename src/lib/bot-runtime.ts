@@ -278,8 +278,13 @@ export async function processBotTurn(
   let dataCollectionState = conversation.dataCollectionState || null;
   if (interaction.type === "guided_routing") {
     const options = interaction.config.options || [];
-    let selected: typeof options[number] | undefined;
-    if (options.length > 0) {
+    const normalizedMessage = normalizeRouteLabel(message);
+    let selected = options.find((option, index) => {
+      const label = normalizeRouteLabel(option.label);
+      const variable = normalizeRouteLabel(routeVariable(option, index));
+      return normalizedMessage === label || normalizedMessage === variable;
+    });
+    if (!selected && options.length > 0) {
       try {
         const template = await getPromptTemplate(db, interaction.config.promptId, "guided_routing") ||
           interaction.config.systemPrompt ||
@@ -291,6 +296,9 @@ export async function processBotTurn(
           return `- Nama route: ${option.label}\n  Variable route: ${routeVariable(option, index)}\n  Kondisi: ${condition}\n  Target interaction: ${targetName}`;
         }).join("\n");
         const config = await getAIConfig(db);
+        if (interaction.config.provider === "lmstudio" || interaction.config.provider === "openrouter") {
+          interactionAIConfig(config, interaction);
+        }
         const routeSessionVariables = Object.fromEntries(Object.entries(dataCollectionState?.answers ?? {}).map(([key, value]) => [key, String(value ?? "")]));
         const routeResult = await generateAICompletion({
           config,
@@ -307,7 +315,8 @@ export async function processBotTurn(
         }) || options
           .filter((option) => normalizedResult === normalizeRouteLabel(option.label))
           .sort((left, right) => right.label.length - left.label.length)[0];
-      } catch {
+      } catch (error) {
+        console.error("Guided Routing classification failed:", error);
         selected = undefined;
       }
     }
@@ -343,7 +352,7 @@ export async function processBotTurn(
       })),
     };
   } else if (interaction.type === "guided_routing") {
-    content = "";
+    content = "Maaf, saya belum bisa menentukan topik percakapan. Silakan coba kirim pesan lagi.";
   } else if (interaction.type === "text" || interaction.type === "text_start") {
     content = applyPromptVariables(interaction.config.text || "", message, user, contextSent, bot.variables || [], sessionVariables);
   } else if (interaction.type === "text_question") {
@@ -628,7 +637,7 @@ export async function processBotTurn(
     : dataCollectionInProgress
       ? { currentInteractionId: interaction.id, botStatus: "active" as const }
     : stateForAction(interaction);
-  const silent = (interaction.type === "guided_routing" && !guidedTargetSelected) || (interaction.type === "data_collection" && Boolean(dataCollectionState?.completed));
+  const silent = interaction.type === "data_collection" && Boolean(dataCollectionState?.completed);
 
   if (advanceFromDataCollection && interaction.nextAction.type === "interaction") {
     return processBotTurn(

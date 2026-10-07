@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import { validateBotDefinition } from "@/lib/bot-flows";
+import { generateUniqueName } from "@/lib/duplicate-name";
 
 function canManage(role: string): boolean {
   return role === "admin" || role === "manager";
@@ -60,9 +62,39 @@ export async function POST(req: NextRequest) {
   if (!canManage(session.role)) return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
 
   try {
-    const validation = validateBotDefinition(await req.json());
-    if (!validation.success) return NextResponse.json({ error: validation.error }, { status: 400 });
+    const body = await req.json();
+    const duplicateFromId = typeof body.duplicateFromId === "string" ? body.duplicateFromId.trim() : "";
     const db = await getDatabase();
+
+    if (duplicateFromId) {
+      const source = await db.collection("bots").findOne({ _id: new ObjectId(duplicateFromId) });
+      if (!source) return NextResponse.json({ error: "Bot sumber tidak ditemukan." }, { status: 404 });
+
+      const existing = await db.collection("bots").find({}, { projection: { name: 1 } }).toArray();
+      const newName = generateUniqueName(source.name, existing.map((item) => item.name));
+      const now = new Date();
+      const { _id, createdAt, updatedAt, createdBy, ...rest } = source;
+      const result = await db.collection("bots").insertOne({
+        ...rest,
+        name: newName,
+        isActive: Boolean(source.isActive),
+        createdBy: { id: session.id, name: session.name },
+        createdAt: now,
+        updatedAt: now,
+      });
+      const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
+      if (!activeSetting && rest.isActive) {
+        await db.collection("botSettings").updateOne(
+          { key: "active" },
+          { $set: { botId: result.insertedId.toString(), updatedAt: now } },
+          { upsert: true }
+        );
+      }
+      return NextResponse.json({ success: true, id: result.insertedId.toString(), name: newName }, { status: 201 });
+    }
+
+    const validation = validateBotDefinition(body);
+    if (!validation.success) return NextResponse.json({ error: validation.error }, { status: 400 });
     if (!await hasOnlyActiveKnowledgeBases(db, validation.data.interactions)) {
       return NextResponse.json({ error: "RAG hanya dapat menggunakan Knowledge Base yang aktif." }, { status: 400 });
     }

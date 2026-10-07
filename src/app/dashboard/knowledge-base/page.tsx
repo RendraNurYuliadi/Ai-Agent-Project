@@ -15,6 +15,7 @@ import {
   Upload,
   Loader2,
   FolderOpen,
+  Copy,
   FileText,
   ChevronLeft,
   ChevronRight,
@@ -183,6 +184,22 @@ export default function KnowledgeBasePage() {
       fetchKBs();
     } catch (err: unknown) {
       notify("error", err instanceof Error ? err.message : "Gagal membuat KB");
+    }
+  };
+
+  const duplicateKb = async (kb: KnowledgeBase) => {
+    try {
+      const response = await fetch("/api/knowledge-bases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duplicateFromId: kb.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menduplikasi Knowledge Base.");
+      await fetchKBs();
+      notify("success", `Knowledge Base "${kb.displayName}" berhasil diduplikat${data.name ? ` sebagai "${data.name}"` : ""}.`);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menduplikasi Knowledge Base.");
     }
   };
 
@@ -538,6 +555,16 @@ export default function KnowledgeBasePage() {
                               <span className={`absolute left-0.5 h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${kb.isActive ? "translate-x-4" : "translate-x-0"}`} />
                             </span>
                             <span className="shrink-0">RAG {kb.isActive ? "Aktif" : "Nonaktif"}</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void duplicateKb(kb);
+                            }}
+                            className="text-neutral-600 hover:text-white p-1.5 rounded-lg hover:bg-neutral-900 transition-colors cursor-pointer"
+                            title="Duplikat Knowledge Base"
+                          >
+                            <Copy className="w-4 h-4" />
                           </button>
                           <button
                             onClick={(e) => {

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
 import { useRouter } from "next/navigation";
-import { AlertCircle, GitBranch, Loader2, Plus, Sparkles, Trash2, UserRound, X } from "lucide-react";
+import { AlertCircle, Copy, GitBranch, Loader2, Plus, Sparkles, Trash2, UserRound, X } from "lucide-react";
 
 interface SkillUserOption {
   id: string;
@@ -131,6 +131,22 @@ export default function SkillsPage() {
     }
   };
 
+  const duplicateSkill = async (skill: SkillItem) => {
+    try {
+      const response = await fetch("/api/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duplicateFromId: skill.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menduplikasi skill.");
+      await refreshSkills();
+      setNotice({ type: "success", message: `Skill "${skill.name}" berhasil diduplikat${data.name ? ` sebagai "${data.name}"` : ""}.` });
+    } catch (error) {
+      setNotice({ type: "error", message: error instanceof Error ? error.message : "Gagal menduplikasi skill." });
+    }
+  };
+
   const deleteSkill = async () => {
     if (!pendingDelete) return;
     setDeleting(true);
@@ -215,7 +231,7 @@ export default function SkillsPage() {
             <div className="min-w-0"><p className="truncate text-sm font-semibold text-neutral-200">{skill.name}</p><p className="mt-1 truncate text-xs text-neutral-600">{skill.description || "Tanpa deskripsi"}</p><span className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] ${skill.isAvailable ? "border-emerald-900/70 bg-emerald-950/30 text-emerald-300" : "border-amber-900/70 bg-amber-950/30 text-amber-300"}`}>{skill.isAvailable ? "Siap digunakan" : "Relasi perlu diperbaiki"}</span></div>
             <div className="hidden min-w-0 items-center gap-2 text-xs text-neutral-400 sm:flex"><UserRound className="h-4 w-4 shrink-0 text-neutral-600" /><span className="truncate">{skill.botUser?.fullName || skill.botUser?.name || "User tidak ditemukan"}</span></div>
             <div className="hidden min-w-0 items-center gap-2 text-xs text-neutral-400 sm:flex"><GitBranch className="h-4 w-4 shrink-0 text-neutral-600" /><span className="truncate">{skill.bot?.name || "Bot tidak ditemukan"}</span></div>
-            <div className="flex items-center justify-end gap-1"><button type="button" onClick={() => openEdit(skill)} aria-label={`Edit skill ${skill.name}`} title="Edit skill" className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><GitBranch className="h-4 w-4" /></button><button type="button" onClick={() => setPendingDelete(skill)} aria-label={`Hapus skill ${skill.name}`} title="Hapus skill" className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button></div>
+            <div className="flex items-center justify-end gap-1"><button type="button" onClick={() => void duplicateSkill(skill)} aria-label={`Duplikat skill ${skill.name}`} title="Duplikat skill" className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><Copy className="h-4 w-4" /></button><button type="button" onClick={() => openEdit(skill)} aria-label={`Edit skill ${skill.name}`} title="Edit skill" className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><GitBranch className="h-4 w-4" /></button><button type="button" onClick={() => setPendingDelete(skill)} aria-label={`Hapus skill ${skill.name}`} title="Hapus skill" className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button></div>
           </article>
         ))}
       </section>

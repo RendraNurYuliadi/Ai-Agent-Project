@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bot, Check, GitBranch, Loader2, Plus, Settings2, Trash2, X } from "lucide-react";
+import { Bot, Check, Copy, GitBranch, Loader2, Plus, Settings2, Trash2, X } from "lucide-react";
 import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
 import { createStarterBot, type BotDefinitionInput } from "@/lib/bot-flows";
 
@@ -85,6 +85,25 @@ export default function BotManagementPage() {
       setNotice(`Bot "${bot.name}" berhasil ${isActive ? "diaktifkan" : "dinonaktifkan"}.`);
     } catch (error) {
       setError(error instanceof Error ? error.message : "Gagal memperbarui status bot.");
+    }
+  };
+
+  const duplicateBot = async (bot: BotListItem) => {
+    try {
+      const response = await fetch("/api/bots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duplicateFromId: bot.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menduplikasi bot.");
+      const freshResponse = await fetch("/api/bots");
+      const freshData = await freshResponse.json();
+      if (!freshResponse.ok) throw new Error(freshData.error || "Gagal memuat bot.");
+      setBots(freshData.bots || []);
+      setNotice(`Bot "${bot.name}" berhasil diduplikat${data.name ? ` sebagai "${data.name}"` : ""}.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Gagal menduplikasi bot.");
     }
   };
 
@@ -180,6 +199,7 @@ export default function BotManagementPage() {
             </span>
             <div className="flex items-center justify-end gap-1.5">
               <button type="button" onClick={() => void setBotActive(bot, !bot.isActive)} className={`rounded-md border px-2.5 py-1.5 text-[10px] ${bot.isActive ? "border-neutral-800 text-neutral-500 hover:border-amber-900 hover:text-amber-300" : "border-neutral-800 text-neutral-400 hover:border-emerald-900 hover:text-emerald-300"}`}>{bot.isActive ? "Nonaktifkan" : "Aktifkan"}</button>
+              <button type="button" onClick={() => void duplicateBot(bot)} title="Duplikat bot" aria-label={`Duplikat ${bot.name}`} className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><Copy className="h-4 w-4" /></button>
               <Link href={`/dashboard/bot-management/${bot.id}`} title="Atur flow" aria-label={`Atur flow ${bot.name}`} className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><Settings2 className="h-4 w-4" /></Link>
               <button type="button" onClick={() => setPendingDelete(bot)} title="Hapus bot" aria-label={`Hapus ${bot.name}`} className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button>
             </div>

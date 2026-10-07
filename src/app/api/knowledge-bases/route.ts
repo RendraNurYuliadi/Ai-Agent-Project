@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
+import { generateUniqueCollectionName, generateUniqueName } from "@/lib/duplicate-name";
 
 // GET /api/knowledge-bases — list all KB registrations
 export async function GET(req: NextRequest) {
@@ -45,31 +47,75 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { displayName, description } = await req.json();
+    const body = await req.json();
+    const duplicateFromId = typeof body.duplicateFromId === "string" ? body.duplicateFromId.trim() : "";
+
+    if (duplicateFromId) {
+      const db = await getDatabase();
+      const source = await db.collection("knowledgeBases").findOne({ _id: new ObjectId(duplicateFromId) });
+      if (!source) {
+        return NextResponse.json({ error: "Knowledge Base sumber tidak ditemukan." }, { status: 404 });
+      }
+
+      const existing = await db.collection("knowledgeBases").find({}, { projection: { displayName: 1, collectionName: 1 } }).toArray();
+      const newDisplayName = generateUniqueName(source.displayName, existing.map((item) => item.displayName));
+      const baseCollectionName = "kb_" + newDisplayName.trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .slice(0, 30);
+      const newCollectionName = generateUniqueCollectionName(baseCollectionName, existing.map((item) => item.collectionName));
+
+      const now = new Date();
+      const newKb = {
+        collectionName: newCollectionName,
+        displayName: newDisplayName,
+        description: source.description || "",
+        isActive: source.isActive !== false,
+        createdBy: { id: session.id, name: session.name },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const result = await db.collection("knowledgeBases").insertOne(newKb);
+      const kbCol = db.collection(newCollectionName);
+      await kbCol.createIndex({ createdAt: -1 });
+
+      const sourceCollection = db.collection(source.collectionName);
+      const sourceArticles = await sourceCollection.find({}).toArray();
+      if (sourceArticles.length > 0) {
+        await kbCol.insertMany(sourceArticles);
+      }
+
+      return NextResponse.json({
+        success: true,
+        name: newDisplayName,
+        knowledgeBase: {
+          id: result.insertedId.toString(),
+          ...newKb,
+          articleCount: sourceArticles.length,
+        },
+      }, { status: 201 });
+    }
+
+    const { displayName, description } = body;
     if (!displayName?.trim()) {
       return NextResponse.json({ error: "Nama Knowledge Base wajib diisi" }, { status: 400 });
     }
 
-    // Generate collection name: kb_ + lowercase alphanumeric
+    const db = await getDatabase();
+    const existingRecords = await db.collection("knowledgeBases").find({}, { projection: { displayName: 1, collectionName: 1 } }).toArray();
+
     const collectionName = "kb_" + displayName.trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "")
       .slice(0, 30);
 
-    const db = await getDatabase();
-
-    // Check if collection name already taken
-    const existing = await db.collection("knowledgeBases").findOne({ collectionName });
-    if (existing) {
-      return NextResponse.json(
-        { error: `Knowledge Base dengan nama "${collectionName}" sudah ada.` },
-        { status: 400 }
-      );
-    }
+    const uniqueCollectionName = generateUniqueCollectionName(collectionName, existingRecords.map((item) => item.collectionName));
 
     const newKb = {
-      collectionName,
+      collectionName: uniqueCollectionName,
       displayName: displayName.trim(),
       description: description?.trim() || "",
       isActive: true,
@@ -80,8 +126,7 @@ export async function POST(req: NextRequest) {
 
     const result = await db.collection("knowledgeBases").insertOne(newKb);
 
-    // Create the MongoDB collection (insert & delete a dummy doc to initialize it)
-    const kbCol = db.collection(collectionName);
+    const kbCol = db.collection(uniqueCollectionName);
     await kbCol.createIndex({ createdAt: -1 });
 
     return NextResponse.json({

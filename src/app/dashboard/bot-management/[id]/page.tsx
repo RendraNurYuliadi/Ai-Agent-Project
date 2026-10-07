@@ -235,7 +235,7 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
     case "welcome_message":
       return { title: "Selamat datang", subtitle: "Ada yang bisa kami bantu?", icon: "sparkles", footerText: "", quickButtons: [] };
     case "guided_routing":
-      return { text: "Pilih topik yang ingin dibahas.", promptId, options: [] };
+      return { provider: "global", text: "Pilih topik yang ingin dibahas.", promptId, options: [] };
     case "small_talk":
       return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.8, maxTokens: 400, promptId, systemPrompt: "Kamu adalah asisten yang ramah dan ringkas." };
     case "rag":
@@ -796,6 +796,34 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                 {selectedInteraction.type === "guided_routing" && (
                   <div className="space-y-3">
                     <PromptSelector type="guided_routing" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} variableOptions={availableVariableOptions} />
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">LLM provider
+                      <select value={selectedInteraction.config.provider === "lmstudio" || selectedInteraction.config.provider === "openrouter" ? selectedInteraction.config.provider : "global"} onChange={(event) => {
+                        const provider = event.target.value as "global" | "lmstudio" | "openrouter";
+                        if (provider === "global") updateConfig({ provider, model: "" });
+                        else void selectRagProvider(provider);
+                      }} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                        <option value="global">Pengaturan global</option><option value="lmstudio">LM Studio</option><option value="openrouter">OpenRouter</option>
+                      </select>
+                    </label>
+                    {(selectedInteraction.config.provider === "lmstudio" || selectedInteraction.config.provider === "openrouter") && <>
+                      {selectedInteraction.config.provider !== "openrouter" && <div className="space-y-1.5">
+                        <label className="block text-[10px] text-neutral-500">Base URL LM Studio
+                          <input value={selectedInteraction.config.lmStudioUrl || "http://localhost:1234/v1"} onChange={(event) => updateConfig({ lmStudioUrl: event.target.value })} placeholder="http://localhost:1234/v1" className="mt-1.5 w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+                        </label>
+                        <button type="button" onClick={() => void selectRagProvider("lmstudio")} disabled={ragProviderTest?.status === "testing" && ragProviderTest.interactionId === selectedInteraction.id} className="inline-flex items-center gap-1.5 text-[10px] text-neutral-400 hover:text-white disabled:opacity-50">
+                          {ragProviderTest?.status === "testing" && ragProviderTest.interactionId === selectedInteraction.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                          Uji koneksi dan muat model
+                        </button>
+                      </div>}
+                      <label className="block space-y-1.5 text-[10px] text-neutral-500">Model
+                        <select value={selectedInteraction.config.model || ""} onChange={(event) => updateConfig({ model: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                          {selectedInteraction.config.model && !ragProviderTest?.models.includes(selectedInteraction.config.model) && <option value={selectedInteraction.config.model}>{selectedInteraction.config.model} (tersimpan)</option>}
+                          {(ragProviderTest?.interactionId === selectedInteraction.id ? ragProviderTest.models : []).map((model) => <option key={model} value={model}>{model}</option>)}
+                          {!selectedInteraction.config.model && <option value="">Pilih model setelah uji koneksi</option>}
+                        </select>
+                      </label>
+                      {ragProviderTest?.interactionId === selectedInteraction.id && <p role={ragProviderTest.status === "error" ? "alert" : "status"} className={`text-[10px] ${ragProviderTest.status === "error" ? "text-red-300" : ragProviderTest.status === "success" ? "text-emerald-300" : "text-neutral-500"}`}>{ragProviderTest.message}</p>}
+                    </>}
                     <div className="space-y-2 border-t border-neutral-900 pt-3">
                       <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-neutral-300">Pilihan route</span><button type="button" onClick={() => updateConfig({ options: [...(selectedInteraction.config.options || []), { label: "", variable: "", prompt: "", targetInteractionId: otherInteractions[0]?.id || "" }] })} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white"><Plus className="h-3 w-3" /> Tambah</button></div>
                       {(selectedInteraction.config.options || []).map((option, index) => <GuidedOptionFields key={`${selectedInteraction.id}-route-${index}`} option={option} interactions={otherInteractions} onChange={(patch) => setGuidedOption(index, patch)} onRemove={() => updateConfig({ options: selectedInteraction.config.options?.filter((_, itemIndex) => itemIndex !== index) })} />)}

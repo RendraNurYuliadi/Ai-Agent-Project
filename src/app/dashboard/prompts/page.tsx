@@ -13,6 +13,7 @@ import {
   ToggleRight,
   Loader2,
   Sparkles,
+  Copy,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/action-feedback";
 
@@ -176,6 +177,22 @@ export default function PromptsPage() {
         "error",
         err instanceof Error ? err.message : "Terjadi kesalahan"
       );
+    }
+  };
+
+  const duplicatePrompt = async (prompt: Prompt) => {
+    try {
+      const response = await fetch("/api/prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duplicateFromId: prompt.id }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menduplikasi prompt.");
+      notify("success", `Prompt "${prompt.name}" berhasil diduplikat${data.name ? ` sebagai "${data.name}"` : ""}.`);
+      await fetchPrompts();
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "Gagal menduplikasi prompt.");
     }
   };
 
@@ -378,6 +395,14 @@ export default function PromptsPage() {
                       ) : (
                         <ToggleLeft className="w-5 h-5" />
                       )}
+                    </button>
+
+                    <button
+                      onClick={() => void duplicatePrompt(p)}
+                      className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 cursor-pointer"
+                      title="Duplikat prompt"
+                    >
+                      <Copy className="w-4 h-4" />
                     </button>
 
                     <button
