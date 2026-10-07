@@ -19,7 +19,6 @@ import {
   Copy,
   Check,
   Pencil,
-  RotateCw,
   ExternalLink,
   ChevronRight,
 } from "lucide-react";
@@ -158,6 +157,27 @@ interface UserProfile {
   fullName: string;
   email: string;
   role: string;
+}
+
+function renderWelcomeText(template: string | undefined, user: UserProfile | null): string | undefined {
+  if (!template) return template;
+  const now = new Date();
+  const userName = user?.name || "User";
+  const values = new Map<string, string>([
+    ["question", ""],
+    ["message", ""],
+    ["fullName", user?.fullName || userName],
+    ["name", userName],
+    ["username", userName],
+    ["email", user?.email || ""],
+    ["role", user?.role || "public_user"],
+    ["year", String(now.getFullYear())],
+    ["month", now.toLocaleDateString("id-ID", { month: "long" })],
+    ["date", now.toLocaleDateString("id-ID", { day: "numeric" })],
+    ["day", now.toLocaleDateString("id-ID", { weekday: "long" })],
+    ["time", now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false })],
+  ]);
+  return template.replace(/\{([^{}]+)\}/g, (placeholder, key: string) => values.get(key) ?? placeholder);
 }
 
 function ComponentButtons({
@@ -588,7 +608,7 @@ export default function ChatbotPage() {
     }
   }, []);
 
-  const fetchUserProfile = async () => {
+  async function fetchUserProfile() {
     try {
       const res = await fetch("/api/auth/me");
       if (res.ok) {
@@ -603,9 +623,9 @@ export default function ChatbotPage() {
         }
       }
     } catch { }
-  };
+  }
 
-  const fetchConversations = async () => {
+  async function fetchConversations() {
     setLoadingConvs(true);
     try {
       const res = await fetch("/api/conversations");
@@ -618,9 +638,9 @@ export default function ChatbotPage() {
     } finally {
       setLoadingConvs(false);
     }
-  };
+  }
 
-  const loadConversation = async (convId: string) => {
+  async function loadConversation(convId: string) {
     setActiveConvId(convId);
     setLoadingMessages(true);
     try {
@@ -636,7 +656,7 @@ export default function ChatbotPage() {
     } finally {
       setLoadingMessages(false);
     }
-  };
+  }
 
   const createNewConversation = async () => {
     if (skillSelectionRequired) return;
@@ -1137,11 +1157,15 @@ export default function ChatbotPage() {
                 <BotInteractionCard
                   data={{
                     type: "welcome_message",
-                    title: welcomeInteraction.config.title,
-                    subtitle: welcomeInteraction.config.subtitle,
+                    title: renderWelcomeText(welcomeInteraction.config.title, userProfile),
+                    subtitle: renderWelcomeText(welcomeInteraction.config.subtitle, userProfile),
                     icon: welcomeInteraction.config.icon,
-                    footerText: welcomeInteraction.config.footerText,
-                    quickButtons: welcomeInteraction.config.quickButtons,
+                    footerText: renderWelcomeText(welcomeInteraction.config.footerText, userProfile),
+                    quickButtons: welcomeInteraction.config.quickButtons?.map((button) => ({
+                      ...button,
+                      label: renderWelcomeText(button.label, userProfile) || "",
+                      value: renderWelcomeText(button.value, userProfile) || "",
+                    })),
                   }}
                   onReply={(value) => void submitMessage(value)}
                   disabled={sending}
@@ -1186,12 +1210,8 @@ export default function ChatbotPage() {
             </div>
           ) : (
             <>
-              {messages.map((msg, messageIndex) => {
+              {messages.map((msg) => {
                 const isUser = msg.role === "user";
-                const relatedUserMessage =
-                  !isUser && messageIndex > 0 && messages[messageIndex - 1].role === "user"
-                    ? messages[messageIndex - 1]
-                    : null;
                 const isEditing = editingMessageId === msg.id;
 
                 return (
@@ -1353,18 +1373,6 @@ export default function ChatbotPage() {
                             aria-label="Edit pesan"
                           >
                             <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                        {!isUser && relatedUserMessage && (
-                          <button
-                            type="button"
-                            onClick={() => void submitMessage(relatedUserMessage.content, { regenerateAssistantId: msg.id })}
-                            disabled={sending}
-                            className="rounded p-1 text-neutral-600 transition-colors hover:bg-neutral-800 hover:text-neutral-200 disabled:opacity-40"
-                            title="Buat ulang respons"
-                            aria-label="Buat ulang respons AI"
-                          >
-                            <RotateCw className="h-3.5 w-3.5" />
                           </button>
                         )}
                       </div>

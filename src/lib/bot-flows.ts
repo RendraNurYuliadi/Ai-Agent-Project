@@ -5,6 +5,7 @@ export const BOT_INTERACTION_TYPES = [
   "rag",
   "web_search",
   "data_collection",
+  "data_collection_submitted",
   "text",
   "text_question",
 ] as const;
@@ -18,6 +19,7 @@ export const BOT_INTERACTION_LABELS: Record<BotInteractionType, string> = {
   rag: "RAG",
   web_search: "Web Search",
   data_collection: "Data Collection",
+  data_collection_submitted: "Data Collection Submitted",
   text: "Text Interaction",
   text_start: "Text Interaction",
   text_question: "Text Question Interaction",
@@ -81,6 +83,11 @@ export interface DataCollectionValidatorButton extends BotQuickButton {
   type: "true" | "false";
 }
 
+export interface DataCollectionSubmittedField {
+  name: string;
+  variable: string;
+}
+
 export interface BotInteractionConfig {
   name?: string;
   title?: string;
@@ -92,6 +99,7 @@ export interface BotInteractionConfig {
   text?: string;
   question?: string;
   systemPrompt?: string;
+  fallbackMessage?: string;
   promptId?: string;
   provider?: "global" | "lmstudio" | "openrouter";
   model?: string;
@@ -101,6 +109,7 @@ export interface BotInteractionConfig {
   webSearchMaxResults?: number;
   dataCollectionQuestions?: DataCollectionQuestion[];
   dataCollectionValidator?: DataCollectionValidator;
+  dataCollectionSubmittedFields?: DataCollectionSubmittedField[];
   knowledgeBases?: string[];
 }
 
@@ -277,6 +286,14 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
         : "",
     }
     : undefined;
+  const dataCollectionSubmittedFields = Array.isArray(value.dataCollectionSubmittedFields)
+    ? value.dataCollectionSubmittedFields.slice(0, 30).flatMap((item) => {
+      if (!isRecord(item)) return [];
+      const name = typeof item.name === "string" ? item.name.trim().slice(0, 80) : "";
+      const variable = typeof item.variable === "string" ? item.variable.trim().slice(0, 100) : "";
+      return name && variable ? [{ name, variable }] : [];
+    })
+    : undefined;
 
   return {
     name: typeof value.name === "string" ? value.name.trim().slice(0, 120) : undefined,
@@ -289,6 +306,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     text: typeof value.text === "string" ? value.text.trim().slice(0, 4000) : undefined,
     question: typeof value.question === "string" ? value.question.trim().slice(0, 1000) : undefined,
     systemPrompt: typeof value.systemPrompt === "string" ? value.systemPrompt.trim().slice(0, 4000) : undefined,
+    fallbackMessage: typeof value.fallbackMessage === "string" ? value.fallbackMessage.trim().slice(0, 1000) : undefined,
     promptId: typeof value.promptId === "string" ? value.promptId.trim().slice(0, 100) : undefined,
     provider,
     model: typeof value.model === "string" ? value.model.trim().slice(0, 200) : undefined,
@@ -304,6 +322,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
       : undefined,
     dataCollectionQuestions,
     dataCollectionValidator,
+    dataCollectionSubmittedFields,
     knowledgeBases: Array.isArray(value.knowledgeBases)
       ? value.knowledgeBases.filter((item): item is string => typeof item === "string").slice(0, 20)
       : undefined,
@@ -354,6 +373,9 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     if (item.type === "data_collection" && isRecord(item.config) && Array.isArray(item.config.dataCollectionQuestions) && config.dataCollectionQuestions?.length !== item.config.dataCollectionQuestions.length) {
       return { success: false, error: "Semua pertanyaan Data Collection harus memiliki nama, tipe, dan prompt yang valid." };
     }
+    if (item.type === "data_collection_submitted" && isRecord(item.config) && Array.isArray(item.config.dataCollectionSubmittedFields) && config.dataCollectionSubmittedFields?.length !== item.config.dataCollectionSubmittedFields.length) {
+      return { success: false, error: "Semua field Data Collection Submitted harus memiliki nama dan variabel." };
+    }
     ids.add(item.id);
     interactions.push({
       id: item.id,
@@ -379,6 +401,16 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
       const variables = options.map((option) => option.variable.toLocaleUpperCase());
       if (new Set(variables).size !== variables.length) {
         return { success: false, error: "Variable route dalam Guided Routing harus unik." };
+      }
+    }
+    if (interaction.type === "data_collection_submitted") {
+      const fields = interaction.config.dataCollectionSubmittedFields || [];
+      if (fields.length === 0 || fields.length > 30) {
+        return { success: false, error: "Data Collection Submitted harus memiliki 1 sampai 30 field." };
+      }
+      const fieldNames = fields.map((field) => field.name.toLocaleLowerCase());
+      if (fields.some((field) => !field.name || field.name.length > 80 || /[.$]/.test(field.name) || !/^\{[^{}]{1,80}\}$/.test(field.variable)) || new Set(fieldNames).size !== fieldNames.length) {
+        return { success: false, error: "Nama field harus unik dan setiap field harus memilih variabel yang valid." };
       }
     }
     if (interaction.nextAction.type === "interaction" && !ids.has(interaction.nextAction.interactionId)) {

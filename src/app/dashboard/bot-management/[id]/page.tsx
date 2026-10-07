@@ -27,6 +27,7 @@ import {
   Bot,
   Check,
   CircleHelp,
+  Database,
   Globe,
   GitBranch,
   ListChecks,
@@ -108,7 +109,7 @@ const BOT_SYSTEM_VARIABLES = [
   "{time}",
 ];
 
-const BOT_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection"];
+const BOT_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection", "data_collection_submitted"];
 const BOT_INTERACTION_TYPES_GROUPED: BotInteractionType[] = ["welcome_message", "text", "text_question"];
 
 function getBotVariableOptions(customVariables: BotCustomVariable[] = [], interactions: BotInteraction[] = [], interactionType?: BotInteractionType) {
@@ -133,6 +134,7 @@ function nodeSummary(interaction: BotInteraction): string {
   if (interaction.type === "guided_routing") return `${interaction.config.options?.length || 0} route · LLM`;
   if (interaction.type === "web_search") return `${interaction.config.webSearchMaxResults || 5} sumber web · LLM`;
   if (interaction.type === "data_collection") return `${interaction.config.dataCollectionQuestions?.length || 0} pertanyaan · Webhook`;
+  if (interaction.type === "data_collection_submitted") return `${interaction.config.dataCollectionSubmittedFields?.length || 0} field · Capture`;
   if (interaction.nextAction.type === "interaction") return "Next interaction";
   return interaction.nextAction.type === "end" ? "End interaction" : "Close conversation";
 }
@@ -146,6 +148,8 @@ function InteractionNode({ data, selected }: NodeProps<FlowCanvasNode>) {
         ? Globe
         : data.interactionType === "data_collection"
           ? ListChecks
+          : data.interactionType === "data_collection_submitted"
+            ? Database
       : data.interactionType === "guided_routing"
         ? GitBranch
         : MessageSquare;
@@ -244,6 +248,8 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
       return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.7, maxTokens: 1024, webSearchMaxResults: 5 };
     case "data_collection":
       return { dataCollectionQuestions: [{ name: "nama_lengkap", question: "Siapa nama lengkap Anda?", variable: "nama_lengkap" }] };
+    case "data_collection_submitted":
+      return { dataCollectionSubmittedFields: [] };
     case "text_question":
       return { question: "Apa yang ingin Anda tanyakan?" };
     case "text_start":
@@ -795,6 +801,12 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
 
                 {selectedInteraction.type === "guided_routing" && (
                   <div className="space-y-3">
+                    <TextAreaField
+                      label="Pesan fallback saat route tidak ditemukan"
+                      value={selectedInteraction.config.fallbackMessage ?? "Maaf, saya belum bisa menentukan topik percakapan. Silakan coba kirim pesan lagi."}
+                      onChange={(value) => updateConfig({ fallbackMessage: value })}
+                      rows={3}
+                    />
                     <PromptSelector type="guided_routing" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} variableOptions={availableVariableOptions} />
                     <label className="block space-y-1.5 text-[10px] text-neutral-500">LLM provider
                       <select value={selectedInteraction.config.provider === "lmstudio" || selectedInteraction.config.provider === "openrouter" ? selectedInteraction.config.provider : "global"} onChange={(event) => {
@@ -929,6 +941,54 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                         onChange={(dataCollectionValidator) => updateConfig({ dataCollectionValidator })}
                       />}
                     </div>
+                  </div>
+                )}
+
+                {selectedInteraction.type === "data_collection_submitted" && (
+                  <div className="space-y-3">
+                    <p className="text-[10px] leading-4 text-neutral-500">Simpan nilai variabel sebagai record pada koleksi milik bot ini.</p>
+                    <div className="space-y-2">
+                      {(selectedInteraction.config.dataCollectionSubmittedFields || []).map((field, index) => (
+                        <div key={`${selectedInteraction.id}-capture-${index}`} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
+                          <input
+                            aria-label={`Nama field ${index + 1}`}
+                            value={field.name}
+                            onChange={(event) => {
+                              const fields = [...(selectedInteraction.config.dataCollectionSubmittedFields || [])];
+                              fields[index] = { ...fields[index], name: event.target.value };
+                              updateConfig({ dataCollectionSubmittedFields: fields });
+                            }}
+                            placeholder="Nama field"
+                            className="min-w-0 rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600"
+                          />
+                          <select
+                            aria-label={`Variabel field ${index + 1}`}
+                            value={field.variable}
+                            onChange={(event) => {
+                              const fields = [...(selectedInteraction.config.dataCollectionSubmittedFields || [])];
+                              fields[index] = { ...fields[index], variable: event.target.value };
+                              updateConfig({ dataCollectionSubmittedFields: fields });
+                            }}
+                            className="min-w-0 rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600"
+                          >
+                            <option value="">Pilih variabel</option>
+                            {availableVariableOptions.map((variable) => <option key={variable} value={variable}>{variable}</option>)}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => updateConfig({ dataCollectionSubmittedFields: selectedInteraction.config.dataCollectionSubmittedFields?.filter((_, itemIndex) => itemIndex !== index) })}
+                            aria-label={`Hapus field ${index + 1}`}
+                            className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-red-300"
+                          ><Trash2 className="h-3.5 w-3.5" /></button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => updateConfig({ dataCollectionSubmittedFields: [...(selectedInteraction.config.dataCollectionSubmittedFields || []), { name: "", variable: "" }] })}
+                      disabled={(selectedInteraction.config.dataCollectionSubmittedFields?.length || 0) >= 30}
+                      className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white disabled:opacity-40"
+                    ><Plus className="h-3 w-3" /> Tambah field</button>
                   </div>
                 )}
 

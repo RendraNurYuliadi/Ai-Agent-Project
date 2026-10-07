@@ -261,8 +261,14 @@ function dataQuestionComponents(
 
 export async function processBotTurn(
   db: Db,
-  bot: Pick<BotDefinitionInput, "entryInteractionId" | "interactions" | "variables">,
-  conversation: { currentInteractionId?: string | null; botStatus?: string; dataCollectionState?: DataCollectionState | null },
+  bot: Pick<BotDefinitionInput, "entryInteractionId" | "interactions" | "variables"> & { id: string; name: string },
+  conversation: {
+    currentInteractionId?: string | null;
+    botStatus?: string;
+    dataCollectionState?: DataCollectionState | null;
+    conversationId?: string;
+    skillId?: string | null;
+  },
   message: string,
   user: { id?: string; name?: string; fullName?: string; email?: string; username?: string; role?: string }
 ): Promise<BotRuntimeResult> {
@@ -274,7 +280,7 @@ export async function processBotTurn(
   if (!interaction) throw new Error("Bot tidak memiliki entry interaction.");
 
   let guidedTargetSelected = false;
-  let advanceFromDataCollection = false;
+  let advanceToNextInteraction = false;
   let dataCollectionState = conversation.dataCollectionState || null;
   if (interaction.type === "guided_routing") {
     const options = interaction.config.options || [];
@@ -352,7 +358,14 @@ export async function processBotTurn(
       })),
     };
   } else if (interaction.type === "guided_routing") {
-    content = "Maaf, saya belum bisa menentukan topik percakapan. Silakan coba kirim pesan lagi.";
+    content = applyPromptVariables(
+      interaction.config.fallbackMessage || "Maaf, saya belum bisa menentukan topik percakapan. Silakan coba kirim pesan lagi.",
+      message,
+      user,
+      contextSent,
+      bot.variables || [],
+      sessionVariables
+    );
   } else if (interaction.type === "text" || interaction.type === "text_start") {
     content = applyPromptVariables(interaction.config.text || "", message, user, contextSent, bot.variables || [], sessionVariables);
   } else if (interaction.type === "text_question") {
@@ -445,18 +458,24 @@ export async function processBotTurn(
       const systemInstruction = systemTemplate.includes("{context}")
         ? renderedTemplate
         : `${renderedTemplate}\n\nKNOWLEDGE CONTEXT:\n${contextSent || "Tidak ada artikel relevan ditemukan."}`;
-      try {
-        content = await generateAICompletion({
-          config,
-          messages: [{ role: "user", content: message.trim() }],
-          systemInstruction,
-          temperature: config.temperature,
-          maxTokens: config.maxTokens,
-        });
-      } catch {
-        content = topArticles.length
-          ? topArticles.map((article) => `**${article.title}**\n${article.summary || article.content}`).join("\n\n")
-          : "Informasi tidak ditemukan dalam Knowledge Base.";
+      for (let attempt = 1; attempt <= 2; attempt += 1) {
+        try {
+          const answer = await generateAICompletion({
+            config,
+            messages: [{ role: "user", content: message.trim() }],
+            systemInstruction,
+            temperature: config.temperature,
+            maxTokens: config.maxTokens,
+          });
+          if (!answer.trim()) throw new Error("Model menghasilkan jawaban kosong.");
+          content = answer.trim();
+          break;
+        } catch (error) {
+          console.error(`RAG answer generation attempt ${attempt} failed:`, error);
+          if (attempt === 2) {
+            content = "Maaf, saya belum berhasil menyusun jawaban dari Knowledge Base. Silakan coba lagi sebentar.";
+          }
+        }
       }
     }
   } else if (interaction.type === "web_search") {
@@ -567,7 +586,7 @@ export async function processBotTurn(
           showReviewChoices(currentState.answers);
         } else {
           dataCollectionState = { ...currentState, completed: true };
-          advanceFromDataCollection = true;
+          advanceToNextInteraction = true;
           content = "";
         }
       } else if (currentState.stage === "select_question") {
@@ -609,12 +628,31 @@ export async function processBotTurn(
               } else {
                 dataCollectionState = { interactionId: interaction.id, questionIndex: questions.length, answers, completed: true };
                 content = "";
+                advanceToNextInteraction = true;
               }
             }
           }
         }
       }
     }
+  } else if (interaction.type === "data_collection_submitted") {
+    const fields = interaction.config.dataCollectionSubmittedFields || [];
+    const values = fields.map((field) => ({
+      name: field.name,
+      variable: field.variable,
+      value: applyPromptVariables(field.variable, message, user, "", bot.variables || [], sessionVariables),
+    }));
+    await db.collection("dataCollectionCaptures").insertOne({
+      botId: bot.id,
+      botName: bot.name,
+      conversationId: conversation.conversationId || "",
+      skillId: conversation.skillId || null,
+      userId: user.id || "",
+      values,
+      submittedAt: new Date(),
+    });
+    content = "Terima kasih, data Anda berhasil disimpan.";
+    advanceToNextInteraction = true;
   }
 
   const nextDataCollectionId = interaction?.nextAction.type === "interaction" ? interaction.nextAction.interactionId : "";
@@ -639,7 +677,7 @@ export async function processBotTurn(
     : stateForAction(interaction);
   const silent = interaction.type === "data_collection" && Boolean(dataCollectionState?.completed);
 
-  if (advanceFromDataCollection && interaction.nextAction.type === "interaction") {
+  if (advanceToNextInteraction && interaction.nextAction.type === "interaction") {
     return processBotTurn(
       db,
       bot,
@@ -647,6 +685,8 @@ export async function processBotTurn(
         currentInteractionId: interaction.nextAction.interactionId,
         botStatus: "active",
         dataCollectionState,
+        conversationId: conversation.conversationId,
+        skillId: conversation.skillId,
       },
       message,
       user

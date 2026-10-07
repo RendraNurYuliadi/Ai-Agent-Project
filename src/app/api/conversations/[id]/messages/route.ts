@@ -116,6 +116,8 @@ export async function POST(
         const turn = await processBotTurn(
           db,
           {
+            id: botDocument._id.toString(),
+            name: botDocument.name || "Bot",
             entryInteractionId: botDocument.entryInteractionId,
             interactions: botDocument.interactions,
             variables: botDocument.variables || [],
@@ -124,6 +126,8 @@ export async function POST(
             currentInteractionId: conversation.currentInteractionId,
             botStatus: conversation.botStatus,
             dataCollectionState: conversation.dataCollectionState,
+            conversationId: id,
+            skillId: typeof conversation.skillId === "string" ? conversation.skillId : null,
           },
           message.trim(),
           session
@@ -298,27 +302,28 @@ KNOWLEDGE CONTEXT:
       });
 
       if (aiAvailable) {
-        try {
-          assistantContent = await generateAICompletion({
-            config: aiConfig,
-            messages: [{ role: "user", content: message.trim() }],
-            systemInstruction: systemPrompt,
-            temperature: aiConfig.temperature,
-            maxTokens: aiConfig.maxTokens,
-            timeoutMs: 30000,
-          });
-        } catch {
-          assistantContent = topArticles.length > 0
-            ? `📚 *Hasil Knowledge Base (Top ${topArticles.length}):*\n\n` +
-              topArticles.map((a, i) => `**${i + 1}. ${a.title}** (Skor: ${a.score})\n${a.summary || a.content}`).join("\n\n")
-            : "Informasi tidak ditemukan dalam Knowledge Base.";
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          try {
+            const answer = await generateAICompletion({
+              config: aiConfig,
+              messages: [{ role: "user", content: message.trim() }],
+              systemInstruction: systemPrompt,
+              temperature: aiConfig.temperature,
+              maxTokens: aiConfig.maxTokens,
+              timeoutMs: 30000,
+            });
+            if (!answer.trim()) throw new Error("Model menghasilkan jawaban kosong.");
+            assistantContent = answer.trim();
+            break;
+          } catch (error) {
+            console.error(`FAQ answer generation attempt ${attempt} failed:`, error);
+            if (attempt === 2) {
+              assistantContent = "Maaf, saya belum berhasil menyusun jawaban dari Knowledge Base. Silakan coba lagi sebentar.";
+            }
+          }
         }
       } else {
-        // Offline fallback
-        assistantContent = topArticles.length > 0
-          ? `📚 *Berdasarkan Knowledge Base (Top ${topArticles.length} Hasil Pencarian):*\n\n` +
-            topArticles.map((a, i) => `**${i + 1}. ${a.title}** (Skor: ${a.score})\n${a.summary || a.content}`).join("\n\n")
-          : "Informasi tidak ditemukan dalam Knowledge Base.";
+        assistantContent = "Maaf, layanan AI sedang tidak tersedia. Silakan coba lagi sebentar.";
       }
     } else {
       // SMALL_TALK

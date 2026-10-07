@@ -103,6 +103,13 @@ export default function DashboardShell({
       roles: ["admin", "manager"],
     },
     {
+      name: "Data Bot Data Collection Capture",
+      href: "/dashboard/data-bot-data-collection-capture",
+      icon: Database,
+      current: pathname.startsWith("/dashboard/data-bot-data-collection-capture"),
+      roles: ["admin", "manager"],
+    },
+    {
       name: "Components",
       href: "/dashboard/components",
       icon: Blocks,
@@ -172,7 +179,7 @@ export default function DashboardShell({
   );
 
   const contentNav = visibleNav.filter((n) =>
-    ["Knowledge Base", "Components", "Prompts"].includes(n.name)
+    ["Knowledge Base", "Data Bot Data Collection Capture", "Components", "Prompts"].includes(n.name)
   );
 
   return (
