@@ -550,6 +550,7 @@ export default function ChatbotPage() {
   const [speechModalOpen, setSpeechModalOpen] = useState(false);
   const [speechTranscript, setSpeechTranscript] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const sendingRef = useRef(false);
   const speechRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const speechTranscriptRef = useRef("");
   const speechModalOpenRef = useRef(false);
@@ -776,7 +777,10 @@ export default function ChatbotPage() {
     if (conversationStatus === "closed") return;
     const isRegenerate = Boolean(options.regenerateAssistantId);
     const isReplacement = isRegenerate || Boolean(options.editUserMessageId);
-    if ((!message.trim() && !isRegenerate) || sending) return;
+    if ((!message.trim() && !isRegenerate) || sendingRef.current || sending) return;
+
+    sendingRef.current = true;
+    setSending(true);
 
     let convId = activeConvId;
     if (!convId) {
@@ -826,7 +830,6 @@ export default function ChatbotPage() {
       setMessages((prev) => [...prev, userMsg]);
       setInput("");
     }
-    setSending(true);
 
     try {
       const res = await fetch(`/api/conversations/${convId}/messages`, {
@@ -890,6 +893,7 @@ export default function ChatbotPage() {
       setEnteringMessageId(errorMsg.id);
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   };

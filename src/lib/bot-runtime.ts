@@ -334,8 +334,26 @@ export async function processBotTurn(
         guidedTargetSelected = true;
       }
     }
+
     if (!guidedTargetSelected) {
-      guidedFallbackTargetId = bot.interactions.find((item) => item.id === interaction?.config.fallbackInteractionId)?.id || null;
+      const defaultTargetId = interaction.config.fallbackInteractionId || (
+        interaction.nextAction.type === "interaction" ? interaction.nextAction.interactionId : null
+      );
+      const defaultTarget = defaultTargetId
+        ? bot.interactions.find((item) => item.id === defaultTargetId) || null
+        : null;
+
+      if (defaultTarget) {
+        interaction = defaultTarget;
+        guidedTargetSelected = true;
+        guidedFallbackTargetId = defaultTarget.id;
+      } else {
+        guidedFallbackTargetId = bot.interactions.find((item) => item.id === interaction?.config.fallbackInteractionId)?.id || null;
+        dataCollectionState = null;
+      }
+    }
+
+    if (!guidedTargetSelected) {
       dataCollectionState = null;
     }
   }
