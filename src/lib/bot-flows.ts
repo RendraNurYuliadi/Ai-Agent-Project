@@ -101,6 +101,7 @@ export interface BotInteractionConfig {
   systemPrompt?: string;
   fallbackMessage?: string;
   fallbackMessageEnabled?: boolean;
+  fallbackMechanismEnabled?: boolean;
   fallbackInteractionId?: string;
   promptId?: string;
   provider?: "global" | "lmstudio" | "openrouter";
@@ -310,6 +311,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     systemPrompt: typeof value.systemPrompt === "string" ? value.systemPrompt.trim().slice(0, 4000) : undefined,
     fallbackMessage: typeof value.fallbackMessage === "string" ? value.fallbackMessage.trim().slice(0, 1000) : undefined,
     fallbackMessageEnabled: typeof value.fallbackMessageEnabled === "boolean" ? value.fallbackMessageEnabled : undefined,
+    fallbackMechanismEnabled: typeof value.fallbackMechanismEnabled === "boolean" ? value.fallbackMechanismEnabled : undefined,
     fallbackInteractionId: typeof value.fallbackInteractionId === "string" ? value.fallbackInteractionId.trim() : undefined,
     promptId: typeof value.promptId === "string" ? value.promptId.trim().slice(0, 100) : undefined,
     provider,

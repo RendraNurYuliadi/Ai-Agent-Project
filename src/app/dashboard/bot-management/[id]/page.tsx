@@ -814,6 +814,10 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                 {selectedInteraction.type === "guided_routing" && (
                   <div className="space-y-3">
                     <label className="flex cursor-pointer items-center gap-2 text-[10px] text-neutral-300">
+                      <input type="checkbox" checked={selectedInteraction.config.fallbackMechanismEnabled !== false} onChange={(event) => updateConfig({ fallbackMechanismEnabled: event.target.checked })} className="accent-white" />
+                      Aktifkan fallback mechanism saat route tidak ditemukan
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2 text-[10px] text-neutral-300">
                       <input type="checkbox" checked={selectedInteraction.config.fallbackMessageEnabled !== false} onChange={(event) => updateConfig({ fallbackMessageEnabled: event.target.checked })} className="accent-white" />
                       Tampilkan pesan fallback saat route tidak ditemukan
                     </label>
@@ -824,12 +828,14 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                       rows={3}
                       variableOptions={availableVariableOptions}
                     />}
-                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Next interaction saat route tidak ditemukan
-                      <select value={selectedInteraction.config.fallbackInteractionId || ""} onChange={(event) => updateConfig({ fallbackInteractionId: event.target.value || undefined })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
-                        <option value="">Tetap di Guided Routing</option>
-                        {otherInteractions.map((item) => <option key={item.id} value={item.id}>{interactionDisplayName(item)}</option>)}
-                      </select>
-                    </label>
+                    {selectedInteraction.config.fallbackMechanismEnabled !== false && (
+                      <label className="block space-y-1.5 text-[10px] text-neutral-500">Next interaction saat route tidak ditemukan
+                        <select value={selectedInteraction.config.fallbackInteractionId || ""} onChange={(event) => updateConfig({ fallbackInteractionId: event.target.value || undefined })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                          <option value="">Tetap di Guided Routing</option>
+                          {otherInteractions.map((item) => <option key={item.id} value={item.id}>{interactionDisplayName(item)}</option>)}
+                        </select>
+                      </label>
+                    )}
                     <PromptSelector type="guided_routing" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} variableOptions={availableVariableOptions} />
                     <label className="block space-y-1.5 text-[10px] text-neutral-500">LLM provider
                       <select value={selectedInteraction.config.provider === "lmstudio" || selectedInteraction.config.provider === "openrouter" ? selectedInteraction.config.provider : "global"} onChange={(event) => {

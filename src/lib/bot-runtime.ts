@@ -335,7 +335,8 @@ export async function processBotTurn(
       }
     }
 
-    if (!guidedTargetSelected) {
+    const fallbackMechanismEnabled = interaction.config.fallbackMechanismEnabled !== false;
+    if (!guidedTargetSelected && fallbackMechanismEnabled) {
       const defaultTargetId = interaction.config.fallbackInteractionId || (
         interaction.nextAction.type === "interaction" ? interaction.nextAction.interactionId : null
       );
@@ -695,12 +696,15 @@ export async function processBotTurn(
   }
 
   const dataCollectionInProgress = interaction.type === "data_collection" && dataCollectionState?.interactionId === interaction.id && !dataCollectionState.completed;
-  const guidedRouteFailed = interaction.type === "guided_routing" && !guidedTargetSelected;
+  const fallbackMechanismEnabled = interaction.type === "guided_routing" ? interaction.config.fallbackMechanismEnabled !== false : true;
+  const guidedRouteFailed = interaction.type === "guided_routing" && !guidedTargetSelected && fallbackMechanismEnabled;
   const state = guidedRouteFailed
     ? { currentInteractionId: guidedFallbackTargetId || interaction.id, botStatus: "active" as const }
     : dataCollectionInProgress
       ? { currentInteractionId: interaction.id, botStatus: "active" as const }
-    : stateForAction(interaction);
+      : interaction.type === "guided_routing" && !fallbackMechanismEnabled
+        ? { currentInteractionId: interaction.id, botStatus: "active" as const }
+        : stateForAction(interaction);
   const silent = interaction.type === "data_collection" && Boolean(dataCollectionState?.completed);
 
   if (advanceToNextInteraction && interaction.nextAction.type === "interaction") {
