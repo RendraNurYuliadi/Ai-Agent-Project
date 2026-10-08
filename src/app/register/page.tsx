@@ -117,9 +117,9 @@ export default function RegisterPage() {
               </p>
             </div>
 
-            <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-neutral-900 border border-neutral-800 text-neutral-400">
+            {/* <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-neutral-900 border border-neutral-800 text-neutral-400">
               Role: Public User
-            </span>
+            </span> */}
           </div>
 
           {error && (
@@ -144,7 +144,7 @@ export default function RegisterPage() {
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="misal: Rendra Nur Yuliandi"
+                  placeholder="misal: John Doe"
                   className="w-full pl-9 pr-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-white placeholder-neutral-600 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:border-neutral-600 transition-all"
                 />
               </div>
@@ -163,7 +163,7 @@ export default function RegisterPage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="misal: Rendra"
+                  placeholder="misal: John"
                   className="w-full pl-9 pr-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-white placeholder-neutral-600 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:border-neutral-600 transition-all"
                 />
               </div>
@@ -183,7 +183,7 @@ export default function RegisterPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nama@example.com"
+                  placeholder="user@example.com"
                   className="w-full pl-9 pr-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-white placeholder-neutral-600 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-700 focus:border-neutral-600 transition-all"
                 />
               </div>

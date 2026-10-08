@@ -100,6 +100,8 @@ export interface BotInteractionConfig {
   question?: string;
   systemPrompt?: string;
   fallbackMessage?: string;
+  fallbackMessageEnabled?: boolean;
+  fallbackInteractionId?: string;
   promptId?: string;
   provider?: "global" | "lmstudio" | "openrouter";
   model?: string;
@@ -307,6 +309,8 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     question: typeof value.question === "string" ? value.question.trim().slice(0, 1000) : undefined,
     systemPrompt: typeof value.systemPrompt === "string" ? value.systemPrompt.trim().slice(0, 4000) : undefined,
     fallbackMessage: typeof value.fallbackMessage === "string" ? value.fallbackMessage.trim().slice(0, 1000) : undefined,
+    fallbackMessageEnabled: typeof value.fallbackMessageEnabled === "boolean" ? value.fallbackMessageEnabled : undefined,
+    fallbackInteractionId: typeof value.fallbackInteractionId === "string" ? value.fallbackInteractionId.trim() : undefined,
     promptId: typeof value.promptId === "string" ? value.promptId.trim().slice(0, 100) : undefined,
     provider,
     model: typeof value.model === "string" ? value.model.trim().slice(0, 200) : undefined,
@@ -418,6 +422,9 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     }
     if (interaction.config.options?.some((option) => !ids.has(option.targetInteractionId))) {
       return { success: false, error: "Target guided routing tidak ditemukan." };
+    }
+    if (interaction.config.fallbackInteractionId && !ids.has(interaction.config.fallbackInteractionId)) {
+      return { success: false, error: "Next interaction fallback tidak ditemukan." };
     }
   }
 

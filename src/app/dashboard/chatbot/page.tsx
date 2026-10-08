@@ -1341,6 +1341,7 @@ export default function ChatbotPage() {
 
                       <ResponseMeta
                         timestamp={msg.timestamp}
+                        align={isUser ? "end" : "start"}
                         generationDurationMs={isUser ? undefined : msg.generationDurationMs}
                         showRetrieval={!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG" || msg.messageType === "WEB_SEARCH")}
                         webSearch={!isUser && msg.messageType === "WEB_SEARCH"}

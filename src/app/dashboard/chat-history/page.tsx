@@ -579,6 +579,7 @@ export default function ChatHistoryPage() {
                     {!isUser && message.uiComponents?.map((component) => <HistoryComponentPreview key={component.id} component={component} />)}
                     <ResponseMeta
                       timestamp={message.timestamp}
+                      align={isUser ? "end" : "start"}
                       generationDurationMs={isUser ? undefined : message.generationDurationMs}
                       showRetrieval={!isUser && (message.messageType === "FAQ" || message.messageType === "RAG" || message.messageType === "WEB_SEARCH")}
                       webSearch={!isUser && message.messageType === "WEB_SEARCH"}
@@ -889,6 +890,7 @@ export default function ChatHistoryPage() {
 
                         <ResponseMeta
                           timestamp={msg.timestamp}
+                          align={isUser ? "end" : "start"}
                           generationDurationMs={isUser ? undefined : msg.generationDurationMs}
                           showRetrieval={!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG" || msg.messageType === "WEB_SEARCH")}
                           webSearch={!isUser && msg.messageType === "WEB_SEARCH"}

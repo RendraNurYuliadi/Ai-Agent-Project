@@ -33,6 +33,7 @@ type WebSource = {
 
 export function ResponseMeta({
   timestamp,
+  align = "start",
   generationDurationMs,
   showRetrieval,
   webSearch = false,
@@ -41,6 +42,7 @@ export function ResponseMeta({
   webSources = [],
 }: {
   timestamp: string | Date;
+  align?: "start" | "end";
   generationDurationMs?: number;
   showRetrieval?: boolean;
   webSearch?: boolean;
@@ -54,7 +56,7 @@ export function ResponseMeta({
     ? ""
     : date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
-  return <div className="flex w-fit self-start flex-wrap items-center justify-start gap-2 px-1 text-[10px]">
+  return <div className={`flex w-fit flex-wrap items-center gap-2 px-1 text-[10px] ${align === "end" ? "self-end justify-end" : "self-start justify-start"}`}>
     {time && <span className="select-none text-neutral-600">{time}</span>}
     {(showRetrieval || webSources.length > 0) && <>
       <button type="button" onClick={() => setDetailsOpen(true)} className="cursor-pointer text-neutral-500 hover:text-neutral-300">

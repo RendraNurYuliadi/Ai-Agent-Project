@@ -280,6 +280,7 @@ export async function processBotTurn(
   if (!interaction) throw new Error("Bot tidak memiliki entry interaction.");
 
   let guidedTargetSelected = false;
+  let guidedFallbackTargetId: string | null = null;
   let advanceToNextInteraction = false;
   let dataCollectionState = conversation.dataCollectionState || null;
   if (interaction.type === "guided_routing") {
@@ -333,6 +334,10 @@ export async function processBotTurn(
         guidedTargetSelected = true;
       }
     }
+    if (!guidedTargetSelected) {
+      guidedFallbackTargetId = bot.interactions.find((item) => item.id === interaction?.config.fallbackInteractionId)?.id || null;
+      dataCollectionState = null;
+    }
   }
 
   let content = "";
@@ -358,14 +363,16 @@ export async function processBotTurn(
       })),
     };
   } else if (interaction.type === "guided_routing") {
-    content = applyPromptVariables(
-      interaction.config.fallbackMessage || "Maaf, saya belum bisa menentukan topik percakapan. Silakan coba kirim pesan lagi.",
-      message,
-      user,
-      contextSent,
-      bot.variables || [],
-      sessionVariables
-    );
+    if (interaction.config.fallbackMessageEnabled !== false) {
+      content = applyPromptVariables(
+        interaction.config.fallbackMessage || "Maaf, saya belum bisa menentukan topik percakapan. Silakan coba kirim pesan lagi.",
+        message,
+        user,
+        contextSent,
+        bot.variables || [],
+        sessionVariables
+      );
+    }
   } else if (interaction.type === "text" || interaction.type === "text_start") {
     content = applyPromptVariables(interaction.config.text || "", message, user, contextSent, bot.variables || [], sessionVariables);
   } else if (interaction.type === "text_question") {
@@ -670,8 +677,9 @@ export async function processBotTurn(
   }
 
   const dataCollectionInProgress = interaction.type === "data_collection" && dataCollectionState?.interactionId === interaction.id && !dataCollectionState.completed;
-  const state = interaction.type === "guided_routing" && !guidedTargetSelected
-    ? { currentInteractionId: interaction.id, botStatus: "active" as const }
+  const guidedRouteFailed = interaction.type === "guided_routing" && !guidedTargetSelected;
+  const state = guidedRouteFailed
+    ? { currentInteractionId: guidedFallbackTargetId || interaction.id, botStatus: "active" as const }
     : dataCollectionInProgress
       ? { currentInteractionId: interaction.id, botStatus: "active" as const }
     : stateForAction(interaction);
@@ -694,7 +702,7 @@ export async function processBotTurn(
   }
 
   return {
-    assistantMessage: silent ? null : {
+    assistantMessage: silent || (guidedRouteFailed && interaction.config.fallbackMessageEnabled === false) ? null : {
       id: new ObjectId().toString(),
       role: "assistant",
       content,

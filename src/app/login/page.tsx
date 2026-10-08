@@ -82,7 +82,7 @@ export default function LoginPage() {
           </h1>
 
           <p className="text-sm text-neutral-500 mt-2">
-            Management Portal & Knowledge Base Dashboard
+            AI Bot & Knowledge Base Management 
           </p>
         </div>
 
@@ -94,7 +94,7 @@ export default function LoginPage() {
             </h2>
 
             <p className="text-xs text-neutral-500 mt-1">
-              Gunakan kredensial yang telah dibuatkan oleh Administrator
+              Silakan masuk menggunakan akun yang telah terdaftar.
             </p>
           </div>
 
@@ -121,7 +121,7 @@ export default function LoginPage() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="admin@example.com"
+                  placeholder="user@example.com"
                   className="w-full pl-10 pr-4 py-2.5 bg-black border border-neutral-800 rounded-xl text-white placeholder-neutral-600 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-600 focus:border-neutral-600 transition-all"
                 />
               </div>
@@ -184,7 +184,7 @@ export default function LoginPage() {
         <div className="mt-5 text-center flex items-center justify-center gap-1.5 text-xs text-neutral-600">
           <ShieldCheck className="w-3.5 h-3.5 text-neutral-400" />
           <span>
-            Pendaftaran baru otomatis mendapatkan hak akses Public User.
+            Daftar untuk mulai menggunakan GenAI Chatbot.
           </span>
         </div>
       </div>

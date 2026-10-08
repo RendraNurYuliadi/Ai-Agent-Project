@@ -229,6 +229,18 @@ function toEdges(interactions: BotInteraction[]): Edge[] {
           style: { stroke: "#525252", strokeWidth: 1 },
         });
       });
+      if (interaction.config.fallbackInteractionId) {
+        edges.push({
+          id: `${interaction.id}--fallback`,
+          source: interaction.id,
+          target: interaction.config.fallbackInteractionId,
+          label: "Fallback",
+          type: "smoothstep",
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#737373" },
+          labelStyle: { fill: "#a3a3a3", fontSize: 10 },
+          style: { stroke: "#737373", strokeWidth: 1, strokeDasharray: "4 3" },
+        });
+      }
     }
     return edges;
   });
@@ -239,7 +251,7 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
     case "welcome_message":
       return { title: "Selamat datang", subtitle: "Ada yang bisa kami bantu?", icon: "sparkles", footerText: "", quickButtons: [] };
     case "guided_routing":
-      return { provider: "global", text: "Pilih topik yang ingin dibahas.", promptId, options: [] };
+      return { provider: "global", text: "Pilih topik yang ingin dibahas.", promptId, options: [], fallbackMessageEnabled: true };
     case "small_talk":
       return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.8, maxTokens: 400, promptId, systemPrompt: "Kamu adalah asisten yang ramah dan ringkas." };
     case "rag":
@@ -801,12 +813,23 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
 
                 {selectedInteraction.type === "guided_routing" && (
                   <div className="space-y-3">
-                    <TextAreaField
+                    <label className="flex cursor-pointer items-center gap-2 text-[10px] text-neutral-300">
+                      <input type="checkbox" checked={selectedInteraction.config.fallbackMessageEnabled !== false} onChange={(event) => updateConfig({ fallbackMessageEnabled: event.target.checked })} className="accent-white" />
+                      Tampilkan pesan fallback saat route tidak ditemukan
+                    </label>
+                    {selectedInteraction.config.fallbackMessageEnabled !== false && <TextAreaField
                       label="Pesan fallback saat route tidak ditemukan"
                       value={selectedInteraction.config.fallbackMessage ?? "Maaf, saya belum bisa menentukan topik percakapan. Silakan coba kirim pesan lagi."}
                       onChange={(value) => updateConfig({ fallbackMessage: value })}
                       rows={3}
-                    />
+                      variableOptions={availableVariableOptions}
+                    />}
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Next interaction saat route tidak ditemukan
+                      <select value={selectedInteraction.config.fallbackInteractionId || ""} onChange={(event) => updateConfig({ fallbackInteractionId: event.target.value || undefined })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                        <option value="">Tetap di Guided Routing</option>
+                        {otherInteractions.map((item) => <option key={item.id} value={item.id}>{interactionDisplayName(item)}</option>)}
+                      </select>
+                    </label>
                     <PromptSelector type="guided_routing" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} variableOptions={availableVariableOptions} />
                     <label className="block space-y-1.5 text-[10px] text-neutral-500">LLM provider
                       <select value={selectedInteraction.config.provider === "lmstudio" || selectedInteraction.config.provider === "openrouter" ? selectedInteraction.config.provider : "global"} onChange={(event) => {
