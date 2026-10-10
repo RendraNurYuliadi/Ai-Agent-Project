@@ -112,6 +112,7 @@ export interface BotInteractionConfig {
   temperature?: number;
   maxTokens?: number;
   webSearchMaxResults?: number;
+  ragDocumentMaxResults?: number;
   dataCollectionQuestions?: DataCollectionQuestion[];
   dataCollectionValidator?: DataCollectionValidator;
   dataCollectionSubmittedFields?: DataCollectionSubmittedField[];
@@ -330,6 +331,9 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
       : undefined,
     webSearchMaxResults: typeof value.webSearchMaxResults === "number" && Number.isFinite(value.webSearchMaxResults)
       ? Math.max(1, Math.min(10, Math.round(value.webSearchMaxResults)))
+      : undefined,
+    ragDocumentMaxResults: typeof value.ragDocumentMaxResults === "number" && Number.isFinite(value.ragDocumentMaxResults)
+      ? Math.max(1, Math.min(10, Math.round(value.ragDocumentMaxResults)))
       : undefined,
     dataCollectionQuestions,
     dataCollectionValidator,

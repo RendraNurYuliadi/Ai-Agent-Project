@@ -35,10 +35,9 @@ import {
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
   Plus,
   Save,
+  Settings2,
   Sparkles,
   Trash2,
   UserRound,
@@ -138,7 +137,6 @@ function getBotVariableOptions(customVariables: BotCustomVariable[] = [], intera
 }
 
 function interactionDisplayName(interaction: Pick<BotInteraction, "type" | "config">): string {
-  if (interaction.type === "data_collection") return BOT_INTERACTION_LABELS[interaction.type];
   return interaction.config.name?.trim() || interaction.config.title?.trim() || interaction.config.question?.trim() || BOT_INTERACTION_LABELS[interaction.type];
 }
 
@@ -270,7 +268,7 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
     case "small_talk":
       return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.8, maxTokens: 400, promptId, systemPrompt: "Kamu adalah asisten yang ramah dan ringkas." };
     case "rag":
-      return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.7, maxTokens: 1024, knowledgeBases: [], promptId, systemPrompt: "Jawab berdasarkan knowledge context. Jika informasi tidak tersedia, sampaikan dengan jujur.\n\n{context}" };
+      return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.7, maxTokens: 1024, ragDocumentMaxResults: 5, knowledgeBases: [], promptId, systemPrompt: "Jawab berdasarkan knowledge context. Jika informasi tidak tersedia, sampaikan dengan jujur.\n\n{context}" };
     case "web_search":
       return { provider: "lmstudio", lmStudioUrl: "http://localhost:1234/v1", model: "", temperature: 0.7, maxTokens: 1024, webSearchMaxResults: 5 };
     case "data_collection":
@@ -589,16 +587,8 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
     setCustomVariables((items) => items.filter((item) => item.id !== id));
   };
   const showConfiguration = configOpen && Boolean(selectedInteraction);
-  const editorGridClass = showConfiguration
-    ? interactionsOpen ? "xl:grid-cols-[190px_minmax(0,1fr)_310px]" : "xl:grid-cols-[42px_minmax(0,1fr)_310px]"
-    : interactionsOpen ? "xl:grid-cols-[190px_minmax(0,1fr)]" : "xl:grid-cols-[42px_minmax(0,1fr)]";
-  const editorRowsClass = showConfiguration
-    ? interactionsOpen
-      ? "grid-rows-[auto_minmax(0,1fr)_minmax(160px,32dvh)] xl:grid-rows-1"
-      : "grid-rows-[minmax(0,1fr)_minmax(160px,32dvh)] xl:grid-rows-1"
-    : interactionsOpen
-      ? "grid-rows-[auto_minmax(0,1fr)] xl:grid-rows-1"
-      : "grid-rows-[minmax(0,1fr)] xl:grid-rows-1";
+  const editorGridClass = interactionsOpen ? "xl:grid-cols-[190px_minmax(0,1fr)]" : "xl:grid-cols-[42px_minmax(0,1fr)]";
+  const editorRowsClass = interactionsOpen ? "grid-rows-[auto_minmax(0,1fr)] xl:grid-rows-1" : "grid-rows-[minmax(0,1fr)] xl:grid-rows-1";
   const availableVariableOptions = getBotVariableOptions(customVariables, interactions, selectedInteraction?.type);
   const groupedInteractionTypes = [
     { label: "Tools", types: BOT_TOOL_TYPES },
@@ -667,8 +657,8 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
           <button type="button" onClick={() => setInteractionsOpen((open) => !open)} title={interactionsOpen ? "Sembunyikan daftar interaction" : "Tampilkan daftar interaction"} aria-label={interactionsOpen ? "Sembunyikan daftar interaction" : "Tampilkan daftar interaction"} aria-expanded={interactionsOpen} className="rounded-md border border-neutral-800 p-2 text-neutral-400 hover:bg-neutral-900 hover:text-white">
             {interactionsOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
           </button>
-          {selectedInteraction && <button type="button" onClick={() => setConfigOpen((open) => !open)} title={showConfiguration ? "Sembunyikan konfigurasi" : "Tampilkan konfigurasi"} aria-label={showConfiguration ? "Sembunyikan konfigurasi" : "Tampilkan konfigurasi"} aria-expanded={showConfiguration} className="rounded-md border border-neutral-800 p-2 text-neutral-400 hover:bg-neutral-900 hover:text-white">
-            {showConfiguration ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+          {selectedInteraction && <button type="button" onClick={() => setConfigOpen((open) => !open)} title="Properti interaction" aria-label="Properti interaction" aria-expanded={showConfiguration} className="rounded-md border border-neutral-800 p-2 text-neutral-400 hover:bg-neutral-900 hover:text-white">
+            <Settings2 className="h-4 w-4" />
           </button>}
           {saved && <span className="inline-flex items-center gap-1 text-[10px] text-emerald-300"><Check className="h-3 w-3" /> Tersimpan</span>}
           <button type="button" onClick={() => void saveBot()} disabled={saving || !botName.trim()} className="inline-flex items-center gap-2 rounded-md bg-white px-3.5 py-2 text-xs font-semibold text-black hover:bg-neutral-200 disabled:opacity-40">
@@ -757,19 +747,32 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
           </ReactFlow>
         </section>
 
-        {showConfiguration && <aside className="min-h-0 overflow-auto border-t border-neutral-800 p-4 xl:border-l xl:border-t-0">
-          <div className="flex items-center justify-between gap-2">
+        {showConfiguration && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfigOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="interaction-properties-title" className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-neutral-800 bg-[#080808] shadow-2xl">
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-900 px-4 py-3">
             <div>
-              <h2 className="text-xs font-semibold text-white">Konfigurasi</h2>
+              <h2 id="interaction-properties-title" className="text-sm font-semibold text-white">Properti interaction</h2>
               <p className="mt-1 text-[10px] text-neutral-600">{selectedInteraction ? BOT_INTERACTION_LABELS[selectedInteraction.type] : "Pilih node untuk mengatur detail."}</p>
             </div>
             <div className="flex items-center gap-1">
-              <button type="button" onClick={() => setConfigOpen(false)} aria-label="Sembunyikan konfigurasi" title="Sembunyikan konfigurasi" className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-900 hover:text-white"><PanelRightClose className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={() => setConfigOpen(false)} aria-label="Tutup properti" title="Tutup properti" className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-900 hover:text-white"><X className="h-4 w-4" /></button>
               {selectedInteraction && <button type="button" onClick={() => setConfirmRemoveOpen(true)} disabled={interactions.length <= 1} aria-label="Hapus interaction" title="Hapus interaction" className="rounded-md p-1.5 text-neutral-600 hover:bg-red-950/50 hover:text-red-300 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>}
             </div>
           </div>
 
-          <div className="mt-4 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="space-y-4">
+            {selectedInteraction && <div className="space-y-1.5 rounded-md border border-neutral-800 bg-neutral-950/50 p-3">
+              <TextField
+                label="Nama interaction"
+                value={selectedInteraction.config.name ?? interactionDisplayName(selectedInteraction)}
+                onChange={(value) => updateConfig({ name: value })}
+                placeholder={`Nama ${BOT_INTERACTION_LABELS[selectedInteraction.type]}`}
+                variableOptions={availableVariableOptions}
+              />
+              <p className="text-[9px] leading-4 text-neutral-600">Nama ini digunakan pada node dan daftar interaction.</p>
+            </div>}
+
             <div className="space-y-3 rounded-md border border-neutral-800 bg-[#090909] p-3">
               <div className="flex items-center justify-between gap-2">
                 <div>
@@ -804,11 +807,6 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
 
             {selectedInteraction ? (
               <>
-                <div className="rounded-md border border-neutral-800 bg-black px-3 py-2.5">
-                  <p className="text-[9px] uppercase tracking-wide text-neutral-600">{BOT_INTERACTION_LABELS[selectedInteraction.type]}</p>
-                  <p className="mt-1 truncate text-xs font-medium text-white">{interactionDisplayName(selectedInteraction)}</p>
-                </div>
-
                 {selectedInteraction.type === "welcome_message" && (
                   <div className="space-y-3">
                     <TextField label="Title" value={selectedInteraction.config.title || ""} onChange={(value) => updateConfig({ title: value })} />
@@ -1070,6 +1068,9 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
 
                 {selectedInteraction.type === "rag" && (
                   <div className="space-y-3">
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Jumlah dokumen retrieval
+                      <input type="number" min="1" max="10" value={selectedInteraction.config.ragDocumentMaxResults ?? 5} onChange={(event) => updateConfig({ ragDocumentMaxResults: Math.max(1, Math.min(10, Number(event.target.value) || 5)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+                    </label>
                     <label className="block space-y-1.5 text-[10px] text-neutral-500">LLM provider
                       <select value={selectedInteraction.config.provider === "openrouter" ? "openrouter" : "lmstudio"} onChange={(event) => void selectRagProvider(event.target.value as "lmstudio" | "openrouter")} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
                         <option value="lmstudio">LM Studio</option><option value="openrouter">OpenRouter</option>
@@ -1113,8 +1114,6 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                 )}
 
                 {(selectedInteraction.type === "text" || selectedInteraction.type === "text_start") && <TextAreaField label="Pesan" value={selectedInteraction.config.text || ""} onChange={(value) => updateConfig({ text: value })} rows={6} variableOptions={availableVariableOptions} />}
-                {selectedInteraction.type !== "data_collection" && <TextField label="Nama interaction" value={selectedInteraction.config.name || ""} onChange={(value) => updateConfig({ name: value })} placeholder="Masukkan nama interaction" variableOptions={availableVariableOptions} />}
-
                 {selectedInteraction.type === "text_question" && (
                   <div className="space-y-3">
                     <TextAreaField label="Pertanyaan" value={selectedInteraction.config.question || ""} onChange={(value) => updateConfig({ question: value })} rows={4} variableOptions={availableVariableOptions} />
@@ -1145,7 +1144,9 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
               </>
             ) : <p className="rounded-md border border-dashed border-neutral-800 px-3 py-8 text-center text-[10px] text-neutral-600">Pilih node di canvas atau tambahkan interaction.</p>}
           </div>
-        </aside>}
+          </div>
+          </section>
+        </div>}
       </div>
     </div>
   );

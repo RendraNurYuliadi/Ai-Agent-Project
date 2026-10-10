@@ -240,7 +240,7 @@ export default function ChatbotPage() {
   const [isListening, setIsListening] = useState(false);
   const [speechModalOpen, setSpeechModalOpen] = useState(false);
   const [speechTranscript, setSpeechTranscript] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
   const speechRecognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const speechTranscriptRef = useRef("");
@@ -256,7 +256,8 @@ export default function ChatbotPage() {
   const notify = (type: "success" | "error", message: string) => setNotification({ type, message });
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = messagesContainerRef.current;
+    container?.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -659,7 +660,7 @@ export default function ChatbotPage() {
   );
 
   return (
-    <div className="h-[calc(100vh-5rem)] w-full min-w-0 flex rounded-2xl overflow-hidden border border-neutral-800 bg-black">
+    <div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden rounded-2xl border border-neutral-800 bg-black">
       {/* Sidebar */}
       <div
         className={`${sidebarOpen ? "w-72" : "w-0"
@@ -690,7 +691,7 @@ export default function ChatbotPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2 space-y-1">
           {loadingConvs ? (
             <div className="py-8 text-center text-xs text-neutral-500">
               <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
@@ -797,7 +798,7 @@ export default function ChatbotPage() {
       )}
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-black">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-black">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-900 bg-[#080808] px-2.5 py-2.5 sm:flex-nowrap sm:px-4 sm:py-3">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
@@ -881,7 +882,7 @@ export default function ChatbotPage() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto p-4 space-y-5">
           {!activeConvId && messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center">
               {skillSelectionRequired ? (
@@ -1046,7 +1047,6 @@ export default function ChatbotPage() {
                 </div>
               )}
 
-              <div ref={messagesEndRef} />
             </>
           )}
         </div>

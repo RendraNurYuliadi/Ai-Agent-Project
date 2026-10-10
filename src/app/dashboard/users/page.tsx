@@ -297,7 +297,7 @@ export default function UsersPage() {
     : { label: "Human", Icon: UserIcon, className: "border-neutral-800 bg-neutral-900 text-neutral-300" };
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       {/* Toast Notification */}
       {notification && (
         <div
@@ -318,7 +318,7 @@ export default function UsersPage() {
       )}
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex shrink-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
             <Users className="w-6 h-6 text-white" />
@@ -348,7 +348,7 @@ export default function UsersPage() {
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
+      <div className="flex shrink-0 flex-col items-center justify-between gap-4 rounded-2xl border border-neutral-800 bg-[#0a0a0a] p-4 md:flex-row">
         {/* Search input */}
         <div className="relative w-full md:w-80">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" />
@@ -382,8 +382,8 @@ export default function UsersPage() {
       </div>
 
       {/* Users Table */}
-      <div className="bg-[#0a0a0a] border border-neutral-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-neutral-800 bg-[#0a0a0a] shadow-xl">
+        <div className="min-h-0 flex-1 overflow-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-neutral-800 bg-black text-[11px] font-semibold text-neutral-500 uppercase tracking-wider">
@@ -525,7 +525,7 @@ export default function UsersPage() {
           </table>
         </div>
 
-        <div className="p-4 border-t border-neutral-800 bg-black/60 flex items-center justify-between text-xs text-neutral-500">
+        <div className="flex shrink-0 items-center justify-between border-t border-neutral-800 bg-black/60 p-4 text-xs text-neutral-500">
           <span>
             Menampilkan {filteredUsers.length} dari {users.length} user
             terdaftar

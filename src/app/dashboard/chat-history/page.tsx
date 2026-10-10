@@ -346,7 +346,7 @@ export default function ChatHistoryPage() {
     const selectedBotUser = viewConv?.botUser || selectedConversation?.botUser;
     const selectedSkill = viewConv?.skill || selectedConversation?.skill;
 
-    return <div className="space-y-5">
+    return <div className="flex h-full min-h-0 flex-col gap-5 overflow-hidden">
       <ActionToast type="success" message={notice} />
       <ConfirmDialog
         open={Boolean(pendingDelete)}
@@ -365,7 +365,7 @@ export default function ChatHistoryPage() {
         onCancel={() => setBulkDeleteOpen(false)}
         onConfirm={() => void deleteAllConversations()}
       />
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Admin workspace</p>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white"><History className="h-6 w-6" />All Conversations</h1>
@@ -384,7 +384,7 @@ export default function ChatHistoryPage() {
         setViewConv(null);
         setSelectedConversationId("");
         setAppliedFilters({ search, botId: botFilter, skillId: skillFilter, dateFrom, dateTo });
-      }} className="grid gap-3 rounded-lg border border-neutral-800 bg-[#080808] p-3 sm:grid-cols-2 xl:grid-cols-6">
+      }} className="grid shrink-0 gap-3 rounded-lg border border-neutral-800 bg-[#080808] p-3 sm:grid-cols-2 xl:grid-cols-6">
         <label className="space-y-1.5 text-[10px] text-neutral-500 xl:col-span-2">Username, nama lengkap, email, atau judul
           <span className="relative block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-600" /><input type="search" placeholder="Cari user atau percakapan..." value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-md border border-neutral-800 bg-black py-2 pl-9 pr-3 text-xs text-white placeholder-neutral-600 outline-none focus:border-neutral-600" /></span>
         </label>
@@ -405,10 +405,10 @@ export default function ChatHistoryPage() {
           }} className="rounded-md border border-neutral-800 px-3 py-2 text-xs text-neutral-400 hover:text-white">Reset</button>
         </div>
       </form>
-      {error && <div role="alert" className="rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-200">{error}</div>}
+      {error && <div role="alert" className="shrink-0 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-200">{error}</div>}
 
-      <div className="grid min-h-[620px] grid-cols-1 gap-3 xl:grid-cols-[minmax(250px,0.85fr)_minmax(340px,1.5fr)_minmax(230px,0.8fr)]">
-        <section className="flex min-h-[360px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-[#080808] xl:max-h-[calc(100vh-250px)]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto xl:grid-cols-[minmax(250px,0.85fr)_minmax(340px,1.5fr)_minmax(230px,0.8fr)] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
+        <section className="flex min-h-[360px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-[#080808] xl:h-full xl:min-h-0">
           <div className="flex items-center justify-between border-b border-neutral-800 px-3.5 py-3">
             <h2 className="text-xs font-semibold text-neutral-200">Percakapan</h2>
             <span className="text-[10px] text-neutral-600">{pagination.total} percakapan</span>
@@ -436,13 +436,13 @@ export default function ChatHistoryPage() {
           </footer>
         </section>
 
-        <section className="flex min-h-[460px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-black xl:max-h-[calc(100vh-250px)]">
+        <section className="flex min-h-[460px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-black xl:h-full xl:min-h-0">
           {viewConv ? <>
             <header className="flex items-center justify-between gap-3 border-b border-neutral-800 bg-[#080808] px-4 py-3">
               <div className="min-w-0"><h2 className="truncate text-sm font-semibold text-white">{viewConv.title}</h2><p className="mt-1 text-[10px] text-neutral-600">{viewConv.messages.length} pesan · {formatDate(selectedConversation?.createdAt || "")}</p></div>
               <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] ${selectedBot?.isActive ? "border-emerald-900/70 text-emerald-300" : "border-neutral-800 text-neutral-500"}`}>{selectedBot?.isActive ? "Bot aktif" : "Bot tidak tersedia"}</span>
             </header>
-            <div className="flex-1 space-y-5 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
               {loadingDetail && <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-neutral-500" /></div>}
               {!loadingDetail && viewConv.messages.length === 0 && <p className="py-12 text-center text-xs text-neutral-600">Belum ada pesan di percakapan ini.</p>}
               {!loadingDetail && viewConv.messages.map((message, index) => {
@@ -461,7 +461,7 @@ export default function ChatHistoryPage() {
           </> : <div className="flex flex-1 flex-col items-center justify-center px-6 text-center"><MessageSquare className="h-8 w-8 text-neutral-700" /><p className="mt-3 text-sm font-medium text-neutral-400">Pilih percakapan</p><p className="mt-1 text-xs text-neutral-600">Preview chat akan tampil di sini.</p></div>}
         </section>
 
-        <aside className="space-y-3 xl:max-h-[calc(100vh-250px)] xl:overflow-y-auto">
+        <aside className="min-h-0 space-y-3 xl:h-full xl:overflow-y-auto">
           <ProfileSection icon={<UserRound className="h-4 w-4" />} title="Biodata user">
             {selectedUser ? <ProfileFields fields={[["Nama lengkap", selectedUser.fullName], ["Username", selectedUser.name], ["Email", selectedUser.email], ["Role", selectedUser.role], ["Tipe", selectedUser.userType], ["Terdaftar", selectedUser.createdAt ? formatDate(selectedUser.createdAt) : "-"], ["User ID", selectedUser.id]]} /> : <ProfileEmpty />}
           </ProfileSection>
@@ -490,7 +490,7 @@ export default function ChatHistoryPage() {
     : "from-neutral-700 to-neutral-500";
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       <ActionToast type="success" message={notice} />
       <ConfirmDialog
         open={Boolean(pendingDelete)}
@@ -509,7 +509,7 @@ export default function ChatHistoryPage() {
         onCancel={() => setBulkDeleteOpen(false)}
         onConfirm={() => void deleteAllConversations()}
       />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex shrink-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
             <History className="w-6 h-6 text-white" />
@@ -529,7 +529,7 @@ export default function ChatHistoryPage() {
       </div>
 
       {/* Search */}
-      <div className="relative max-w-md">
+      <div className="relative max-w-md shrink-0">
         <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-600" />
 
         <input
@@ -542,6 +542,7 @@ export default function ChatHistoryPage() {
       </div>
 
       {/* History List */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
       {loading ? (
         <div className="py-20 text-center text-neutral-500">
           <Loader2 className="w-7 h-7 animate-spin mx-auto mb-2 text-neutral-300" />
@@ -631,6 +632,7 @@ export default function ChatHistoryPage() {
           ))}
         </div>
       )}
+      </div>
 
       {/* View Conversation Modal */}
       {viewConv && (

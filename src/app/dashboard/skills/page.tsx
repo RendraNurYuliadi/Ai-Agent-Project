@@ -181,7 +181,7 @@ export default function SkillsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       <ActionToast type={notice?.type || "success"} message={notice?.message || ""} />
       <ConfirmDialog
         open={Boolean(pendingDelete)}
@@ -201,7 +201,7 @@ export default function SkillsPage() {
         onConfirm={() => void deleteAllSkills()}
       />
 
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Bot identity</p>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white"><Sparkles className="h-6 w-6" />Skills</h1>
@@ -213,17 +213,18 @@ export default function SkillsPage() {
         </div>
       </header>
 
-      {error && !modalOpen && <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}
+      {error && !modalOpen && <div role="alert" className="flex shrink-0 items-center gap-2 rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}
 
-      {!loading && !users.length && <div className="flex flex-col gap-2 rounded-lg border border-neutral-800 bg-[#080808] px-4 py-3 text-xs text-neutral-400 sm:flex-row sm:items-center">
+      {!loading && !users.length && <div className="flex shrink-0 flex-col gap-2 rounded-lg border border-neutral-800 bg-[#080808] px-4 py-3 text-xs text-neutral-400 sm:flex-row sm:items-center">
         <span>Tambahkan user terlebih dahulu untuk membuat skill.</span>
         <Link href="/dashboard/users" className="text-neutral-200 underline">Buka Users</Link>
       </div>}
 
-      <section className="overflow-hidden rounded-xl border border-neutral-800 bg-[#080808]">
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)_minmax(150px,1fr)_auto] gap-4 border-b border-neutral-800 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 max-sm:grid-cols-[minmax(0,1fr)_auto]">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-neutral-800 bg-[#080808]">
+        <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)_minmax(150px,1fr)_auto] gap-4 border-b border-neutral-800 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 max-sm:grid-cols-[minmax(0,1fr)_auto]">
           <span>Skill</span><span className="max-sm:hidden">User terhubung</span><span className="max-sm:hidden">Bot flow</span><span className="text-right">Aksi</span>
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-neutral-500" /></div> : skills.length === 0 ? (
           <div className="px-5 py-16 text-center"><Sparkles className="mx-auto h-8 w-8 text-neutral-700" /><p className="mt-3 text-sm font-medium text-neutral-300">Belum ada skill</p><p className="mt-1 text-xs text-neutral-600">Buat skill untuk menghubungkan user bot dan bot flow.</p></div>
         ) : skills.map((skill) => (
@@ -234,6 +235,7 @@ export default function SkillsPage() {
             <div className="flex items-center justify-end gap-1"><button type="button" onClick={() => void duplicateSkill(skill)} aria-label={`Duplikat skill ${skill.name}`} title="Duplikat skill" className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><Copy className="h-4 w-4" /></button><button type="button" onClick={() => openEdit(skill)} aria-label={`Edit nama dan relasi skill ${skill.name}`} title="Edit nama, user, dan bot terkait" className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => setPendingDelete(skill)} aria-label={`Hapus skill ${skill.name}`} title="Hapus skill" className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button></div>
           </article>
         ))}
+        </div>
       </section>
 
       {modalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">

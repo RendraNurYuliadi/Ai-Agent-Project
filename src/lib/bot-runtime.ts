@@ -493,7 +493,7 @@ export async function processBotTurn(
         .toArray()
       : [];
     const activeCollections = activeKbs.map((kb) => kb.collectionName);
-    const searchResult = await smartSearchKB(db, message.trim(), activeCollections, 5);
+    const searchResult = await smartSearchKB(db, message.trim(), activeCollections, interaction.config.ragDocumentMaxResults ?? 5);
     topArticles = searchResult.articles;
     contextSent = searchResult.formattedContext;
     const triggerArticle = topArticles[0];

@@ -441,7 +441,7 @@ export default function KnowledgeBasePage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       {/* Toast Notification */}
       {notification && (
         <div
@@ -477,7 +477,7 @@ export default function KnowledgeBasePage() {
       />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             {activeKb ? (
@@ -539,7 +539,7 @@ export default function KnowledgeBasePage() {
 
       {/* KB LIST VIEW */}
       {!activeKb && (
-        <>
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {loading ? (
             <div className="py-20 text-center text-neutral-500">
               <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-neutral-300" />
@@ -653,14 +653,14 @@ export default function KnowledgeBasePage() {
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* ARTICLES HORIZONTAL LIST VIEW WITH PAGINATION */}
       {activeKb && (
-        <div className="space-y-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
           {/* Search & Category Filter Section */}
-          <div className="flex flex-col gap-3 bg-[#0a0a0a] p-3.5 rounded-2xl border border-neutral-800">
+          <div className="flex shrink-0 flex-col gap-3 rounded-2xl border border-neutral-800 bg-[#0a0a0a] p-3.5">
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500" />
@@ -765,6 +765,7 @@ export default function KnowledgeBasePage() {
             )}
           </div>
 
+          <div className="min-h-0 flex-1 overflow-y-auto">
           {articlesLoading ? (
             <div className="py-16 text-center text-neutral-500">
               <Loader2 className="w-7 h-7 animate-spin mx-auto mb-2 text-neutral-300" />
@@ -890,8 +891,10 @@ export default function KnowledgeBasePage() {
           )}
 
           {/* Pagination Controls */}
+          </div>
+
           {totalPages > 1 && (
-            <div className="p-4 bg-[#0a0a0a] border border-neutral-800 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-500 mt-4">
+            <div className="flex shrink-0 flex-col items-center justify-between gap-3 rounded-2xl border border-neutral-800 bg-[#0a0a0a] p-4 text-xs text-neutral-500 sm:flex-row">
               <div>
                 Menampilkan{" "}
                 <span className="font-semibold text-white">
