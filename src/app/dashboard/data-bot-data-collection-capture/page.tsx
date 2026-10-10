@@ -163,7 +163,7 @@ export default function DataBotDataCollectionCapturePage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       <ActionToast type={notice?.type || "success"} message={notice?.message || ""} />
       <ConfirmDialog
         open={Boolean(pendingDeleteId)}
@@ -184,7 +184,7 @@ export default function DataBotDataCollectionCapturePage() {
         onCancel={() => setPendingBulkDelete(false)}
         onConfirm={() => void deleteAllCaptures()}
       />
-      <header>
+      <header className="shrink-0">
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Bot data</p>
         <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white">
           <Database className="h-6 w-6" /> Data Bot Data Collection Capture
@@ -192,12 +192,12 @@ export default function DataBotDataCollectionCapturePage() {
         <p className="mt-1 max-w-2xl text-sm text-neutral-500">Data yang disimpan oleh node Data Collection Submitted.</p>
       </header>
 
-      {error && <div role="alert" className="rounded-md border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200">{error}</div>}
+      {error && <div role="alert" className="shrink-0 rounded-md border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200">{error}</div>}
 
-      <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <section className="min-w-0">
-          <h2 className="mb-2 text-xs font-semibold text-neutral-300">Collection name · bot</h2>
-          <div className="divide-y divide-neutral-900 border-y border-neutral-900">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(110px,0.35fr)_minmax(0,1.65fr)] gap-5 overflow-hidden lg:grid-cols-[260px_minmax(0,1fr)] lg:grid-rows-1">
+        <section className="flex min-h-0 min-w-0 flex-col">
+          <h2 className="mb-2 shrink-0 text-xs font-semibold text-neutral-300">Collection name · bot</h2>
+          <div className="min-h-0 flex-1 overflow-y-auto divide-y divide-neutral-900 border-y border-neutral-900">
             {botsLoading ? (
               <div className="flex justify-center py-10"><Loader2 className="h-5 w-5 animate-spin text-neutral-500" /></div>
             ) : bots.length === 0 ? (
@@ -219,16 +219,16 @@ export default function DataBotDataCollectionCapturePage() {
           </div>
         </section>
 
-        <section className="min-w-0">
+        <section className="flex min-h-0 min-w-0 flex-col">
           {!selectedBot ? (
-            <div className="flex min-h-56 flex-col items-center justify-center border-y border-neutral-900 text-center">
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center border-y border-neutral-900 text-center">
               <Rows3 className="h-7 w-7 text-neutral-700" />
               <p className="mt-3 text-sm font-medium text-neutral-300">Pilih collection bot</p>
               <p className="mt-1 text-xs text-neutral-600">Record capture akan ditampilkan sebagai tabel.</p>
             </div>
           ) : (
             <>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="truncate text-base font-semibold text-white">{selectedBot.name}</h2>
                   <p className="mt-1 text-[10px] text-neutral-600">{totalCount} record · {fieldNames.length} field</p>
@@ -246,7 +246,7 @@ export default function DataBotDataCollectionCapturePage() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto border-y border-neutral-800">
+              <div className="min-h-0 flex-1 overflow-auto border-y border-neutral-800">
                 <table className="w-full min-w-max border-collapse text-left text-xs">
                   <thead className="bg-[#080808] text-[10px] uppercase text-neutral-500">
                     <tr>
@@ -278,7 +278,7 @@ export default function DataBotDataCollectionCapturePage() {
                 </table>
               </div>
 
-              {totalPages > 1 && <div className="mt-3 flex items-center justify-between text-xs text-neutral-500">
+              {totalPages > 1 && <div className="mt-3 flex shrink-0 items-center justify-between text-xs text-neutral-500">
                 <span>Halaman {page} dari {totalPages}</span>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => void loadCaptures(selectedBot, page - 1)} disabled={page <= 1 || captureLoading} className="rounded-md border border-neutral-800 px-3 py-1.5 hover:text-white disabled:opacity-40">Sebelumnya</button>

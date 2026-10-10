@@ -175,9 +175,9 @@ export default function BotManagementPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       <ActionToast type="success" message={notice} />
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Automation</p>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white">
@@ -200,16 +200,17 @@ export default function BotManagementPage() {
       </header>
 
       {error && (
-        <div role="alert" className="flex items-center justify-between rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200">
+        <div role="alert" className="flex shrink-0 items-center justify-between rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200">
           {error}
           <button type="button" onClick={() => setError("")} aria-label="Tutup pesan error"><X className="h-4 w-4" /></button>
         </div>
       )}
 
-      <section className="overflow-hidden rounded-xl border border-neutral-800 bg-[#080808]">
-        <div className="grid grid-cols-[minmax(0,1fr)_120px_120px_auto] gap-4 border-b border-neutral-800 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 max-sm:grid-cols-[minmax(0,1fr)_auto]">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-neutral-800 bg-[#080808]">
+        <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_120px_120px_auto] gap-4 border-b border-neutral-800 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 max-sm:grid-cols-[minmax(0,1fr)_auto]">
           <span>Bot</span><span className="max-sm:hidden">Interactions</span><span className="max-sm:hidden">Status</span><span className="text-right">Aksi</span>
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-neutral-500" /></div>
         ) : bots.length === 0 ? (
@@ -240,6 +241,7 @@ export default function BotManagementPage() {
             </div>
           </article>
         ))}
+        </div>
       </section>
 
       {modalOpen && (

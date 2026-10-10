@@ -255,7 +255,7 @@ export default function PromptsPage() {
       : prompts.filter((p) => p.type === activeTab);
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       {/* Notification */}
       {notification && (
         <div
@@ -294,7 +294,7 @@ export default function PromptsPage() {
       />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex shrink-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
             <Zap className="w-6 h-6 text-white" />
@@ -313,7 +313,7 @@ export default function PromptsPage() {
       </div>
 
       {/* Type Tabs */}
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {[
           { key: "all", label: "Semua" },
           { key: "faq", label: "FAQ" },
@@ -336,6 +336,7 @@ export default function PromptsPage() {
       </div>
 
       {/* Prompts List */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
       {loading ? (
         <div className="py-16 text-center text-neutral-400">
           <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
@@ -425,6 +426,7 @@ export default function PromptsPage() {
           })}
         </div>
       )}
+      </div>
 
       {/* Modal */}
       {showModal && (

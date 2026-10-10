@@ -408,7 +408,7 @@ export default function ComponentsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       {notification && (
         <div className={`fixed bottom-6 right-6 z-50 border px-4 py-3 text-sm shadow-xl ${notification.type === "success" ? "border-neutral-700 bg-neutral-950 text-white" : "border-red-900 bg-neutral-950 text-red-300"}`}>
           {notification.message}
@@ -432,7 +432,7 @@ export default function ComponentsPage() {
         onConfirm={() => void deleteAllTemplates()}
       />
 
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-neutral-900 pb-5">
+      <header className="flex shrink-0 flex-wrap items-end justify-between gap-4 border-b border-neutral-900 pb-5">
         <div>
           <div className="mb-2 flex items-center gap-2 text-neutral-500">
             <Blocks className="h-4 w-4" />
@@ -446,10 +446,11 @@ export default function ComponentsPage() {
         </div>
       </header>
 
-      <section className="overflow-hidden rounded-lg border border-neutral-800 bg-[#090909]">
-        <div className="grid grid-cols-[minmax(0,1fr)_110px_100px_auto] gap-3 border-b border-neutral-800 px-4 py-3 text-[10px] font-semibold uppercase text-neutral-600 sm:grid-cols-[minmax(0,2fr)_130px_120px_130px]">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-800 bg-[#090909]">
+        <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_110px_100px_auto] gap-3 border-b border-neutral-800 px-4 py-3 text-[10px] font-semibold uppercase text-neutral-600 sm:grid-cols-[minmax(0,2fr)_130px_120px_130px]">
           <span>Template</span><span>Tipe</span><span>Artikel</span><span className="text-right">Status / Aksi</span>
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-neutral-500" /></div>
         ) : templates.length ? templates.map((template) => (
@@ -489,6 +490,7 @@ export default function ComponentsPage() {
             <p className="mt-3 text-sm text-neutral-400">Belum ada component template.</p>
           </div>
         )}
+        </div>
       </section>
 
       {modalOpen && (

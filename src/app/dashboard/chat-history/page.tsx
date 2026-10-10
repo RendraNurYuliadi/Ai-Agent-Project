@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import { usePathname } from "next/navigation";
 import {
   History,
@@ -16,8 +14,6 @@ import {
   Search,
   ExternalLink,
   Calendar,
-  CircleHelp,
-  Sparkles,
   UserRound,
   ShieldCheck,
   Layers3,
@@ -25,9 +21,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { FormattedMessage } from "@/components/formatted-message";
-import { ResponseMeta } from "@/components/response-meta";
 import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
+import { ConversationMessageBody } from "@/components/conversation-message-body";
 
 interface Conversation {
   id: string;
@@ -131,122 +126,6 @@ interface UserProfile {
   fullName: string;
   email: string;
   role: string;
-}
-
-function HistoryComponentPreview({ component }: { component: AssistantComponent }) {
-  const renderButtons = (items: ComponentActionButton[]) => (
-    <div className="flex flex-wrap gap-2">
-      {items.map((button, index) => (
-        <span
-          key={`${button.label}-${index}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300"
-        >
-          {button.label}
-          {button.action === "link" && <ExternalLink className="h-3 w-3" />}
-        </span>
-      ))}
-    </div>
-  );
-
-  const renderCard = (card: ComponentCard, index: number) => (
-    <article
-      key={`${component.id}-card-${index}`}
-      className="w-full min-w-0 overflow-hidden rounded-xl border border-neutral-800 bg-[#101010]"
-    >
-      {card.imageUrl && (
-        <Image
-          src={getImageProxyUrl(card.imageUrl)}
-          alt={card.title}
-          width={520}
-          height={card.imageHeight ?? 128}
-          unoptimized
-          style={{ height: `${card.imageHeight ?? 128}px` }}
-          className="w-full object-cover"
-        />
-      )}
-      <div className="space-y-2.5 p-3">
-        <div>
-          <h4 className="text-sm font-semibold text-white">{card.title}</h4>
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">
-            {card.subtitle}
-          </p>
-        </div>
-        {renderButtons(card.buttons)}
-      </div>
-    </article>
-  );
-
-  if (component.type === "reply_buttons") {
-    return renderButtons(component.buttons);
-  }
-
-  if (component.type === "link_buttons") {
-    return (
-      <article className="w-full max-w-[320px] rounded-xl border border-neutral-800 bg-[#101010] p-3">
-        {component.title && <h4 className="text-sm font-semibold text-white">{component.title}</h4>}
-        {component.subtitle && (
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">
-            {component.subtitle}
-          </p>
-        )}
-        <div className="mt-3 flex flex-wrap items-start gap-2">
-          {component.buttons.map((button, index) => (
-            <div
-              key={`${button.label}-${index}`}
-              className="flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5"
-            >
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-200">
-                {button.label}<ExternalLink className="h-3 w-3" />
-              </span>
-            </div>
-          ))}
-        </div>
-      </article>
-    );
-  }
-
-  if (component.type === "card" && component.card) {
-    return <div className="w-full max-w-[260px]">{renderCard(component.card, 0)}</div>;
-  }
-
-  if (component.type === "carousel" && component.cards.length > 0) {
-    return (
-      <div className="flex w-full gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
-        {component.cards.map((card, index) => (
-          <div key={`${component.id}-${index}`} className="w-[240px] shrink-0 snap-start">
-            {renderCard(card, index)}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return null;
-}
-
-function HistoryBotInteractionPreview({ data }: { data: NonNullable<Message["botInteraction"]> }) {
-  const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
-  const buttons = data.buttons || data.quickButtons || [];
-  return (
-    <article className="w-full max-w-[360px] rounded-xl border border-neutral-800 bg-[#101010] p-3.5">
-      {data.type === "welcome_message" && (
-        <div className="mb-2 flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black"><Icon className="h-4 w-4" /></span>
-          <h3 className="text-sm font-semibold text-white">{data.title}</h3>
-        </div>
-      )}
-      {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
-      {buttons.length > 0 && <div className="mt-3 flex flex-wrap items-start gap-2">
-        {buttons.map((button, index) => (
-          <span key={`${button.label}-${index}`} className="inline-flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300">
-            {button.label}
-            {button.action === "link" && <ExternalLink className="h-3 w-3 shrink-0" />}
-          </span>
-        ))}
-      </div>}
-      {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
-    </article>
-  );
 }
 
 function formatDate(d: string): string {
@@ -467,7 +346,7 @@ export default function ChatHistoryPage() {
     const selectedBotUser = viewConv?.botUser || selectedConversation?.botUser;
     const selectedSkill = viewConv?.skill || selectedConversation?.skill;
 
-    return <div className="space-y-5">
+    return <div className="flex h-full min-h-0 flex-col gap-5 overflow-hidden">
       <ActionToast type="success" message={notice} />
       <ConfirmDialog
         open={Boolean(pendingDelete)}
@@ -486,7 +365,7 @@ export default function ChatHistoryPage() {
         onCancel={() => setBulkDeleteOpen(false)}
         onConfirm={() => void deleteAllConversations()}
       />
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Admin workspace</p>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white"><History className="h-6 w-6" />All Conversations</h1>
@@ -505,7 +384,7 @@ export default function ChatHistoryPage() {
         setViewConv(null);
         setSelectedConversationId("");
         setAppliedFilters({ search, botId: botFilter, skillId: skillFilter, dateFrom, dateTo });
-      }} className="grid gap-3 rounded-lg border border-neutral-800 bg-[#080808] p-3 sm:grid-cols-2 xl:grid-cols-6">
+      }} className="grid shrink-0 gap-3 rounded-lg border border-neutral-800 bg-[#080808] p-3 sm:grid-cols-2 xl:grid-cols-6">
         <label className="space-y-1.5 text-[10px] text-neutral-500 xl:col-span-2">Username, nama lengkap, email, atau judul
           <span className="relative block"><Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-600" /><input type="search" placeholder="Cari user atau percakapan..." value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-md border border-neutral-800 bg-black py-2 pl-9 pr-3 text-xs text-white placeholder-neutral-600 outline-none focus:border-neutral-600" /></span>
         </label>
@@ -526,10 +405,10 @@ export default function ChatHistoryPage() {
           }} className="rounded-md border border-neutral-800 px-3 py-2 text-xs text-neutral-400 hover:text-white">Reset</button>
         </div>
       </form>
-      {error && <div role="alert" className="rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-200">{error}</div>}
+      {error && <div role="alert" className="shrink-0 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-200">{error}</div>}
 
-      <div className="grid min-h-[620px] grid-cols-1 gap-3 xl:grid-cols-[minmax(250px,0.85fr)_minmax(340px,1.5fr)_minmax(230px,0.8fr)]">
-        <section className="flex min-h-[360px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-[#080808] xl:max-h-[calc(100vh-250px)]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto xl:grid-cols-[minmax(250px,0.85fr)_minmax(340px,1.5fr)_minmax(230px,0.8fr)] xl:grid-rows-[minmax(0,1fr)] xl:overflow-hidden">
+        <section className="flex min-h-[360px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-[#080808] xl:h-full xl:min-h-0">
           <div className="flex items-center justify-between border-b border-neutral-800 px-3.5 py-3">
             <h2 className="text-xs font-semibold text-neutral-200">Percakapan</h2>
             <span className="text-[10px] text-neutral-600">{pagination.total} percakapan</span>
@@ -557,13 +436,13 @@ export default function ChatHistoryPage() {
           </footer>
         </section>
 
-        <section className="flex min-h-[460px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-black xl:max-h-[calc(100vh-250px)]">
+        <section className="flex min-h-[460px] flex-col overflow-hidden rounded-lg border border-neutral-800 bg-black xl:h-full xl:min-h-0">
           {viewConv ? <>
             <header className="flex items-center justify-between gap-3 border-b border-neutral-800 bg-[#080808] px-4 py-3">
               <div className="min-w-0"><h2 className="truncate text-sm font-semibold text-white">{viewConv.title}</h2><p className="mt-1 text-[10px] text-neutral-600">{viewConv.messages.length} pesan · {formatDate(selectedConversation?.createdAt || "")}</p></div>
               <span className={`shrink-0 rounded-full border px-2 py-1 text-[9px] ${selectedBot?.isActive ? "border-emerald-900/70 text-emerald-300" : "border-neutral-800 text-neutral-500"}`}>{selectedBot?.isActive ? "Bot aktif" : "Bot tidak tersedia"}</span>
             </header>
-            <div className="flex-1 space-y-5 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
               {loadingDetail && <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-neutral-500" /></div>}
               {!loadingDetail && viewConv.messages.length === 0 && <p className="py-12 text-center text-xs text-neutral-600">Belum ada pesan di percakapan ini.</p>}
               {!loadingDetail && viewConv.messages.map((message, index) => {
@@ -574,19 +453,7 @@ export default function ChatHistoryPage() {
                   </span>
                   <div className={`flex min-w-0 max-w-[86%] flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
                     <span className="px-1 text-[9px] text-neutral-600">{isUser ? selectedUser?.fullName || "User" : selectedBot?.name || "Bot"}</span>
-                    {message.content && <div className={`rounded-xl px-3 py-2.5 text-xs leading-relaxed ${isUser ? "rounded-tr-sm bg-white text-black" : "rounded-tl-sm border border-neutral-800 bg-[#111] text-neutral-300"}`}><FormattedMessage content={message.content} isUser={isUser} /></div>}
-                    {!isUser && message.botInteraction && <HistoryBotInteractionPreview data={message.botInteraction} />}
-                    {!isUser && message.uiComponents?.map((component) => <HistoryComponentPreview key={component.id} component={component} />)}
-                    <ResponseMeta
-                      timestamp={message.timestamp}
-                      align={isUser ? "end" : "start"}
-                      generationDurationMs={isUser ? undefined : message.generationDurationMs}
-                      showRetrieval={!isUser && (message.messageType === "FAQ" || message.messageType === "RAG" || message.messageType === "WEB_SEARCH")}
-                      webSearch={!isUser && message.messageType === "WEB_SEARCH"}
-                      topArticles={message.topArticles}
-                      uiComponents={message.uiComponents}
-                      webSources={message.webSources}
-                    />
+                    <ConversationMessageBody message={message} isUser={isUser} />
                   </div>
                 </div>;
               })}
@@ -594,7 +461,7 @@ export default function ChatHistoryPage() {
           </> : <div className="flex flex-1 flex-col items-center justify-center px-6 text-center"><MessageSquare className="h-8 w-8 text-neutral-700" /><p className="mt-3 text-sm font-medium text-neutral-400">Pilih percakapan</p><p className="mt-1 text-xs text-neutral-600">Preview chat akan tampil di sini.</p></div>}
         </section>
 
-        <aside className="space-y-3 xl:max-h-[calc(100vh-250px)] xl:overflow-y-auto">
+        <aside className="min-h-0 space-y-3 xl:h-full xl:overflow-y-auto">
           <ProfileSection icon={<UserRound className="h-4 w-4" />} title="Biodata user">
             {selectedUser ? <ProfileFields fields={[["Nama lengkap", selectedUser.fullName], ["Username", selectedUser.name], ["Email", selectedUser.email], ["Role", selectedUser.role], ["Tipe", selectedUser.userType], ["Terdaftar", selectedUser.createdAt ? formatDate(selectedUser.createdAt) : "-"], ["User ID", selectedUser.id]]} /> : <ProfileEmpty />}
           </ProfileSection>
@@ -623,7 +490,7 @@ export default function ChatHistoryPage() {
     : "from-neutral-700 to-neutral-500";
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       <ActionToast type="success" message={notice} />
       <ConfirmDialog
         open={Boolean(pendingDelete)}
@@ -642,7 +509,7 @@ export default function ChatHistoryPage() {
         onCancel={() => setBulkDeleteOpen(false)}
         onConfirm={() => void deleteAllConversations()}
       />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex shrink-0 flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2.5">
             <History className="w-6 h-6 text-white" />
@@ -662,7 +529,7 @@ export default function ChatHistoryPage() {
       </div>
 
       {/* Search */}
-      <div className="relative max-w-md">
+      <div className="relative max-w-md shrink-0">
         <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-600" />
 
         <input
@@ -675,6 +542,7 @@ export default function ChatHistoryPage() {
       </div>
 
       {/* History List */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
       {loading ? (
         <div className="py-20 text-center text-neutral-500">
           <Loader2 className="w-7 h-7 animate-spin mx-auto mb-2 text-neutral-300" />
@@ -764,6 +632,7 @@ export default function ChatHistoryPage() {
           ))}
         </div>
       )}
+      </div>
 
       {/* View Conversation Modal */}
       {viewConv && (
@@ -818,89 +687,10 @@ export default function ChatHistoryPage() {
               ) : (
                 viewConv.messages.map((msg, idx) => {
                   const isUser = msg.role === "user";
-
-                  return (
-                    <div
-                      key={msg.id || idx}
-                      className={`flex items-start gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"
-                        }`}
-                    >
-                      {/* Avatar */}
-                      {isUser ? (
-                        <div
-                          className={`w-8 h-8 rounded-full bg-gradient-to-tr ${avatarGradient} flex items-center justify-center text-[11px] font-bold ${userProfile?.role === "admin"
-                            ? "text-black"
-                            : "text-white"
-                            } select-none shrink-0 shadow-md`}
-                          title={userProfile?.fullName || "User"}
-                        >
-                          {userInitials}
-                        </div>
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-md">
-                          <Bot className="w-4 h-4 text-black" />
-                        </div>
-                      )}
-
-                      {/* Bubble + meta */}
-                      <div
-                        className={`flex flex-col gap-1 max-w-[82%] sm:max-w-[72%] ${isUser ? "items-end" : "items-start"
-                          }`}
-                      >
-                        {/* Badges for assistant */}
-                        {!isUser && (
-                          <div className="flex items-center gap-1.5 pl-1 text-[10px] text-neutral-500">
-                            <span className="font-semibold text-white">
-                              GenAI
-                            </span>
-
-                            {msg.messageType && (
-                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-black text-neutral-300 border border-neutral-800">
-                                {msg.messageType}
-                              </span>
-                            )}
-
-                            {msg.lmStudioAvailable === false && (
-                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-black text-neutral-400 border border-neutral-800">
-                                Offline
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Bubble */}
-                        {msg.content && <div
-                          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser
-                            ? "bg-white text-black rounded-tr-sm shadow-lg font-medium"
-                            : "bg-[#111111] text-neutral-300 border border-neutral-800 rounded-tl-sm shadow-md"
-                            }`}
-                        >
-                          <FormattedMessage content={msg.content} isUser={isUser} />
-                        </div>}
-
-                        {!isUser && msg.botInteraction && (
-                          <HistoryBotInteractionPreview data={msg.botInteraction} />
-                        )}
-
-                        {!isUser && msg.uiComponents?.map((component) => (
-                          <div key={component.id} className="w-full pl-1">
-                            <HistoryComponentPreview component={component} />
-                          </div>
-                        ))}
-
-                        <ResponseMeta
-                          timestamp={msg.timestamp}
-                          align={isUser ? "end" : "start"}
-                          generationDurationMs={isUser ? undefined : msg.generationDurationMs}
-                          showRetrieval={!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG" || msg.messageType === "WEB_SEARCH")}
-                          webSearch={!isUser && msg.messageType === "WEB_SEARCH"}
-                          topArticles={msg.topArticles}
-                          uiComponents={msg.uiComponents}
-                          webSources={msg.webSources}
-                        />
-                      </div>
-                    </div>
-                  );
+                  return <div key={msg.id || idx} className={`flex items-start gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+                    {isUser ? <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${avatarGradient} flex items-center justify-center text-[11px] font-bold ${userProfile?.role === "admin" ? "text-black" : "text-white"} select-none shrink-0 shadow-md`} title={userProfile?.fullName || "User"}>{userInitials}</div> : <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-md"><Bot className="w-4 h-4 text-black" /></div>}
+                    <div className={`flex flex-col gap-1 max-w-[82%] sm:max-w-[72%] ${isUser ? "items-end" : "items-start"}`}><ConversationMessageBody message={msg} isUser={isUser} /></div>
+                  </div>;
                 })
               )}
             </div>

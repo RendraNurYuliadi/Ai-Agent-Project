@@ -181,7 +181,7 @@ export default function SkillsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6 overflow-hidden">
       <ActionToast type={notice?.type || "success"} message={notice?.message || ""} />
       <ConfirmDialog
         open={Boolean(pendingDelete)}
@@ -201,11 +201,11 @@ export default function SkillsPage() {
         onConfirm={() => void deleteAllSkills()}
       />
 
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-500">Bot identity</p>
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-white"><Sparkles className="h-6 w-6" />Skills</h1>
-          <p className="mt-1 max-w-2xl text-sm text-neutral-500">Hubungkan user bertipe Bot dengan bot flow untuk memilih persona di Chatbot.</p>
+          <p className="mt-1 max-w-2xl text-sm text-neutral-500">Hubungkan skill ke user human untuk menerima escalation, atau ke user bot dan bot flow untuk percakapan otomatis.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || skills.length === 0 || deletingAll} className="inline-flex items-center gap-2 rounded-lg border border-red-900/70 px-3.5 py-2.5 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-4 w-4" />Hapus semua ({skills.length})</button>
@@ -213,32 +213,34 @@ export default function SkillsPage() {
         </div>
       </header>
 
-      {error && !modalOpen && <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}
+      {error && !modalOpen && <div role="alert" className="flex shrink-0 items-center gap-2 rounded-lg border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200"><AlertCircle className="h-4 w-4 shrink-0" />{error}</div>}
 
-      {!loading && !users.length && <div className="flex flex-col gap-2 rounded-lg border border-neutral-800 bg-[#080808] px-4 py-3 text-xs text-neutral-400 sm:flex-row sm:items-center">
+      {!loading && !users.length && <div className="flex shrink-0 flex-col gap-2 rounded-lg border border-neutral-800 bg-[#080808] px-4 py-3 text-xs text-neutral-400 sm:flex-row sm:items-center">
         <span>Tambahkan user terlebih dahulu untuk membuat skill.</span>
         <Link href="/dashboard/users" className="text-neutral-200 underline">Buka Users</Link>
       </div>}
 
-      <section className="overflow-hidden rounded-xl border border-neutral-800 bg-[#080808]">
-        <div className="grid grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)_minmax(150px,1fr)_auto] gap-4 border-b border-neutral-800 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 max-sm:grid-cols-[minmax(0,1fr)_auto]">
-          <span>Skill</span><span className="max-sm:hidden">User bot</span><span className="max-sm:hidden">Bot flow</span><span className="text-right">Aksi</span>
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-neutral-800 bg-[#080808]">
+        <div className="grid shrink-0 grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)_minmax(150px,1fr)_auto] gap-4 border-b border-neutral-800 px-4 py-3 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 max-sm:grid-cols-[minmax(0,1fr)_auto]">
+          <span>Skill</span><span className="max-sm:hidden">User terhubung</span><span className="max-sm:hidden">Bot flow</span><span className="text-right">Aksi</span>
         </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
         {loading ? <div className="flex justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-neutral-500" /></div> : skills.length === 0 ? (
           <div className="px-5 py-16 text-center"><Sparkles className="mx-auto h-8 w-8 text-neutral-700" /><p className="mt-3 text-sm font-medium text-neutral-300">Belum ada skill</p><p className="mt-1 text-xs text-neutral-600">Buat skill untuk menghubungkan user bot dan bot flow.</p></div>
         ) : skills.map((skill) => (
           <article key={skill.id} className="grid grid-cols-[minmax(0,1fr)_minmax(130px,0.8fr)_minmax(150px,1fr)_auto] items-center gap-4 border-b border-neutral-900 px-4 py-4 last:border-0 max-sm:grid-cols-[minmax(0,1fr)_auto]">
             <div className="min-w-0"><p className="truncate text-sm font-semibold text-neutral-200">{skill.name}</p><p className="mt-1 truncate text-xs text-neutral-600">{skill.description || "Tanpa deskripsi"}</p><span className={`mt-2 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] ${skill.isAvailable ? "border-emerald-900/70 bg-emerald-950/30 text-emerald-300" : "border-amber-900/70 bg-amber-950/30 text-amber-300"}`}>{skill.isAvailable ? "Siap digunakan" : "Relasi perlu diperbaiki"}</span></div>
-            <div className="hidden min-w-0 items-center gap-2 text-xs text-neutral-400 sm:flex"><UserRound className="h-4 w-4 shrink-0 text-neutral-600" /><span className="truncate">{skill.botUser?.fullName || skill.botUser?.name || "User tidak ditemukan"}</span></div>
-            <div className="hidden min-w-0 items-center gap-2 text-xs text-neutral-400 sm:flex"><GitBranch className="h-4 w-4 shrink-0 text-neutral-600" /><span className="truncate">{skill.bot?.name || "Bot tidak ditemukan"}</span></div>
+            <div className="hidden min-w-0 items-center gap-2 text-xs text-neutral-400 sm:flex"><UserRound className="h-4 w-4 shrink-0 text-neutral-600" /><span className="truncate">{skill.botUser?.fullName || skill.botUser?.name || "User tidak ditemukan"} · {skill.botUser?.userType || "-"}</span></div>
+            <div className="hidden min-w-0 items-center gap-2 text-xs text-neutral-400 sm:flex"><GitBranch className="h-4 w-4 shrink-0 text-neutral-600" /><span className="truncate">{skill.bot?.name || "Tidak terhubung"}</span></div>
             <div className="flex items-center justify-end gap-1"><button type="button" onClick={() => void duplicateSkill(skill)} aria-label={`Duplikat skill ${skill.name}`} title="Duplikat skill" className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><Copy className="h-4 w-4" /></button><button type="button" onClick={() => openEdit(skill)} aria-label={`Edit nama dan relasi skill ${skill.name}`} title="Edit nama, user, dan bot terkait" className="rounded-md p-2 text-neutral-500 hover:bg-neutral-900 hover:text-white"><Pencil className="h-4 w-4" /></button><button type="button" onClick={() => setPendingDelete(skill)} aria-label={`Hapus skill ${skill.name}`} title="Hapus skill" className="rounded-md p-2 text-neutral-600 hover:bg-red-950/50 hover:text-red-300"><Trash2 className="h-4 w-4" /></button></div>
           </article>
         ))}
+        </div>
       </section>
 
       {modalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
         <form onSubmit={saveSkill} className="my-8 w-full max-w-lg space-y-4 rounded-xl border border-neutral-800 bg-[#0a0a0a] p-5 shadow-2xl">
-          <div className="flex items-start justify-between"><div><h2 className="text-base font-semibold text-white">{editing ? "Edit skill" : "Buat skill"}</h2><p className="mt-1 text-xs text-neutral-500">{editing ? "Ubah nama skill, user, atau bot flow yang terhubung." : "Skill menghubungkan satu identitas Bot dengan satu bot flow."}</p></div><button type="button" onClick={() => setModalOpen(false)} aria-label="Tutup" className="rounded p-1 text-neutral-500 hover:text-white"><X className="h-4 w-4" /></button></div>
+          <div className="flex items-start justify-between"><div><h2 className="text-base font-semibold text-white">{editing ? "Edit skill" : "Buat skill"}</h2><p className="mt-1 text-xs text-neutral-500">{editing ? "Ubah nama skill, user human/bot, atau bot flow." : "Skill human menerima escalation; skill bot dapat dihubungkan dengan bot flow."}</p></div><button type="button" onClick={() => setModalOpen(false)} aria-label="Tutup" className="rounded p-1 text-neutral-500 hover:text-white"><X className="h-4 w-4" /></button></div>
           {error && <div role="alert" className="flex items-center gap-2 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-200"><AlertCircle className="h-4 w-4" />{error}</div>}
           <label className="block space-y-1.5 text-xs text-neutral-400">Nama skill<input required maxLength={100} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Contoh: Asisten Rendra" className="w-full rounded-md border border-neutral-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600" /></label>
           <label className="block space-y-1.5 text-xs text-neutral-400">Deskripsi<textarea maxLength={500} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Tujuan skill ini" className="w-full resize-y rounded-md border border-neutral-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-neutral-600" /></label>

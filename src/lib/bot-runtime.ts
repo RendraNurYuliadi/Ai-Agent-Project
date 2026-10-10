@@ -38,6 +38,8 @@ export interface BotRuntimeResult {
   botStatus: "active" | "ended" | "closed";
   contextSent: string;
   dataCollectionState: DataCollectionState | null;
+  escalation?: { skillId: string; humanUserId: string };
+  botTransfer?: { skillId: string; botUserId: string; botId: string };
 }
 
 export interface DataCollectionState {
@@ -386,6 +388,8 @@ export async function processBotTurn(
   let uiComponents: BotRuntimeComponent[] = [];
   let interactionCard: BotRuntimeMessage["botInteraction"];
   let messageType = interaction.type.toUpperCase();
+  let escalation: BotRuntimeResult["escalation"];
+  let botTransfer: BotRuntimeResult["botTransfer"];
   const conversationHistory = formatConversationHistory(conversation.historyMessages || []);
   const sessionVariables = {
     ...Object.fromEntries(Object.entries(dataCollectionState?.answers ?? {}).map(([key, value]) => [key, String(value ?? "")])),
@@ -432,6 +436,40 @@ export async function processBotTurn(
         value: applyPromptVariables(button.value, message, user, contextSent, bot.variables || [], sessionVariables),
       })),
     };
+  } else if (interaction.type === "skill_escalation") {
+    const skillId = interaction.config.escalationSkillId || "";
+    if (ObjectId.isValid(skillId)) {
+      const skill = await db.collection("skills").findOne({ _id: new ObjectId(skillId) }, { projection: { botUserId: 1, botId: 1 } });
+      const targetUserId = typeof skill?.botUserId === "string" ? skill.botUserId : "";
+      const targetUser = ObjectId.isValid(targetUserId)
+        ? await db.collection("users").findOne({ _id: new ObjectId(targetUserId) }, { projection: { _id: 1, userType: 1 } })
+        : null;
+      if (targetUser && targetUser.userType === "bot") {
+        const botId = typeof skill?.botId === "string" ? skill.botId : "";
+        const targetBot = ObjectId.isValid(botId)
+          ? await db.collection("bots").findOne({ _id: new ObjectId(botId) })
+          : null;
+        const activeSetting = await db.collection("botSettings").findOne({ key: "active" }, { projection: { botId: 1 } });
+        const isActive = targetBot && (typeof targetBot.isActive === "boolean" ? targetBot.isActive : activeSetting?.botId === botId);
+        if (targetBot && isActive) {
+          botTransfer = { skillId, botUserId: targetUserId, botId };
+          if (interaction.config.escalationMessageEnabled !== false) {
+            content = applyPromptVariables(interaction.config.escalationMessage || "Percakapan Anda sedang dialihkan.", message, user, "", bot.variables || [], sessionVariables);
+          }
+        } else {
+          content = "Bot tujuan tidak tersedia atau tidak aktif. Hubungi pengelola untuk memperbaiki konfigurasi.";
+        }
+      } else if (targetUser) {
+        escalation = { skillId, humanUserId: targetUserId };
+        if (interaction.config.escalationMessageEnabled !== false) {
+          content = applyPromptVariables(interaction.config.escalationMessage || "Percakapan Anda sedang dialihkan ke petugas.", message, user, "", bot.variables || [], sessionVariables);
+        }
+      } else {
+        content = "Skill tujuan tidak lagi terhubung ke user yang valid. Hubungi pengelola untuk memperbaiki konfigurasi.";
+      }
+    } else {
+      content = "Skill tujuan belum dipilih. Hubungi pengelola untuk memperbaiki konfigurasi.";
+    }
   } else if (interaction.type === "small_talk") {
     const config = interactionAIConfig(await getAIConfig(db), interaction);
     try {
@@ -455,7 +493,7 @@ export async function processBotTurn(
         .toArray()
       : [];
     const activeCollections = activeKbs.map((kb) => kb.collectionName);
-    const searchResult = await smartSearchKB(db, message.trim(), activeCollections, 5);
+    const searchResult = await smartSearchKB(db, message.trim(), activeCollections, interaction.config.ragDocumentMaxResults ?? 5);
     topArticles = searchResult.articles;
     contextSent = searchResult.formattedContext;
     const triggerArticle = topArticles[0];
@@ -724,14 +762,16 @@ export async function processBotTurn(
   const dataCollectionInProgress = interaction.type === "data_collection" && dataCollectionState?.interactionId === interaction.id && !dataCollectionState.completed;
   const fallbackMechanismEnabled = interaction.type === "guided_routing" ? interaction.config.fallbackMechanismEnabled !== false : true;
   const guidedRouteFailed = interaction.type === "guided_routing" && !guidedTargetSelected && fallbackMechanismEnabled;
-  const state = guidedRouteFailed
+  const state = escalation
+    ? { currentInteractionId: interaction.id, botStatus: "active" as const }
+    : guidedRouteFailed
     ? { currentInteractionId: guidedFallbackTargetId || interaction.id, botStatus: "active" as const }
     : dataCollectionInProgress
       ? { currentInteractionId: interaction.id, botStatus: "active" as const }
       : interaction.type === "guided_routing" && !fallbackMechanismEnabled
         ? { currentInteractionId: interaction.id, botStatus: "active" as const }
         : stateForAction(interaction);
-  const silent = interaction.type === "data_collection" && Boolean(dataCollectionState?.completed);
+  const silent = (interaction.type === "data_collection" && Boolean(dataCollectionState?.completed)) || Boolean((escalation || botTransfer) && !content);
 
   if (advanceToNextInteraction && interaction.nextAction.type === "interaction") {
     return processBotTurn(
@@ -773,5 +813,7 @@ export async function processBotTurn(
     ...state,
     contextSent,
     dataCollectionState,
+    ...(escalation ? { escalation } : {}),
+    ...(botTransfer ? { botTransfer } : {}),
   };
 }

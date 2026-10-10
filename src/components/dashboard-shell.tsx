@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -20,6 +20,7 @@ import {
   GitBranch,
   ChevronRight,
   Blocks,
+  MessagesSquare,
 } from "lucide-react";
 import { UserSession } from "@/lib/auth";
 
@@ -44,6 +45,36 @@ export default function DashboardShell({
   const pathname = usePathname();
   const router = useRouter();
   const isBotFlowEditor = pathname.startsWith("/dashboard/bot-management/") && pathname !== "/dashboard/bot-management";
+  const isFullHeightPage = isBotFlowEditor || [
+    "/dashboard/chatbot",
+    "/dashboard/chat-history",
+    "/dashboard/all-conversations",
+    "/dashboard/escalation-queue",
+    "/dashboard/knowledge-base",
+    "/dashboard/prompts",
+    "/dashboard/users",
+    "/dashboard/bot-management",
+    "/dashboard/skills",
+    "/dashboard/data-bot-data-collection-capture",
+    "/dashboard/components",
+  ].includes(pathname);
+
+  useEffect(() => {
+    if (!isFullHeightPage) return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    const previousHtmlOverflow = html.style.overflow;
+    const previousBodyOverflow = body.style.overflow;
+    window.scrollTo(0, 0);
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+
+    return () => {
+      html.style.overflow = previousHtmlOverflow;
+      body.style.overflow = previousBodyOverflow;
+    };
+  }, [isFullHeightPage]);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -87,6 +118,13 @@ export default function DashboardShell({
       href: "/dashboard/chat-history",
       icon: History,
       current: pathname.startsWith("/dashboard/chat-history"),
+    },
+    {
+      name: "Escalation Queue",
+      href: "/dashboard/escalation-queue",
+      icon: MessagesSquare,
+      current: pathname.startsWith("/dashboard/escalation-queue"),
+      roles: user.userType === "human" ? undefined : ["__hidden__"],
     },
     {
       name: "All Conversations",
@@ -171,7 +209,7 @@ export default function DashboardShell({
   const RoleIcon = roleInfo.icon;
 
   const mainNav = visibleNav.filter((n) =>
-    ["Dashboard", "Chatbot", "Chat History", "All Conversations", "LLM Gateway"].includes(n.name)
+    ["Dashboard", "Chatbot", "Chat History", "Escalation Queue", "All Conversations", "LLM Gateway"].includes(n.name)
   );
 
   const adminNav = visibleNav.filter((n) =>
@@ -183,7 +221,7 @@ export default function DashboardShell({
   );
 
   return (
-    <div className={`${isBotFlowEditor ? "h-dvh w-full overflow-hidden" : "min-h-screen w-full max-w-[100vw] overflow-x-clip"} bg-black flex flex-col md:flex-row text-neutral-100`}>
+    <div className={`${isFullHeightPage ? "h-dvh w-full overflow-hidden" : "min-h-screen w-full max-w-[100vw] overflow-x-clip"} bg-black flex flex-col md:flex-row text-neutral-100`}>
 
       {/* Mobile Top Header */}
       <div
@@ -473,8 +511,8 @@ export default function DashboardShell({
       </aside>
 
       {/* Main Content */}
-      <main className={`${isBotFlowEditor ? "h-[calc(100dvh-60px)] min-h-0 md:h-screen" : "min-h-screen w-full md:w-auto"} flex flex-1 min-w-0 flex-col bg-black`}>
-        <div className={`${isBotFlowEditor ? "w-full min-w-0 max-w-none flex-1 min-h-0 overflow-hidden p-2 md:p-3" : "mx-auto w-full min-w-0 max-w-7xl flex-1 p-5 md:p-7"}`}>
+      <main className={`${isFullHeightPage ? "h-[calc(100dvh-60px)] min-h-0 md:h-screen" : "min-h-screen w-full md:w-auto"} flex flex-1 min-w-0 flex-col bg-black`}>
+        <div className={`${isFullHeightPage ? "w-full min-w-0 max-w-none flex-1 min-h-0 overflow-hidden p-2 md:p-3" : "mx-auto w-full min-w-0 max-w-7xl flex-1 p-5 md:p-7"}`}>
           {children}
         </div>
       </main>
