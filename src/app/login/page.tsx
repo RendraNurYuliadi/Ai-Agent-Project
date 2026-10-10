@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { SplashScreen } from "@/components/splash-screen";
 import {
   Lock,
   Mail,
@@ -15,6 +16,7 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
+  const [showSplash, setShowSplash] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -60,6 +62,10 @@ export default function LoginPage() {
     setPassword(quickPass);
     setError(null);
   };
+
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} />;
+  }
 
   return (
     <div className="min-h-screen bg-black flex flex-col justify-center items-center px-4 relative overflow-hidden">
