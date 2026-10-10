@@ -12,6 +12,7 @@ export interface UserSession {
   fullName: string;
   email: string;
   role: "admin" | "manager" | "public_user";
+  userType: "human" | "bot";
 }
 
 export async function signSession(user: UserSession): Promise<string> {
@@ -21,6 +22,7 @@ export async function signSession(user: UserSession): Promise<string> {
     fullName: user.fullName,
     email: user.email,
     role: user.role,
+    userType: user.userType,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -37,6 +39,7 @@ export async function verifyToken(token: string): Promise<UserSession | null> {
       fullName: (payload.fullName as string) || (payload.name as string) || "User",
       email: payload.email as string,
       role: payload.role as "admin" | "manager" | "public_user",
+      userType: payload.userType === "bot" ? "bot" : "human",
     };
   } catch {
     return null;

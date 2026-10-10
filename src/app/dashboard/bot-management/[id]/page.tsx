@@ -41,6 +41,7 @@ import {
   Save,
   Sparkles,
   Trash2,
+  UserRound,
   X,
 } from "lucide-react";
 import {
@@ -80,6 +81,14 @@ interface PromptOption {
   isActive: boolean;
 }
 
+interface SkillOption {
+  id: string;
+  name: string;
+  botUser: { userType: "human" | "bot" } | null;
+  bot: { name: string } | null;
+  isAvailable: boolean;
+}
+
 interface FlowNodeData extends Record<string, unknown> {
   label: string;
   interactionType: BotInteractionType;
@@ -112,7 +121,7 @@ const BOT_SYSTEM_VARIABLES = [
   "{time}",
 ];
 
-const BOT_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection", "data_collection_submitted"];
+const BOT_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection", "data_collection_submitted", "skill_escalation"];
 const BOT_INTERACTION_TYPES_GROUPED: BotInteractionType[] = ["welcome_message", "text", "text_question"];
 
 function getBotVariableOptions(customVariables: BotCustomVariable[] = [], interactions: BotInteraction[] = [], interactionType?: BotInteractionType) {
@@ -138,6 +147,7 @@ function nodeSummary(interaction: BotInteraction): string {
   if (interaction.type === "web_search") return `${interaction.config.webSearchMaxResults || 5} sumber web · LLM`;
   if (interaction.type === "data_collection") return `${interaction.config.dataCollectionQuestions?.length || 0} pertanyaan · Webhook`;
   if (interaction.type === "data_collection_submitted") return `${interaction.config.dataCollectionSubmittedFields?.length || 0} field · Capture`;
+  if (interaction.type === "skill_escalation") return "Alihkan percakapan ke human";
   if (interaction.nextAction.type === "interaction") return "Next interaction";
   return interaction.nextAction.type === "end" ? "End interaction" : "Close conversation";
 }
@@ -153,6 +163,8 @@ function InteractionNode({ data, selected }: NodeProps<FlowCanvasNode>) {
           ? ListChecks
           : data.interactionType === "data_collection_submitted"
             ? Database
+            : data.interactionType === "skill_escalation"
+              ? UserRound
       : data.interactionType === "guided_routing"
         ? GitBranch
         : MessageSquare;
@@ -265,6 +277,8 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
       return { dataCollectionQuestions: [{ name: "nama_lengkap", question: "Siapa nama lengkap Anda?", variable: "nama_lengkap" }] };
     case "data_collection_submitted":
       return { dataCollectionSubmittedFields: [] };
+    case "skill_escalation":
+      return { escalationSkillId: "", escalationMessageEnabled: true, escalationMessage: "Percakapan Anda sedang dialihkan." };
     case "text_question":
       return { question: "Apa yang ingin Anda tanyakan?" };
     case "text_start":
@@ -285,6 +299,7 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
   const [skillCount, setSkillCount] = useState(0);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBaseOption[]>([]);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
+  const [skills, setSkills] = useState<SkillOption[]>([]);
   const [selectedId, setSelectedId] = useState("");
   const [interactionsOpen, setInteractionsOpen] = useState(true);
   const [configOpen, setConfigOpen] = useState(false);
@@ -319,7 +334,12 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
         const data = await response.json();
         return (data.prompts || []) as PromptOption[];
       }),
-    ]).then(([bot, bases, promptOptions]) => {
+      fetch("/api/skills").then(async (response) => {
+        if (!response.ok) return [];
+        const data = await response.json();
+        return (data.skills || []) as SkillOption[];
+      }),
+    ]).then(([bot, bases, promptOptions, skillOptions]) => {
       if (!current) return;
       setBotName(bot.name);
       setDescription(bot.description || "");
@@ -341,6 +361,7 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
       setKnowledgeBases(activeKnowledgeBases);
       if (staleKnowledgeBaseCount) setNotice("Referensi ke Knowledge Base yang sudah tidak tersedia dilepas. Simpan flow untuk menerapkan perubahan.");
       setPrompts(promptOptions);
+      setSkills(skillOptions);
       setNodes(normalizedInteractions.map((item) => toCanvasNode(item, bot.entryInteractionId)));
       setEdges(toEdges(normalizedInteractions));
       setSelectedId("");
@@ -1021,6 +1042,29 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                       disabled={(selectedInteraction.config.dataCollectionSubmittedFields?.length || 0) >= 30}
                       className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white disabled:opacity-40"
                     ><Plus className="h-3 w-3" /> Tambah field</button>
+                  </div>
+                )}
+
+                {selectedInteraction.type === "skill_escalation" && (
+                  <div className="space-y-3">
+                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Skill tujuan
+                      <select value={selectedInteraction.config.escalationSkillId || ""} onChange={(event) => updateConfig({ escalationSkillId: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                        <option value="">Pilih skill</option>
+                        {skills.filter((skill) => skill.botUser && skill.isAvailable).map((skill) => <option key={skill.id} value={skill.id}>{skill.name} · {skill.botUser?.userType === "bot" ? skill.bot?.name || "Bot" : "Human"}</option>)}
+                      </select>
+                    </label>
+                    <p className="text-[10px] leading-4 text-neutral-600">Percakapan dialihkan ke user atau bot flow yang terhubung dengan skill ini.</p>
+                    <label className="flex cursor-pointer items-center gap-2 text-[10px] text-neutral-300">
+                      <input type="checkbox" checked={selectedInteraction.config.escalationMessageEnabled !== false} onChange={(event) => updateConfig({ escalationMessageEnabled: event.target.checked })} className="accent-white" />
+                      Tampilkan pesan saat dialihkan
+                    </label>
+                    {selectedInteraction.config.escalationMessageEnabled !== false && <TextAreaField
+                      label="Pesan"
+                      value={selectedInteraction.config.escalationMessage || ""}
+                      onChange={(value) => updateConfig({ escalationMessage: value })}
+                      rows={3}
+                      variableOptions={availableVariableOptions}
+                    />}
                   </div>
                 )}
 

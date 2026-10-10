@@ -20,6 +20,46 @@ async function hasOnlyActiveKnowledgeBases(
   return new Set(active.map((item) => item.collectionName)).size === requested.length;
 }
 
+async function hasValidEscalationSkills(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  interactions: Array<{ type: string; config: { escalationSkillId?: string } }>
+): Promise<boolean> {
+  const skillIds = [...new Set(interactions
+    .filter((item) => item.type === "skill_escalation")
+    .map((item) => item.config.escalationSkillId || ""))];
+  if (skillIds.length === 0) return true;
+  if (skillIds.some((skillId) => !ObjectId.isValid(skillId))) return false;
+
+  const skills = await db.collection("skills")
+    .find({ _id: { $in: skillIds.map((skillId) => new ObjectId(skillId)) } }, { projection: { botUserId: 1, botId: 1 } })
+    .toArray();
+  if (skills.length !== skillIds.length) return false;
+  const userIds = [...new Set(skills.map((skill) => skill.botUserId).filter((id): id is string => typeof id === "string" && ObjectId.isValid(id)))];
+  if (skills.some((skill) => typeof skill.botUserId !== "string" || !ObjectId.isValid(skill.botUserId))) return false;
+  const users = await db.collection("users")
+    .find({ _id: { $in: userIds.map((userId) => new ObjectId(userId)) } }, { projection: { userType: 1 } })
+    .toArray();
+  if (users.length !== userIds.length) return false;
+  const userById = new Map(users.map((user) => [user._id.toString(), user]));
+  const botIds: string[] = [];
+  for (const skill of skills) {
+    const user = userById.get(String(skill.botUserId));
+    if (user?.userType !== "bot") continue;
+    if (typeof skill.botId !== "string" || !ObjectId.isValid(skill.botId)) return false;
+    botIds.push(skill.botId);
+  }
+  if (botIds.length === 0) return true;
+  const [bots, activeSetting] = await Promise.all([
+    db.collection("bots").find({ _id: { $in: botIds.map((botId) => new ObjectId(botId)) } }, { projection: { isActive: 1 } }).toArray(),
+    db.collection("botSettings").findOne({ key: "active" }, { projection: { botId: 1 } }),
+  ]);
+  const botById = new Map(bots.map((bot) => [bot._id.toString(), bot]));
+  return botIds.every((botId) => {
+    const bot = botById.get(botId);
+    return Boolean(bot && (typeof bot.isActive === "boolean" ? bot.isActive : activeSetting?.botId === botId));
+  });
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -68,6 +108,9 @@ export async function PUT(
     const db = await getDatabase();
     if (!await hasOnlyActiveKnowledgeBases(db, validation.data.interactions)) {
       return NextResponse.json({ error: "RAG hanya dapat menggunakan Knowledge Base yang aktif." }, { status: 400 });
+    }
+    if (!await hasValidEscalationSkills(db, validation.data.interactions)) {
+      return NextResponse.json({ error: "Skill Escalation harus memilih skill human yang valid atau skill bot dengan bot flow aktif." }, { status: 400 });
     }
     const result = await db.collection("bots").updateOne(
       { _id: new ObjectId(id) },

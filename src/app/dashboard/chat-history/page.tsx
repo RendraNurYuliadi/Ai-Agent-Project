@@ -2,8 +2,6 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
-import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import { usePathname } from "next/navigation";
 import {
   History,
@@ -16,8 +14,6 @@ import {
   Search,
   ExternalLink,
   Calendar,
-  CircleHelp,
-  Sparkles,
   UserRound,
   ShieldCheck,
   Layers3,
@@ -25,9 +21,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-import { FormattedMessage } from "@/components/formatted-message";
-import { ResponseMeta } from "@/components/response-meta";
 import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
+import { ConversationMessageBody } from "@/components/conversation-message-body";
 
 interface Conversation {
   id: string;
@@ -131,122 +126,6 @@ interface UserProfile {
   fullName: string;
   email: string;
   role: string;
-}
-
-function HistoryComponentPreview({ component }: { component: AssistantComponent }) {
-  const renderButtons = (items: ComponentActionButton[]) => (
-    <div className="flex flex-wrap gap-2">
-      {items.map((button, index) => (
-        <span
-          key={`${button.label}-${index}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300"
-        >
-          {button.label}
-          {button.action === "link" && <ExternalLink className="h-3 w-3" />}
-        </span>
-      ))}
-    </div>
-  );
-
-  const renderCard = (card: ComponentCard, index: number) => (
-    <article
-      key={`${component.id}-card-${index}`}
-      className="w-full min-w-0 overflow-hidden rounded-xl border border-neutral-800 bg-[#101010]"
-    >
-      {card.imageUrl && (
-        <Image
-          src={getImageProxyUrl(card.imageUrl)}
-          alt={card.title}
-          width={520}
-          height={card.imageHeight ?? 128}
-          unoptimized
-          style={{ height: `${card.imageHeight ?? 128}px` }}
-          className="w-full object-cover"
-        />
-      )}
-      <div className="space-y-2.5 p-3">
-        <div>
-          <h4 className="text-sm font-semibold text-white">{card.title}</h4>
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">
-            {card.subtitle}
-          </p>
-        </div>
-        {renderButtons(card.buttons)}
-      </div>
-    </article>
-  );
-
-  if (component.type === "reply_buttons") {
-    return renderButtons(component.buttons);
-  }
-
-  if (component.type === "link_buttons") {
-    return (
-      <article className="w-full max-w-[320px] rounded-xl border border-neutral-800 bg-[#101010] p-3">
-        {component.title && <h4 className="text-sm font-semibold text-white">{component.title}</h4>}
-        {component.subtitle && (
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">
-            {component.subtitle}
-          </p>
-        )}
-        <div className="mt-3 flex flex-wrap items-start gap-2">
-          {component.buttons.map((button, index) => (
-            <div
-              key={`${button.label}-${index}`}
-              className="flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5"
-            >
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-200">
-                {button.label}<ExternalLink className="h-3 w-3" />
-              </span>
-            </div>
-          ))}
-        </div>
-      </article>
-    );
-  }
-
-  if (component.type === "card" && component.card) {
-    return <div className="w-full max-w-[260px]">{renderCard(component.card, 0)}</div>;
-  }
-
-  if (component.type === "carousel" && component.cards.length > 0) {
-    return (
-      <div className="flex w-full gap-3 overflow-x-auto pb-2 snap-x snap-mandatory">
-        {component.cards.map((card, index) => (
-          <div key={`${component.id}-${index}`} className="w-[240px] shrink-0 snap-start">
-            {renderCard(card, index)}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return null;
-}
-
-function HistoryBotInteractionPreview({ data }: { data: NonNullable<Message["botInteraction"]> }) {
-  const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
-  const buttons = data.buttons || data.quickButtons || [];
-  return (
-    <article className="w-full max-w-[360px] rounded-xl border border-neutral-800 bg-[#101010] p-3.5">
-      {data.type === "welcome_message" && (
-        <div className="mb-2 flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black"><Icon className="h-4 w-4" /></span>
-          <h3 className="text-sm font-semibold text-white">{data.title}</h3>
-        </div>
-      )}
-      {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
-      {buttons.length > 0 && <div className="mt-3 flex flex-wrap items-start gap-2">
-        {buttons.map((button, index) => (
-          <span key={`${button.label}-${index}`} className="inline-flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-300">
-            {button.label}
-            {button.action === "link" && <ExternalLink className="h-3 w-3 shrink-0" />}
-          </span>
-        ))}
-      </div>}
-      {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
-    </article>
-  );
 }
 
 function formatDate(d: string): string {
@@ -574,19 +453,7 @@ export default function ChatHistoryPage() {
                   </span>
                   <div className={`flex min-w-0 max-w-[86%] flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
                     <span className="px-1 text-[9px] text-neutral-600">{isUser ? selectedUser?.fullName || "User" : selectedBot?.name || "Bot"}</span>
-                    {message.content && <div className={`rounded-xl px-3 py-2.5 text-xs leading-relaxed ${isUser ? "rounded-tr-sm bg-white text-black" : "rounded-tl-sm border border-neutral-800 bg-[#111] text-neutral-300"}`}><FormattedMessage content={message.content} isUser={isUser} /></div>}
-                    {!isUser && message.botInteraction && <HistoryBotInteractionPreview data={message.botInteraction} />}
-                    {!isUser && message.uiComponents?.map((component) => <HistoryComponentPreview key={component.id} component={component} />)}
-                    <ResponseMeta
-                      timestamp={message.timestamp}
-                      align={isUser ? "end" : "start"}
-                      generationDurationMs={isUser ? undefined : message.generationDurationMs}
-                      showRetrieval={!isUser && (message.messageType === "FAQ" || message.messageType === "RAG" || message.messageType === "WEB_SEARCH")}
-                      webSearch={!isUser && message.messageType === "WEB_SEARCH"}
-                      topArticles={message.topArticles}
-                      uiComponents={message.uiComponents}
-                      webSources={message.webSources}
-                    />
+                    <ConversationMessageBody message={message} isUser={isUser} />
                   </div>
                 </div>;
               })}
@@ -818,89 +685,10 @@ export default function ChatHistoryPage() {
               ) : (
                 viewConv.messages.map((msg, idx) => {
                   const isUser = msg.role === "user";
-
-                  return (
-                    <div
-                      key={msg.id || idx}
-                      className={`flex items-start gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"
-                        }`}
-                    >
-                      {/* Avatar */}
-                      {isUser ? (
-                        <div
-                          className={`w-8 h-8 rounded-full bg-gradient-to-tr ${avatarGradient} flex items-center justify-center text-[11px] font-bold ${userProfile?.role === "admin"
-                            ? "text-black"
-                            : "text-white"
-                            } select-none shrink-0 shadow-md`}
-                          title={userProfile?.fullName || "User"}
-                        >
-                          {userInitials}
-                        </div>
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-md">
-                          <Bot className="w-4 h-4 text-black" />
-                        </div>
-                      )}
-
-                      {/* Bubble + meta */}
-                      <div
-                        className={`flex flex-col gap-1 max-w-[82%] sm:max-w-[72%] ${isUser ? "items-end" : "items-start"
-                          }`}
-                      >
-                        {/* Badges for assistant */}
-                        {!isUser && (
-                          <div className="flex items-center gap-1.5 pl-1 text-[10px] text-neutral-500">
-                            <span className="font-semibold text-white">
-                              GenAI
-                            </span>
-
-                            {msg.messageType && (
-                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-black text-neutral-300 border border-neutral-800">
-                                {msg.messageType}
-                              </span>
-                            )}
-
-                            {msg.lmStudioAvailable === false && (
-                              <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-black text-neutral-400 border border-neutral-800">
-                                Offline
-                              </span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Bubble */}
-                        {msg.content && <div
-                          className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser
-                            ? "bg-white text-black rounded-tr-sm shadow-lg font-medium"
-                            : "bg-[#111111] text-neutral-300 border border-neutral-800 rounded-tl-sm shadow-md"
-                            }`}
-                        >
-                          <FormattedMessage content={msg.content} isUser={isUser} />
-                        </div>}
-
-                        {!isUser && msg.botInteraction && (
-                          <HistoryBotInteractionPreview data={msg.botInteraction} />
-                        )}
-
-                        {!isUser && msg.uiComponents?.map((component) => (
-                          <div key={component.id} className="w-full pl-1">
-                            <HistoryComponentPreview component={component} />
-                          </div>
-                        ))}
-
-                        <ResponseMeta
-                          timestamp={msg.timestamp}
-                          align={isUser ? "end" : "start"}
-                          generationDurationMs={isUser ? undefined : msg.generationDurationMs}
-                          showRetrieval={!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG" || msg.messageType === "WEB_SEARCH")}
-                          webSearch={!isUser && msg.messageType === "WEB_SEARCH"}
-                          topArticles={msg.topArticles}
-                          uiComponents={msg.uiComponents}
-                          webSources={msg.webSources}
-                        />
-                      </div>
-                    </div>
-                  );
+                  return <div key={msg.id || idx} className={`flex items-start gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+                    {isUser ? <div className={`w-8 h-8 rounded-full bg-gradient-to-tr ${avatarGradient} flex items-center justify-center text-[11px] font-bold ${userProfile?.role === "admin" ? "text-black" : "text-white"} select-none shrink-0 shadow-md`} title={userProfile?.fullName || "User"}>{userInitials}</div> : <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center shrink-0 shadow-md"><Bot className="w-4 h-4 text-black" /></div>}
+                    <div className={`flex flex-col gap-1 max-w-[82%] sm:max-w-[72%] ${isUser ? "items-end" : "items-start"}`}><ConversationMessageBody message={msg} isUser={isUser} /></div>
+                  </div>;
                 })
               )}
             </div>

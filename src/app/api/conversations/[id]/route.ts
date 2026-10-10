@@ -18,12 +18,17 @@ export async function GET(
   try {
     const db = await getDatabase();
     const isStaff = session.role === "admin" || session.role === "manager";
-    const conversation = await db.collection("conversations").findOne({
-      _id: new ObjectId(id),
-      ...(isStaff ? {} : { userId: session.id }),
-    });
+    const conversation = await db.collection("conversations").findOne({ _id: new ObjectId(id) });
 
     if (!conversation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+    const isOwner = String(conversation.userId) === session.id;
+    const isAssignedAgent = conversation.escalationStatus === "accepted" && conversation.assignedHumanUserId === session.id;
+    const assignedUser = isAssignedAgent
+      ? await db.collection("users").findOne({ _id: new ObjectId(session.id), userType: { $ne: "bot" } }, { projection: { _id: 1 } })
+      : null;
+    if (!isStaff && !isOwner && !(isAssignedAgent && assignedUser)) {
+      return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+    }
 
     const messages = (conversation.messages || []).map((message: Record<string, unknown>) => ({
       ...message,
@@ -38,6 +43,8 @@ export async function GET(
         id: conversation._id.toString(),
         title: conversation.title,
         skillId: conversation.skillId || null,
+        escalationStatus: conversation.escalationStatus || null,
+        assignedHumanUserId: conversation.assignedHumanUserId || null,
         messages,
         botStatus: conversation.botStatus || "active",
         createdAt: conversation.createdAt,

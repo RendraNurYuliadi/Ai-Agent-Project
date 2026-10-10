@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useSyncExternalStore } from "react";
-import Image from "next/image";
-import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import {
   Bot,
   Send,
@@ -19,12 +17,9 @@ import {
   Copy,
   Check,
   Pencil,
-  ExternalLink,
-  ChevronRight,
 } from "lucide-react";
-import { FormattedMessage } from "@/components/formatted-message";
-import { ResponseMeta } from "@/components/response-meta";
 import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
+import { ConversationMessageBody, type ConversationMessageComponent, type ConversationMessageData } from "@/components/conversation-message-body";
 
 interface SpeechRecognitionResultEventLike {
   resultIndex: number;
@@ -61,6 +56,8 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  authorName?: string;
+  authorId?: string;
   messageType?: string;
   lmStudioAvailable?: boolean;
   generationDurationMs?: number;
@@ -73,20 +70,12 @@ interface Message {
     matchedKeywords: string[];
   }>;
   webSources?: Array<{ id: string; title: string; url: string; score: number; publishedDate?: string }>;
-  uiComponents?: AssistantComponent[];
-  botInteraction?: BotInteractionCardData;
+  uiComponents?: ConversationMessageComponent[];
+  botInteraction?: ConversationMessageData["botInteraction"];
   timestamp: string;
 }
 
-interface BotInteractionCardData {
-  type: "welcome_message" | "guided_routing" | "text_question";
-  title?: string;
-  subtitle?: string;
-  icon?: string;
-  footerText?: string;
-  buttons?: ComponentActionButton[];
-  quickButtons?: ComponentActionButton[];
-}
+type BotInteractionCardData = NonNullable<ConversationMessageData["botInteraction"]>;
 
 interface ActiveBotPreview {
   name: string;
@@ -105,37 +94,6 @@ interface ChatSkill {
   botUser: { id: string; name: string; fullName: string; email: string; userType: "human" | "bot" } | null;
   bot: ActiveBotPreview | null;
   isAvailable: boolean;
-}
-
-interface ComponentActionButton {
-  label: string;
-  action: "reply" | "link";
-  value: string;
-}
-
-interface ComponentCard {
-  imageUrl: string;
-  imageHeight?: number;
-  title: string;
-  subtitle: string;
-  buttons: ComponentActionButton[];
-}
-
-interface AssistantComponent {
-  id: string;
-  name: string;
-  title?: string;
-  subtitle?: string;
-  type: "reply_buttons" | "link_buttons" | "card" | "carousel";
-  buttons: ComponentActionButton[];
-  card: ComponentCard | null;
-  cards: ComponentCard[];
-  triggeredBy?: Array<{
-    collectionName: string;
-    articleId: string;
-    title: string;
-    score: number;
-  }>;
 }
 
 interface MessageSubmissionOptions {
@@ -178,235 +136,6 @@ function renderWelcomeText(template: string | undefined, user: UserProfile | nul
     ["time", now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", hour12: false })],
   ]);
   return template.replace(/\{([^{}]+)\}/g, (placeholder, key: string) => values.get(key) ?? placeholder);
-}
-
-function ComponentButtons({
-  buttons,
-  onReply,
-  disabled,
-  buttonMode,
-}: {
-  buttons: ComponentActionButton[];
-  onReply: (value: string) => void;
-  disabled: boolean;
-  buttonMode?: "reply" | "link";
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {buttons.map((button, index) => (buttonMode || button.action) === "reply" ? (
-        <button
-          key={`${button.label}-${index}`}
-          type="button"
-          onClick={() => onReply(button.value)}
-          disabled={disabled}
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-40"
-        >
-          {button.label}
-        </button>
-      ) : (
-        <a
-          key={`${button.label}-${index}`}
-          href={button.value}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800"
-        >
-          {button.label}<ExternalLink className="h-3 w-3" />
-        </a>
-      ))}
-    </div>
-  );
-}
-
-function ComponentCardView({
-  card,
-  onReply,
-  disabled,
-}: {
-  card: ComponentCard;
-  onReply: (value: string) => void;
-  disabled: boolean;
-}) {
-  return (
-    <article className="w-full min-w-0 overflow-hidden rounded-xl border border-neutral-800 bg-[#101010]">
-      {card.imageUrl && (
-        <Image
-          src={getImageProxyUrl(card.imageUrl)}
-          alt={card.title}
-          width={520}
-          height={card.imageHeight ?? 128}
-          unoptimized
-          style={{ height: `${card.imageHeight ?? 128}px` }}
-          className="w-full object-cover"
-        />
-      )}
-      <div className="space-y-2.5 p-3">
-        <div>
-          <h3 className="text-sm font-semibold text-white">{card.title}</h3>
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">{card.subtitle}</p>
-        </div>
-        <ComponentButtons buttons={card.buttons} onReply={onReply} disabled={disabled} />
-      </div>
-    </article>
-  );
-}
-
-function AssistantComponents({
-  component,
-  onReply,
-  disabled,
-}: {
-  component: AssistantComponent;
-  onReply: (value: string) => void;
-  disabled: boolean;
-}) {
-  if (component.type === "reply_buttons") {
-    return (
-      <ComponentButtons
-        buttons={component.buttons}
-        onReply={onReply}
-        disabled={disabled}
-      />
-    );
-  }
-  if (component.type === "link_buttons") {
-    return (
-      <article className="w-full max-w-[320px] rounded-xl border border-neutral-800 bg-[#101010] p-3">
-        {component.title && <h3 className="text-sm font-semibold text-white">{component.title}</h3>}
-        {component.subtitle && (
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">
-            {component.subtitle}
-          </p>
-        )}
-        <div className="mt-3 flex flex-wrap items-start gap-2">
-          {component.buttons.map((button, index) => (
-            <a
-              key={`${button.label}-${index}`}
-              href={button.value}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-xs font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800"
-            >
-              {button.label}<ExternalLink className="h-3 w-3" />
-            </a>
-          ))}
-        </div>
-      </article>
-    );
-  }
-  if (component.type === "card" && component.card) {
-    return (
-      <div className="w-full max-w-[260px]">
-        <ComponentCardView card={component.card} onReply={onReply} disabled={disabled} />
-      </div>
-    );
-  }
-  if (component.type === "carousel") {
-    return <ComponentCarousel component={component} onReply={onReply} disabled={disabled} />;
-  }
-  return null;
-}
-
-function RotatingAssistantComponents({
-  components,
-  onReply,
-  disabled,
-}: {
-  components: AssistantComponent[];
-  onReply: (value: string) => void;
-  disabled: boolean;
-}) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const componentCount = components.length;
-
-  useEffect(() => {
-    if (componentCount < 2) return;
-    const intervalId = window.setInterval(() => {
-      setCurrentIndex((index) => (index + 1) % componentCount);
-    }, 10_000);
-    return () => window.clearInterval(intervalId);
-  }, [componentCount]);
-
-  if (componentCount === 0) return null;
-  const component = components[currentIndex % componentCount];
-
-  return (
-    <div key={component.id} className="chat-component-enter w-full min-w-0 pl-1">
-      <AssistantComponents
-        component={component}
-        onReply={onReply}
-        disabled={disabled}
-      />
-    </div>
-  );
-}
-
-function ComponentCarousel({
-  component,
-  onReply,
-  disabled,
-}: {
-  component: AssistantComponent;
-  onReply: (value: string) => void;
-  disabled: boolean;
-}) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const cardCount = component.cards.length;
-
-  useEffect(() => {
-    if (cardCount <= 1) return;
-    const intervalId = window.setInterval(() => {
-      setCurrentIndex((index) => (index + 1) % cardCount);
-    }, 5000);
-    return () => window.clearInterval(intervalId);
-  }, [cardCount]);
-
-  if (cardCount === 0) return null;
-
-  const showPrevious = () => setCurrentIndex((index) => (index - 1 + cardCount) % cardCount);
-  const showNext = () => setCurrentIndex((index) => (index + 1) % cardCount);
-
-  return (
-    <div className="w-full max-w-[260px]" aria-roledescription="carousel">
-      <div className="overflow-hidden">
-        <div
-          className="flex transition-transform duration-500 ease-out motion-reduce:transition-none"
-          style={{ transform: `translateX(-${currentIndex * 100}%)` }}
-        >
-          {component.cards.map((card, index) => (
-            <div key={`${component.id}-${index}`} className="w-full shrink-0">
-              <ComponentCardView card={card} onReply={onReply} disabled={disabled} />
-            </div>
-          ))}
-        </div>
-      </div>
-      {cardCount > 1 && (
-        <div className="mt-2 flex items-center justify-between px-1">
-          <button
-            type="button"
-            onClick={showPrevious}
-            aria-label="Card sebelumnya"
-            title="Card sebelumnya"
-            className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span className="text-[10px] tabular-nums text-neutral-500">
-            {currentIndex + 1} / {cardCount}
-          </span>
-          <button
-            type="button"
-            onClick={showNext}
-            aria-label="Card berikutnya"
-            title="Card berikutnya"
-            className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 function getInitials(fullName: string, name: string): string {
@@ -473,50 +202,13 @@ function BotInteractionCard({
   onReply: (value: string) => void;
   disabled: boolean;
 }) {
-  const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : Sparkles;
-  const buttons = data.buttons || data.quickButtons || [];
-
-  if (data.type === "text_question") {
-    return (
-      <article className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-neutral-800 bg-[#101010] p-3.5 sm:max-w-[360px]">
-        {buttons.length > 0 && (
-          <div className="flex flex-wrap items-start gap-2">
-            {buttons.map((button, index) => button.action === "link" ? (
-              <a key={`${button.label}-${index}`} href={button.value} target="_blank" rel="noopener noreferrer" className="inline-flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800">
-                {button.label}<ExternalLink className="h-3 w-3 shrink-0" />
-              </a>
-            ) : (
-              <button key={`${button.label}-${index}`} type="button" onClick={() => onReply(button.value)} disabled={disabled} className="w-fit max-w-full break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-40">{button.label}</button>
-            ))}
-          </div>
-        )}
-      </article>
-    );
-  }
-
-  return (
-    <article className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-neutral-800 bg-[#101010] p-3.5 sm:max-w-[360px]">
-      {data.type === "welcome_message" && data.title && (
-        <div className="mb-2 flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black"><Icon className="h-4 w-4" /></span>
-          <h3 className="text-sm font-semibold text-white">{data.title}</h3>
-        </div>
-      )}
-      {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
-      {buttons.length > 0 && (
-        <div className="mt-3 flex flex-wrap items-start gap-2">
-          {buttons.map((button, index) => button.action === "link" ? (
-            <a key={`${button.label}-${index}`} href={button.value} target="_blank" rel="noopener noreferrer" className="inline-flex w-fit max-w-full items-center gap-1.5 break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800">
-              {button.label}<ExternalLink className="h-3 w-3 shrink-0" />
-            </a>
-          ) : (
-            <button key={`${button.label}-${index}`} type="button" onClick={() => onReply(button.value)} disabled={disabled} className="w-fit max-w-full break-words rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-40">{button.label}</button>
-          ))}
-        </div>
-      )}
-      {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
-    </article>
-  );
+  return <ConversationMessageBody message={{
+    id: "welcome-preview",
+    role: "assistant",
+    content: "",
+    timestamp: new Date().toISOString(),
+    botInteraction: data,
+  }} isUser={false} onReply={onReply} disabled={disabled} />;
 }
 
 export default function ChatbotPage() {
@@ -529,11 +221,10 @@ export default function ChatbotPage() {
   const [selectedSkillId, setSelectedSkillId] = useState("");
   const [fallbackActiveBot, setFallbackActiveBot] = useState<ActiveBotPreview | null>(null);
   const [conversationStatus, setConversationStatus] = useState("active");
+  const [escalationStatus, setEscalationStatus] = useState<"pending" | "accepted" | null>(null);
   const [input, setInput] = useState("");
   const [chatModelProvider, setChatModelProvider] = useState<"lmstudio" | "openrouter">("lmstudio");
   const [chatModel, setChatModel] = useState("local-model");
-  const [availableChatModels, setAvailableChatModels] = useState<string[]>([]);
-  const [loadingChatModels, setLoadingChatModels] = useState(true);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -580,6 +271,41 @@ export default function ChatbotPage() {
   }, []);
 
   useEffect(() => {
+    if (!activeConvId || !escalationStatus) return;
+    let active = true;
+    const syncEscalatedConversation = async () => {
+      try {
+        const response = await fetch(`/api/conversations/${activeConvId}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!active) return;
+        const conversation = data.conversation;
+        if (conversation.escalationStatus === "closed" || conversation.botStatus === "closed") {
+          setConversationStatus("closed");
+          setEscalationStatus(null);
+        } else if (conversation.escalationStatus === "bot") {
+          setEscalationStatus(null);
+        } else {
+          setEscalationStatus(conversation.escalationStatus || null);
+        }
+        const incomingMessages: Message[] = conversation.messages || [];
+        setMessages((current) => {
+          const currentLast = current.at(-1)?.id;
+          const incomingLast = incomingMessages.at(-1)?.id;
+          return current.length === incomingMessages.length && currentLast === incomingLast ? current : incomingMessages;
+        });
+      } catch {
+        // A later poll can recover from a temporary network failure.
+      }
+    };
+    const interval = window.setInterval(() => void syncEscalatedConversation(), 4000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [activeConvId, escalationStatus]);
+
+  useEffect(() => {
     fetchConversations();
     fetchUserProfile();
     fetch("/api/bots/active")
@@ -592,13 +318,11 @@ export default function ChatbotPage() {
       .catch(() => setSkills([]))
       .finally(() => setSkillsLoading(false));
     loadGatewayModelOptions()
-      .then(({ provider, model, models }) => {
+      .then(({ provider, model }) => {
         setChatModelProvider(provider);
         setChatModel(model || (provider === "openrouter" ? "openrouter/free" : "local-model"));
-        setAvailableChatModels(models);
       })
-      .catch(() => {})
-      .finally(() => setLoadingChatModels(false));
+      .catch(() => {});
 
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -650,6 +374,7 @@ export default function ChatbotPage() {
         const data = await res.json();
         setMessages(data.conversation.messages || []);
         setConversationStatus(data.conversation.botStatus || "active");
+        setEscalationStatus(data.conversation.escalationStatus || null);
         setSelectedSkillId(data.conversation.skillId || "");
       }
     } catch (err) {
@@ -683,6 +408,7 @@ export default function ChatbotPage() {
       setActiveConvId(newConv.id);
       setMessages(newConv.messages || []);
       setConversationStatus(newConv.botStatus || "active");
+      setEscalationStatus(null);
       notify("success", "Percakapan baru berhasil dibuat.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Gagal membuat percakapan.");
@@ -701,6 +427,7 @@ export default function ChatbotPage() {
         setActiveConvId(null);
         setMessages([]);
         setConversationStatus("active");
+        setEscalationStatus(null);
       }
       notify("success", `Percakapan "${pendingDelete.title}" berhasil dihapus.`);
       setPendingDelete(null);
@@ -797,6 +524,7 @@ export default function ChatbotPage() {
           setActiveConvId(convId);
           setMessages(data.conversation.messages || []);
           setConversationStatus(data.conversation.botStatus || "active");
+          setEscalationStatus(data.conversation.escalationStatus || null);
           setConversations((prev) => [
             {
               id: convId!,
@@ -847,6 +575,7 @@ export default function ChatbotPage() {
         throw new Error(data.error || "Gagal memproses pesan.");
       }
       if (data.botStatus) setConversationStatus(data.botStatus);
+      if (data.escalationStatus !== undefined) setEscalationStatus(data.escalationStatus);
 
       if (options.editUserMessageId) {
         if (data.assistantMessage) setEnteringMessageId(data.assistantMessage.id);
@@ -865,10 +594,13 @@ export default function ChatbotPage() {
           ));
         }
       } else {
-        if (data.assistantMessage) setEnteringMessageId(data.assistantMessage.id);
+        const assistantMessages: Message[] = Array.isArray(data.assistantMessages)
+          ? data.assistantMessages
+          : data.assistantMessage ? [data.assistantMessage] : [];
+        if (assistantMessages.length) setEnteringMessageId(assistantMessages.at(-1)!.id);
         setMessages((prev) => {
           const updated = prev.map((item) => item.id === userMsg!.id ? data.userMessage : item);
-          return data.assistantMessage ? [...updated, data.assistantMessage] : updated;
+          return assistantMessages.length ? [...updated, ...assistantMessages] : updated;
         });
         setConversations((prev) =>
           prev.map((c) =>
@@ -1099,7 +831,7 @@ export default function ChatbotPage() {
 
                 <p className="flex max-w-36 items-center gap-1 truncate text-[10px] text-neutral-500 sm:max-w-64">
                   <Cpu className="w-2.5 h-2.5" />
-                  {selectedSkill ? `${selectedSkill.name} · ${selectedSkill.botUser?.fullName || selectedSkill.botUser?.name || "Bot"}` : activeBot ? "Bot flow aktif (fallback)" : `${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • ${chatModel}`}
+                  {escalationStatus === "pending" ? "Menunggu human agent menerima" : escalationStatus === "accepted" ? "Ditangani human agent" : selectedSkill ? `${selectedSkill.name} · ${selectedSkill.botUser?.fullName || selectedSkill.botUser?.name || "Bot"}` : activeBot ? "Bot flow aktif (fallback)" : `${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • ${chatModel}`}
                 </p>
               </div>
             </div>
@@ -1113,6 +845,7 @@ export default function ChatbotPage() {
                 setActiveConvId(null);
                 setMessages([]);
                 setConversationStatus("active");
+                setEscalationStatus(null);
               }}
               disabled={skillsLoading || sending}
               aria-label="Pilih skill chatbot"
@@ -1248,110 +981,21 @@ export default function ChatbotPage() {
                       className={`flex w-full min-w-0 max-w-[calc(100%-2.625rem)] flex-col gap-1 ${isUser ? "items-end sm:max-w-[min(80%,42rem)]" : "items-start sm:max-w-[min(68%,42rem)]"
                         }`}
                     >
-                      {/* Badges (assistant only, above bubble) */}
-                      {!isUser && (
-                        <div className="flex items-center gap-1.5 pl-1 text-[10px] text-neutral-500">
-                          <span className="font-semibold text-white">
-                            GenAI
-                          </span>
-
-                          {msg.messageType && msg.messageType !== "TEXT_QUESTION" && (
-                            <span
-                              className={`px-1.5 py-0.5 rounded-full text-[9px] font-medium ${msg.messageType === "FAQ"
-                                ? "bg-white/10 text-white border border-white/20"
-                                : "bg-neutral-700/20 text-neutral-300 border border-neutral-700/40"
-                                }`}
-                            >
-                              {msg.messageType}
-                            </span>
-                          )}
-
-                          {msg.lmStudioAvailable === false && (
-                            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-neutral-800 text-neutral-400 border border-neutral-700">
-                              Offline
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Bubble */}
-                      {(msg.content || isEditing) && <div
-                        className={`w-fit min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser
-                          ? "bg-white text-black rounded-tr-sm shadow-lg font-medium"
-                          : "bg-[#111111] text-neutral-300 border border-neutral-800 rounded-tl-sm shadow-md"
-                          }`}
-                      >
-                        {isEditing ? (
-                          <form
-                            className="w-full min-w-48 space-y-2"
-                            onSubmit={(event) => {
-                              event.preventDefault();
-                              void submitMessage(editingText, { editUserMessageId: msg.id });
-                            }}
-                          >
-                            <textarea
-                              autoFocus
-                              value={editingText}
-                              onChange={(event) => setEditingText(event.target.value)}
-                              rows={Math.min(6, Math.max(2, editingText.split("\n").length))}
-                              className="w-full resize-y bg-transparent text-sm text-black outline-none placeholder:text-neutral-500"
-                              aria-label="Edit pesan user"
-                            />
-                            <div className="flex justify-end gap-1">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingMessageId(null);
-                                  setEditingText("");
-                                }}
-                                disabled={sending}
-                                className="rounded p-1 text-neutral-600 hover:bg-neutral-100 hover:text-black disabled:opacity-40"
-                                title="Batal edit"
-                                aria-label="Batal edit"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="submit"
-                                disabled={sending || !editingText.trim()}
-                                className="rounded p-1 text-neutral-600 hover:bg-neutral-100 hover:text-black disabled:opacity-40"
-                                title="Kirim ulang"
-                                aria-label="Kirim ulang pesan yang diedit"
-                              >
-                                <Send className="h-4 w-4" />
-                              </button>
-                            </div>
-                          </form>
-                        ) : (
-                          <FormattedMessage content={msg.content} isUser={isUser} />
-                        )}
-                      </div>}
-
-                      {!isUser && msg.botInteraction && (
-                        <BotInteractionCard
-                          data={msg.botInteraction}
-                          onReply={(value) => void submitMessage(value)}
-                          disabled={sending}
-                        />
-                      )}
-
-                      {!isUser && msg.uiComponents && msg.uiComponents.length > 0 && (
-                        <RotatingAssistantComponents
-                          components={msg.uiComponents}
-                          onReply={(value) => void submitMessage(value)}
-                          disabled={sending}
-                        />
-                      )}
-
-                      <ResponseMeta
-                        timestamp={msg.timestamp}
-                        align={isUser ? "end" : "start"}
-                        generationDurationMs={isUser ? undefined : msg.generationDurationMs}
-                        showRetrieval={!isUser && (msg.messageType === "FAQ" || msg.messageType === "RAG" || msg.messageType === "WEB_SEARCH")}
-                        webSearch={!isUser && msg.messageType === "WEB_SEARCH"}
-                        topArticles={msg.topArticles}
-                        uiComponents={msg.uiComponents}
-                        webSources={msg.webSources}
+                      <ConversationMessageBody
+                        message={msg}
+                        isUser={isUser}
+                        onReply={(value) => void submitMessage(value)}
+                        disabled={sending}
+                        contentOverride={isEditing ? <form className="w-full min-w-48 space-y-2" onSubmit={(event) => {
+                          event.preventDefault();
+                          void submitMessage(editingText, { editUserMessageId: msg.id });
+                        }}>
+                          <textarea autoFocus value={editingText} onChange={(event) => setEditingText(event.target.value)} rows={Math.min(6, Math.max(2, editingText.split("\n").length))} className="w-full resize-y bg-transparent text-sm text-black outline-none placeholder:text-neutral-500" aria-label="Edit pesan user" />
+                          <div className="flex justify-end gap-1">
+                            <button type="button" onClick={() => { setEditingMessageId(null); setEditingText(""); }} disabled={sending} className="rounded p-1 text-neutral-600 hover:bg-neutral-100 hover:text-black disabled:opacity-40" title="Batal edit" aria-label="Batal edit"><X className="h-4 w-4" /></button>
+                            <button type="submit" disabled={sending || !editingText.trim()} className="rounded p-1 text-neutral-600 hover:bg-neutral-100 hover:text-black disabled:opacity-40" title="Kirim ulang" aria-label="Kirim ulang pesan yang diedit"><Send className="h-4 w-4" /></button>
+                          </div>
+                        </form> : undefined}
                       />
                       <div className="flex flex-wrap items-center justify-end gap-2 px-1">
                         <button

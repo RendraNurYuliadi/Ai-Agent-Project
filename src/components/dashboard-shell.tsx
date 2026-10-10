@@ -20,6 +20,7 @@ import {
   GitBranch,
   ChevronRight,
   Blocks,
+  MessagesSquare,
 } from "lucide-react";
 import { UserSession } from "@/lib/auth";
 
@@ -87,6 +88,13 @@ export default function DashboardShell({
       href: "/dashboard/chat-history",
       icon: History,
       current: pathname.startsWith("/dashboard/chat-history"),
+    },
+    {
+      name: "Escalation Queue",
+      href: "/dashboard/escalation-queue",
+      icon: MessagesSquare,
+      current: pathname.startsWith("/dashboard/escalation-queue"),
+      roles: user.userType === "human" ? undefined : ["__hidden__"],
     },
     {
       name: "All Conversations",
@@ -171,7 +179,7 @@ export default function DashboardShell({
   const RoleIcon = roleInfo.icon;
 
   const mainNav = visibleNav.filter((n) =>
-    ["Dashboard", "Chatbot", "Chat History", "All Conversations", "LLM Gateway"].includes(n.name)
+    ["Dashboard", "Chatbot", "Chat History", "Escalation Queue", "All Conversations", "LLM Gateway"].includes(n.name)
   );
 
   const adminNav = visibleNav.filter((n) =>

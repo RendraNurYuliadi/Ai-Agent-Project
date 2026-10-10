@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
       fullName: user.fullName || user.name || "User",
       email: user.email,
       role: user.role || "public_user",
+      userType: (user.userType === "bot" ? "bot" : "human") as "human" | "bot",
     };
 
     const token = await signSession(sessionUser);

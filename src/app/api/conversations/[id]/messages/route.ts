@@ -4,7 +4,7 @@ import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import { smartSearchKB, ScoredArticle } from "@/lib/smart-search";
 import { getAIConfig, generateAICompletion, isOpenRouterFreeModel } from "@/lib/ai";
-import { processBotTurn } from "@/lib/bot-runtime";
+import { initializeBotConversation, processBotTurn } from "@/lib/bot-runtime";
 
 // POST /api/conversations/[id]/messages — add message & get AI reply
 export async function POST(
@@ -30,12 +30,11 @@ export async function POST(
 
     const db = await getDatabase();
 
-    // Verify conversation belongs to user
-    const conversation = await db.collection("conversations").findOne({
-      _id: new ObjectId(id),
-      userId: session.id,
-    });
+    const conversation = await db.collection("conversations").findOne({ _id: new ObjectId(id) });
     if (!conversation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
+    const isConversationOwner = String(conversation.userId) === session.id;
+    const isAssignedHumanAgent = conversation.escalationStatus === "accepted" && conversation.assignedHumanUserId === session.id;
+    if (!isConversationOwner && !isAssignedHumanAgent) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
     if (conversation.botStatus === "closed") {
       return NextResponse.json({ error: "Percakapan ini sudah ditutup. Mulai percakapan baru." }, { status: 409 });
     }
@@ -50,6 +49,53 @@ export async function POST(
     const existingMessages: ConversationMessage[] = Array.isArray(conversation.messages)
       ? conversation.messages
       : [];
+
+    if ((conversation.escalationStatus === "pending" || conversation.escalationStatus === "accepted") && (editUserMessageId || regenerateAssistantId)) {
+      return NextResponse.json({ error: "Pesan tidak dapat diedit atau dibuat ulang selama percakapan ditangani melalui escalation." }, { status: 409 });
+    }
+
+    if ((conversation.escalationStatus === "pending" || conversation.escalationStatus === "accepted") && !editUserMessageId && !regenerateAssistantId) {
+      const now = new Date();
+      if (isAssignedHumanAgent) {
+        const assistantMessage = {
+          id: new ObjectId().toString(),
+          role: "assistant" as const,
+          content: message.trim(),
+          messageType: "HUMAN_AGENT",
+          authorName: session.fullName || session.name,
+          authorId: session.id,
+          timestamp: now,
+        };
+        const agentReplyUpdate: Record<string, unknown> = {
+          $push: { messages: assistantMessage },
+          $set: { updatedAt: now },
+          $inc: { messageCount: 1 },
+        };
+        await db.collection("conversations").updateOne(
+          { _id: new ObjectId(id), escalationStatus: "accepted", assignedHumanUserId: session.id },
+          agentReplyUpdate
+        );
+        return NextResponse.json({ success: true, assistantMessage, escalationStatus: "accepted" });
+      }
+
+      const userMessage = {
+        id: new ObjectId().toString(),
+        role: "user" as const,
+        content: message.trim(),
+        timestamp: now,
+      };
+      const pendingUserUpdate: Record<string, unknown> = {
+        $push: { messages: userMessage },
+        $set: { updatedAt: now },
+        $inc: { messageCount: 1 },
+      };
+      await db.collection("conversations").updateOne(
+        { _id: new ObjectId(id), userId: session.id, escalationStatus: { $in: ["pending", "accepted"] } },
+        pendingUserUpdate
+      );
+      return NextResponse.json({ success: true, userMessage, assistantMessage: null, escalationStatus: conversation.escalationStatus });
+    }
+
     let userMessage: ConversationMessage;
     let replacementAssistantId: string | null = null;
     let editedUserMessageIndex = -1;
@@ -136,6 +182,52 @@ export async function POST(
         if (turn.assistantMessage) {
           turn.assistantMessage.generationDurationMs = Date.now() - botTurnStartedAt;
         }
+        if (turn.botTransfer) {
+          const [targetSkill, targetBot] = await Promise.all([
+            db.collection("skills").findOne({ _id: new ObjectId(turn.botTransfer.skillId), botUserId: turn.botTransfer.botUserId, botId: turn.botTransfer.botId }),
+            db.collection("bots").findOne({ _id: new ObjectId(turn.botTransfer.botId) }),
+          ]);
+          if (!targetSkill || !targetBot) return NextResponse.json({ error: "Skill bot tujuan tidak lagi tersedia." }, { status: 409 });
+          const flowState = await initializeBotConversation(db, {
+            entryInteractionId: targetBot.entryInteractionId,
+            interactions: targetBot.interactions || [],
+            variables: targetBot.variables || [],
+          }, session);
+          const assistantMessages = [
+            ...(turn.assistantMessage ? [turn.assistantMessage] : []),
+            ...flowState.messages,
+          ];
+          const transferSet: Record<string, unknown> = {
+            botId: turn.botTransfer.botId,
+            botUserId: turn.botTransfer.botUserId,
+            skillId: turn.botTransfer.skillId,
+            currentInteractionId: flowState.currentInteractionId,
+            botStatus: flowState.botStatus,
+            dataCollectionState: flowState.dataCollectionState,
+            escalationStatus: "bot",
+            assignedHumanUserId: null,
+            updatedAt: new Date(),
+          };
+          if (!existingMessages.some((item) => item.role === "user")) {
+            transferSet.title = message.trim().slice(0, 60) + (message.trim().length > 60 ? "..." : "");
+          }
+          const transferUpdate: Record<string, unknown> = {
+            $push: { messages: { $each: [userMessage, ...assistantMessages] } },
+            $set: transferSet,
+            $inc: { messageCount: 1 + assistantMessages.length },
+            $unset: { escalationHumanUserId: "", escalationAcceptedAt: "", escalationClosedAt: "" },
+          };
+          await db.collection("conversations").updateOne({ _id: new ObjectId(id) }, transferUpdate);
+          return NextResponse.json({
+            success: true,
+            userMessage,
+            assistantMessage: assistantMessages.at(-1) || null,
+            assistantMessages,
+            botStatus: flowState.botStatus,
+            escalationStatus: "bot",
+            botTransfer: true,
+          });
+        }
         const updatedAt = new Date();
         const isFirstMessage = !existingMessages.some((item) => item.role === "user");
         const setFields: Record<string, unknown> = {
@@ -145,6 +237,12 @@ export async function POST(
           dataCollectionState: turn.dataCollectionState,
           updatedAt,
         };
+        if (turn.escalation) {
+          setFields.escalationStatus = "pending";
+          setFields.escalationSkillId = turn.escalation.skillId;
+          setFields.escalationHumanUserId = turn.escalation.humanUserId;
+          setFields.assignedHumanUserId = null;
+        }
         if (isFirstMessage) {
           setFields.title = message.trim().slice(0, 60) + (message.trim().length > 60 ? "..." : "");
         }
@@ -153,6 +251,13 @@ export async function POST(
           $set: setFields,
           $inc: { messageCount: turn.assistantMessage ? 2 : 1 },
         };
+        if (conversation.escalationStatus === "bot") {
+          (botUpdate.$unset as Record<string, string>) = {
+            escalationStatus: "",
+            escalationSkillId: "",
+            assignedHumanUserId: "",
+          };
+        }
         await db.collection("conversations").updateOne({ _id: new ObjectId(id) }, botUpdate);
         return NextResponse.json({
           success: true,
@@ -163,6 +268,7 @@ export async function POST(
           contextSent: turn.contextSent,
           botStatus: turn.botStatus,
           silent: turn.silent,
+          escalationStatus: turn.escalation ? "pending" : null,
         });
       }
     }

@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
       fullName: resolvedFullName,
       email: emailClean,
       role: "public_user" as const,
+      userType: "human" as const,
     };
 
     // Auto-login: sign session JWT and set cookie
