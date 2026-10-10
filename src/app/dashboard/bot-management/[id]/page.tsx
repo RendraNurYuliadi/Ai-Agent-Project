@@ -98,6 +98,9 @@ const iconChoices = [
 
 const BOT_SYSTEM_VARIABLES = [
   "{question}",
+  "{chatHistory}",
+  "{conversationHistory}",
+  "{history}",
   "{fullName}",
   "{email}",
   "{username}",

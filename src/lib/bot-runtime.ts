@@ -49,6 +49,25 @@ export interface DataCollectionState {
   completed?: boolean;
 }
 
+function formatConversationHistory(
+  messages: Array<{ role?: string; content?: string }> = [],
+  limit = 20
+): string {
+  if (!Array.isArray(messages) || messages.length === 0) return "";
+  const recentMessages = messages
+    .filter((item) => item && typeof item.content === "string" && item.content.trim())
+    .slice(-limit);
+  if (recentMessages.length === 0) return "";
+
+  return recentMessages
+    .map((item) => {
+      const content = typeof item.content === "string" ? item.content.trim() : "";
+      const roleLabel = item.role === "assistant" ? "Assistant" : "User";
+      return `${roleLabel}: ${content}`;
+    })
+    .join("\n");
+}
+
 function applyPromptVariables(
   template: string,
   message: string,
@@ -268,6 +287,7 @@ export async function processBotTurn(
     dataCollectionState?: DataCollectionState | null;
     conversationId?: string;
     skillId?: string | null;
+    historyMessages?: Array<{ role?: string; content?: string }>;
   },
   message: string,
   user: { id?: string; name?: string; fullName?: string; email?: string; username?: string; role?: string }
@@ -366,7 +386,13 @@ export async function processBotTurn(
   let uiComponents: BotRuntimeComponent[] = [];
   let interactionCard: BotRuntimeMessage["botInteraction"];
   let messageType = interaction.type.toUpperCase();
-  const sessionVariables = Object.fromEntries(Object.entries(dataCollectionState?.answers ?? {}).map(([key, value]) => [key, String(value ?? "")])) as Record<string, string>;
+  const conversationHistory = formatConversationHistory(conversation.historyMessages || []);
+  const sessionVariables = {
+    ...Object.fromEntries(Object.entries(dataCollectionState?.answers ?? {}).map(([key, value]) => [key, String(value ?? "")])),
+    chatHistory: conversationHistory,
+    conversationHistory,
+    history: conversationHistory,
+  } as Record<string, string>;
 
   if (interaction.type === "welcome_message") {
     interactionCard = {
@@ -717,6 +743,7 @@ export async function processBotTurn(
         dataCollectionState,
         conversationId: conversation.conversationId,
         skillId: conversation.skillId,
+        historyMessages: conversation.historyMessages,
       },
       message,
       user

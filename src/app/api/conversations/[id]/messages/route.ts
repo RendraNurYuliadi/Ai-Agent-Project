@@ -128,6 +128,7 @@ export async function POST(
             dataCollectionState: conversation.dataCollectionState,
             conversationId: id,
             skillId: typeof conversation.skillId === "string" ? conversation.skillId : null,
+            historyMessages: existingMessages,
           },
           message.trim(),
           session

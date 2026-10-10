@@ -136,6 +136,36 @@ async function callLMStudio(
  * Call OpenRouter (OpenAI-compatible cloud API with free models)
  * Docs: https://openrouter.ai/docs
  */
+function extractTextFromOpenRouterContent(value: unknown): string | null {
+  if (typeof value === "string") return value.trim() || null;
+  if (Array.isArray(value)) {
+    const textParts: string[] = [];
+    for (const item of value) {
+      const extracted = extractTextFromOpenRouterContent(item);
+      if (extracted) textParts.push(extracted);
+    }
+    return textParts.join("\n").trim() || null;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const preferredKeys = ["text", "content", "value", "message", "output", "answer", "reasoning"];
+    for (const key of preferredKeys) {
+      const candidate = record[key];
+      const extracted = extractTextFromOpenRouterContent(candidate);
+      if (extracted) return extracted;
+    }
+
+    const nestedValues = Object.values(record);
+    for (const nested of nestedValues) {
+      if (nested && typeof nested === "object") {
+        const extracted = extractTextFromOpenRouterContent(nested);
+        if (extracted) return extracted;
+      }
+    }
+  }
+  return null;
+}
+
 async function callOpenRouter(
   config: AIConfig,
   messages: ChatMessage[],
@@ -181,11 +211,14 @@ async function callOpenRouter(
   }
 
   const data = await res.json();
-  const answer = data.choices?.[0]?.message?.content;
-  if (typeof answer !== "string") {
-    throw new Error("Format respons OpenRouter tidak valid");
-  }
-  return answer;
+  const answer = extractTextFromOpenRouterContent(data.choices?.[0]?.message?.content);
+  if (answer) return answer;
+
+  const altAnswer = extractTextFromOpenRouterContent(data.choices?.[0]?.message);
+  if (altAnswer) return altAnswer;
+
+  console.warn("OpenRouter returned non-text content; continuing with empty result.", JSON.stringify(data).slice(0, 1200));
+  return "";
 }
 
 /**

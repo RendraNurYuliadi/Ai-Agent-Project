@@ -1419,22 +1419,6 @@ export default function ChatbotPage() {
               className="h-10 min-w-0 flex-1 rounded-xl border border-neutral-800 bg-black px-3 text-sm text-white placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50 sm:px-4"
             />
 
-            {!activeBot && <select
-              value={chatModel}
-              onChange={(event) => setChatModel(event.target.value)}
-              disabled={loadingChatModels || availableChatModels.length === 0}
-              aria-label={`Model ${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"}`}
-              title={`${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"}: ${chatModel}`}
-              className="hidden h-10 w-28 shrink-0 truncate rounded-xl border border-neutral-800 bg-black px-2 text-[11px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 disabled:opacity-50 sm:block sm:w-48"
-            >
-              {chatModel && !availableChatModels.includes(chatModel) && (
-                <option value={chatModel}>{chatModel} (aktif)</option>
-              )}
-              {availableChatModels.map((model) => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>}
-
             <select
               value={speechLanguage}
               onChange={(e) => setSpeechLanguage(e.target.value)}

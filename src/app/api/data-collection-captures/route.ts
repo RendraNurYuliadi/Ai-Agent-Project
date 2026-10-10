@@ -71,3 +71,33 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Gagal memuat data capture." }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canManage(session.role)) return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
+
+  try {
+    const db = await getDatabase();
+    const captureId = req.nextUrl.searchParams.get("id");
+    const botId = req.nextUrl.searchParams.get("botId");
+    const captureCollection = db.collection("dataCollectionCaptures");
+
+    if (captureId) {
+      if (!ObjectId.isValid(captureId)) return NextResponse.json({ error: "ID data capture tidak valid." }, { status: 400 });
+      const result = await captureCollection.deleteOne({ _id: new ObjectId(captureId) });
+      return NextResponse.json({ success: true, deletedCount: result.deletedCount ?? 0 });
+    }
+
+    if (botId) {
+      if (!ObjectId.isValid(botId)) return NextResponse.json({ error: "ID bot tidak valid." }, { status: 400 });
+      const result = await captureCollection.deleteMany({ botId });
+      return NextResponse.json({ success: true, deletedCount: result.deletedCount ?? 0 });
+    }
+
+    return NextResponse.json({ error: "Parameter hapus tidak valid." }, { status: 400 });
+  } catch (error) {
+    console.error("DELETE data collection captures error:", error);
+    return NextResponse.json({ error: "Gagal menghapus data capture." }, { status: 500 });
+  }
+}
