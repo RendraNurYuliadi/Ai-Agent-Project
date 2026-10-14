@@ -54,6 +54,8 @@ export async function GET(req: NextRequest) {
           description: skill.description || "",
           botUserId: skill.botUserId || "",
           botId: skill.botId || "",
+          introMessageEnabled: skill.introMessageEnabled === true,
+          introMessage: skill.introMessage || "",
           botUser: botUser ? {
             id: botUser._id.toString(),
             name: botUser.name || "User",
@@ -109,7 +111,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, id: result.insertedId.toString(), name: newName }, { status: 201 });
     }
 
-    const { name, description, botUserId, botId } = body;
+    const { name, description, botUserId, botId, introMessageEnabled, introMessage } = body;
     const cleanName = typeof name === "string" ? name.trim() : "";
     const normalizedBotUserId = typeof botUserId === "string" ? botUserId.trim() : "";
     const normalizedBotId = typeof botId === "string" ? botId.trim() : "";
@@ -124,6 +126,9 @@ export async function POST(req: NextRequest) {
     }
     const user = await resolveOptionalSkillUser(db, normalizedBotUserId);
     if (!user) return NextResponse.json({ error: "User yang dipilih tidak valid." }, { status: 400 });
+    const cleanIntroMessage = typeof introMessage === "string" ? introMessage.trim().slice(0, 1000) : "";
+    const enableIntroMessage = user.userType !== "bot" && introMessageEnabled === true;
+    if (enableIntroMessage && !cleanIntroMessage) return NextResponse.json({ error: "Isi pesan perkenalan atau nonaktifkan pesannya." }, { status: 400 });
 
     const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
     const botLinked = Boolean(normalizedBotUserId && normalizedBotId);
@@ -144,6 +149,8 @@ export async function POST(req: NextRequest) {
       description: typeof description === "string" ? description.trim() : "",
       botUserId: normalizedBotUserId,
       botId: normalizedBotId,
+      introMessageEnabled: enableIntroMessage,
+      introMessage: cleanIntroMessage,
       createdBy: { id: session.id, name: session.name },
       createdAt: now,
       updatedAt: now,

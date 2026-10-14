@@ -130,12 +130,13 @@ export async function POST(req: NextRequest) {
     const { title, skillId } = await req.json();
     const db = await getDatabase();
 
-    let selectedSkill: { _id: ObjectId; name: string; botUserId?: string; botId?: string } | null = null;
+    let selectedSkill: { _id: ObjectId; name: string; botUserId?: string; botId?: string; introMessageEnabled?: boolean; introMessage?: string } | null = null;
     let botUserId: string | null = null;
+    let humanRecipientId: string | null = null;
     let activeBot = null;
     if (typeof skillId === "string" && skillId) {
       if (!ObjectId.isValid(skillId)) return NextResponse.json({ error: "Skill tidak valid." }, { status: 400 });
-      selectedSkill = await db.collection("skills").findOne<{ _id: ObjectId; name: string; botUserId?: string; botId?: string }>({ _id: new ObjectId(skillId) });
+      selectedSkill = await db.collection("skills").findOne<{ _id: ObjectId; name: string; botUserId?: string; botId?: string; introMessageEnabled?: boolean; introMessage?: string }>({ _id: new ObjectId(skillId) });
       if (!selectedSkill) return NextResponse.json({ error: "Skill tidak ditemukan." }, { status: 400 });
       if (selectedSkill.botUserId && ObjectId.isValid(selectedSkill.botUserId) && selectedSkill.botId && ObjectId.isValid(selectedSkill.botId)) {
         const [botUser, skillBot] = await Promise.all([
@@ -146,10 +147,19 @@ export async function POST(req: NextRequest) {
         activeBot = skillBot;
         botUserId = selectedSkill.botUserId;
       } else {
-        const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
-        activeBot = activeSetting?.botId && ObjectId.isValid(activeSetting.botId)
-          ? await db.collection("bots").findOne({ _id: new ObjectId(activeSetting.botId) })
+        const skillUser = selectedSkill.botUserId && ObjectId.isValid(selectedSkill.botUserId)
+          ? await db.collection("users").findOne({ _id: new ObjectId(selectedSkill.botUserId) }, { projection: { userType: 1 } })
           : null;
+        if (!skillUser) return NextResponse.json({ error: "Penerima skill tidak lagi tersedia." }, { status: 409 });
+        if (skillUser.userType !== "bot") {
+          humanRecipientId = selectedSkill.botUserId!;
+          botUserId = humanRecipientId;
+        } else {
+          const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
+          activeBot = activeSetting?.botId && ObjectId.isValid(activeSetting.botId)
+            ? await db.collection("bots").findOne({ _id: new ObjectId(activeSetting.botId) })
+            : null;
+        }
       }
     } else {
       const activeSetting = await db.collection("botSettings").findOne({ key: "active" });
@@ -164,13 +174,30 @@ export async function POST(req: NextRequest) {
         variables: activeBot.variables || [],
       }, session)
       : null;
+    const introMessage = selectedSkill?.introMessageEnabled === true ? selectedSkill.introMessage?.trim() : "";
+    const initialMessages = humanRecipientId && introMessage ? [{
+      id: new ObjectId().toString(),
+      role: "assistant" as const,
+      content: introMessage,
+      messageType: "SKILL_INTRO",
+      authorName: selectedSkill?.name || "Human Agent",
+      timestamp: new Date(),
+    }] : flowState?.messages || [];
 
     const newConversation = {
       userId: session.id,
       title: title || "Percakapan Baru",
-      messages: flowState?.messages || [],
-      messageCount: flowState?.messages.length || 0,
-      ...(activeBot && flowState ? {
+      messages: initialMessages,
+      messageCount: initialMessages.length,
+      ...(humanRecipientId && selectedSkill ? {
+        skillId: selectedSkill._id.toString(),
+        botUserId: humanRecipientId,
+        escalationSkillId: selectedSkill._id.toString(),
+        escalationHumanUserId: humanRecipientId,
+        escalationStatus: "pending",
+        assignedHumanUserId: null,
+        botStatus: "active",
+      } : activeBot && flowState ? {
         botId: activeBot._id.toString(),
         ...(selectedSkill ? { skillId: selectedSkill._id.toString(), botUserId } : {}),
         currentInteractionId: flowState.currentInteractionId,

@@ -127,7 +127,7 @@ export default function DashboardShell({
       href: "/dashboard/escalation-queue",
       icon: MessagesSquare,
       current: pathname.startsWith("/dashboard/escalation-queue"),
-      roles: user.userType === "human" ? undefined : ["__hidden__"],
+      roles: ["admin", "manager"],
     },
     {
       name: "All Conversations",

@@ -16,7 +16,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!ObjectId.isValid(id)) return NextResponse.json({ error: "ID skill tidak valid." }, { status: 400 });
 
   try {
-    const { name, description, botUserId, botId } = await req.json();
+    const { name, description, botUserId, botId, introMessageEnabled, introMessage } = await req.json();
     const cleanName = typeof name === "string" ? name.trim() : "";
     const normalizedBotUserId = typeof botUserId === "string" ? botUserId.trim() : "";
     const normalizedBotId = typeof botId === "string" ? botId.trim() : "";
@@ -40,6 +40,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     ]);
     if (!exists) return NextResponse.json({ error: "Skill tidak ditemukan." }, { status: 404 });
     if (duplicate) return NextResponse.json({ error: "Nama skill sudah digunakan." }, { status: 409 });
+    if (!botUser) return NextResponse.json({ error: "User yang dipilih tidak valid." }, { status: 400 });
+    const cleanIntroMessage = typeof introMessage === "string" ? introMessage.trim().slice(0, 1000) : "";
+    const enableIntroMessage = botUser.userType !== "bot" && introMessageEnabled === true;
+    if (enableIntroMessage && !cleanIntroMessage) return NextResponse.json({ error: "Isi pesan perkenalan atau nonaktifkan pesannya." }, { status: 400 });
     const botLinked = Boolean(normalizedBotUserId && normalizedBotId);
     if (botLinked) {
       if (!botUser || botUser.userType !== "bot" || !bot) return NextResponse.json({ error: "Pilih user bertipe bot dan bot flow yang valid." }, { status: 400 });
@@ -56,6 +60,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         description: typeof description === "string" ? description.trim() : "",
         botUserId: normalizedBotUserId,
         botId: normalizedBotId,
+        introMessageEnabled: enableIntroMessage,
+        introMessage: cleanIntroMessage,
         updatedBy: { id: session.id, name: session.name },
         updatedAt: new Date(),
       } }

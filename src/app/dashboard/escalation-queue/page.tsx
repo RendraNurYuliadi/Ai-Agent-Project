@@ -211,7 +211,7 @@ export default function EscalationQueuePage() {
 
       {error && <div role="alert" className="shrink-0 rounded-md border border-red-900/60 bg-red-950/30 px-4 py-3 text-xs text-red-200">{error}</div>}
 
-      <div className="grid min-h-0 flex-1 gap-5 overflow-hidden lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.6fr)]">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(150px,0.8fr)_minmax(0,1.2fr)] gap-3 overflow-hidden sm:grid-rows-1 sm:grid-cols-[minmax(170px,0.75fr)_minmax(0,1.8fr)] sm:gap-5">
         <section className="min-h-0 overflow-y-auto border-y border-neutral-900">
           <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-900 bg-black py-3">
             <h2 className="text-xs font-semibold text-neutral-300">Queue <span className="ml-1 font-mono text-neutral-600">{items.length}</span></h2>

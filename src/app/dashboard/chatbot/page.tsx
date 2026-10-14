@@ -75,6 +75,20 @@ interface Message {
   timestamp: string;
 }
 
+function normalizeMessages(value: unknown): Message[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item, index) => {
+    if (typeof item !== "object" || item === null) return [];
+    const message = item as Partial<Message>;
+    if ((message.role !== "user" && message.role !== "assistant") || typeof message.content !== "string") return [];
+    return [{
+      ...message,
+      id: typeof message.id === "string" && message.id ? message.id : `legacy-${index}-${Date.now()}`,
+      timestamp: typeof message.timestamp === "string" ? message.timestamp : new Date().toISOString(),
+    } as Message];
+  });
+}
+
 type BotInteractionCardData = NonNullable<ConversationMessageData["botInteraction"]>;
 
 interface ActiveBotPreview {
@@ -289,11 +303,12 @@ export default function ChatbotPage() {
         } else {
           setEscalationStatus(conversation.escalationStatus || null);
         }
-        const incomingMessages: Message[] = conversation.messages || [];
+        const incomingMessages = normalizeMessages(conversation.messages);
         setMessages((current) => {
-          const currentLast = current.at(-1)?.id;
+          const safeCurrent = normalizeMessages(current);
+          const currentLast = safeCurrent.at(-1)?.id;
           const incomingLast = incomingMessages.at(-1)?.id;
-          return current.length === incomingMessages.length && currentLast === incomingLast ? current : incomingMessages;
+          return safeCurrent.length === incomingMessages.length && currentLast === incomingLast ? safeCurrent : incomingMessages;
         });
       } catch {
         // A later poll can recover from a temporary network failure.
@@ -373,7 +388,7 @@ export default function ChatbotPage() {
       const res = await fetch(`/api/conversations/${convId}`);
       if (res.ok) {
         const data = await res.json();
-        setMessages(data.conversation.messages || []);
+        setMessages(normalizeMessages(data.conversation.messages));
         setConversationStatus(data.conversation.botStatus || "active");
         setEscalationStatus(data.conversation.escalationStatus || null);
         setSelectedSkillId(data.conversation.skillId || "");
@@ -401,15 +416,16 @@ export default function ChatbotPage() {
           id: newConv.id,
           title: newConv.title,
           messageCount: newConv.messageCount || 0,
+          skillId: newConv.skillId || selectedSkillId || null,
           createdAt: newConv.createdAt,
           updatedAt: newConv.updatedAt,
         },
         ...prev,
       ]);
       setActiveConvId(newConv.id);
-      setMessages(newConv.messages || []);
+      setMessages(normalizeMessages(newConv.messages));
       setConversationStatus(newConv.botStatus || "active");
-      setEscalationStatus(null);
+      setEscalationStatus(newConv.escalationStatus || null);
       notify("success", "Percakapan baru berhasil dibuat.");
     } catch (error) {
       notify("error", error instanceof Error ? error.message : "Gagal membuat percakapan.");
@@ -523,7 +539,7 @@ export default function ChatbotPage() {
           const data = await res.json();
           convId = data.conversation.id;
           setActiveConvId(convId);
-          setMessages(data.conversation.messages || []);
+          setMessages(normalizeMessages(data.conversation.messages));
           setConversationStatus(data.conversation.botStatus || "active");
           setEscalationStatus(data.conversation.escalationStatus || null);
           setConversations((prev) => [
@@ -556,7 +572,7 @@ export default function ChatbotPage() {
 
     if (userMsg) {
       setEnteringMessageId(userMsg.id);
-      setMessages((prev) => [...prev, userMsg]);
+      setMessages((prev) => normalizeMessages([...prev, userMsg]));
       setInput("");
     }
 
@@ -580,11 +596,12 @@ export default function ChatbotPage() {
 
       if (options.editUserMessageId) {
         if (data.assistantMessage) setEnteringMessageId(data.assistantMessage.id);
-        setMessages((prev) => prev.map((item) => {
-          if (item.id === options.editUserMessageId) return data.userMessage;
+        const updatedUserMessage = normalizeMessages([data.userMessage])[0];
+        setMessages((prev) => normalizeMessages(prev.map((item) => {
+          if (item.id === options.editUserMessageId && updatedUserMessage) return updatedUserMessage;
           if (data.assistantMessage && item.id === data.assistantMessage.id) return data.assistantMessage;
           return item;
-        }));
+        })));
         setEditingMessageId(null);
         setEditingText("");
       } else if (options.regenerateAssistantId) {
@@ -595,13 +612,14 @@ export default function ChatbotPage() {
           ));
         }
       } else {
-        const assistantMessages: Message[] = Array.isArray(data.assistantMessages)
+        const assistantMessages = normalizeMessages(Array.isArray(data.assistantMessages)
           ? data.assistantMessages
-          : data.assistantMessage ? [data.assistantMessage] : [];
+          : data.assistantMessage ? [data.assistantMessage] : []);
         if (assistantMessages.length) setEnteringMessageId(assistantMessages.at(-1)!.id);
         setMessages((prev) => {
-          const updated = prev.map((item) => item.id === userMsg!.id ? data.userMessage : item);
-          return assistantMessages.length ? [...updated, ...assistantMessages] : updated;
+          const replacementUser = normalizeMessages([data.userMessage])[0] || userMsg!;
+          const updated = normalizeMessages(prev.map((item) => item.id === userMsg!.id ? replacementUser : item));
+          return normalizeMessages(assistantMessages.length ? [...updated, ...assistantMessages] : updated);
         });
         setConversations((prev) =>
           prev.map((c) =>
@@ -624,7 +642,7 @@ export default function ChatbotPage() {
         timestamp: new Date().toISOString(),
       };
       setEnteringMessageId(errorMsg.id);
-      setMessages((prev) => [...prev, errorMsg]);
+      setMessages((prev) => normalizeMessages([...prev, errorMsg]));
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -948,7 +966,7 @@ export default function ChatbotPage() {
             </div>
           ) : (
             <>
-              {messages.map((msg) => {
+              {normalizeMessages(messages).map((msg) => {
                 const isUser = msg.role === "user";
                 const isEditing = editingMessageId === msg.id;
 

@@ -251,7 +251,7 @@ export async function POST(
           $set: setFields,
           $inc: { messageCount: turn.assistantMessage ? 2 : 1 },
         };
-        if (conversation.escalationStatus === "bot") {
+        if (conversation.escalationStatus === "bot" && !turn.escalation) {
           (botUpdate.$unset as Record<string, string>) = {
             escalationStatus: "",
             escalationSkillId: "",

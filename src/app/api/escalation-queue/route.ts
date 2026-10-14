@@ -19,11 +19,18 @@ export async function GET(req: NextRequest) {
   try {
     const db = await getDatabase();
     if (!await isHumanUser(db, session.id)) return NextResponse.json({ error: "Queue hanya tersedia untuk user human." }, { status: 403 });
+    const recipientSkills = await db.collection("skills")
+      .find({ botUserId: { $in: [session.id, new ObjectId(session.id)] } }, { projection: { _id: 1 } })
+      .toArray();
+    const recipientSkillIds = recipientSkills.flatMap((skill) => [skill._id.toString(), skill._id]);
     const [conversations, skills, activeSetting] = await Promise.all([
       db.collection("conversations")
         .find({
-        escalationHumanUserId: session.id,
         escalationStatus: { $in: ["pending", "accepted"] },
+        $or: [
+          { escalationHumanUserId: session.id },
+          { escalationStatus: "pending", escalationSkillId: { $in: recipientSkillIds } },
+        ],
       })
       .sort({ updatedAt: -1 })
       .project({ messages: 1, title: 1, userId: 1, createdAt: 1, updatedAt: 1, escalationStatus: 1, assignedHumanUserId: 1 })
