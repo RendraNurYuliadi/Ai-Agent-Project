@@ -12,6 +12,7 @@ async function validateArticleReferences(
   db: Awaited<ReturnType<typeof getDatabase>>,
   articleRefs: Array<{ collectionName: string; articleId: string }>
 ): Promise<boolean> {
+  if (articleRefs.length === 0) return true;
   const collections = [...new Set(articleRefs.map((item) => item.collectionName))];
   const registered = await db.collection("knowledgeBases")
     .find({ collectionName: { $in: collections } }, { projection: { collectionName: 1 } })

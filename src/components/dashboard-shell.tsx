@@ -19,6 +19,8 @@ import {
   Zap,
   GitBranch,
   ChevronRight,
+  PanelLeftClose,
+  PanelLeftOpen,
   Blocks,
   MessagesSquare,
 } from "lucide-react";
@@ -77,6 +79,7 @@ export default function DashboardShell({
   }, [isFullHeightPage]);
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const navigation: NavItem[] = [
@@ -277,12 +280,12 @@ export default function DashboardShell({
           fixed md:sticky
           top-0 inset-y-0 left-0
           z-50
-          w-64
+          w-64 ${sidebarCollapsed ? "md:w-[4.5rem]" : "md:w-64"}
           bg-[#080808]
           md:bg-[#080808]
           border-r border-neutral-900
           flex flex-col justify-between
-          transition-transform duration-200 ease-in-out
+          transition-[width,transform] duration-200 ease-in-out
           h-screen
           ${mobileMenuOpen
             ? "translate-x-0"
@@ -294,17 +297,18 @@ export default function DashboardShell({
 
           {/* Brand */}
           <div
-            className="
-              px-5 py-5
+            className={`
+              px-3 py-5
               border-b border-neutral-900
-              flex items-center justify-between
+              flex items-center justify-between ${sidebarCollapsed ? "md:flex-col md:gap-2" : ""}
               shrink-0
-            "
+            `}
           >
             <Link
               href="/dashboard"
-              className="flex items-center gap-3 group focus:outline-none"
+              className={`flex min-w-0 items-center ${sidebarCollapsed ? "md:justify-center" : "gap-3"} group focus:outline-none`}
               onClick={() => setMobileMenuOpen(false)}
+              title="GenAI Chatbot"
             >
               <div
                 className="
@@ -320,7 +324,7 @@ export default function DashboardShell({
                 <Bot className="w-5 h-5" />
               </div>
 
-              <div>
+              <div className={sidebarCollapsed ? "md:hidden" : ""}>
                 <h2 className="font-semibold text-sm text-white tracking-tight">
                   GenAI Chatbot
                 </h2>
@@ -331,6 +335,16 @@ export default function DashboardShell({
                 </p>
               </div>
             </Link>
+
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+              className="hidden md:inline-flex shrink-0 rounded-lg p-1.5 text-neutral-500 transition-colors hover:bg-neutral-900 hover:text-white"
+              aria-label={sidebarCollapsed ? "Perbesar sidebar" : "Perkecil sidebar"}
+              title={sidebarCollapsed ? "Perbesar sidebar" : "Perkecil sidebar"}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
 
             <button
               onClick={() => setMobileMenuOpen(false)}
@@ -349,20 +363,20 @@ export default function DashboardShell({
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto p-3 space-y-5 scrollbar-thin">
+          <nav className={`flex-1 overflow-y-auto ${sidebarCollapsed ? "p-2 md:px-2" : "p-3"} space-y-5 scrollbar-thin`}>
 
             {/* Main */}
             {mainNav.length > 0 && (
               <div>
                 <div
-                  className="
-                    px-2 pb-2
+                  className={`
+                    px-2 pb-2 ${sidebarCollapsed ? "md:hidden" : ""}
                     text-[10px]
                     font-semibold
                     uppercase
                     tracking-[0.12em]
                     text-neutral-600
-                  "
+                  `}
                 >
                   Menu
                 </div>
@@ -372,6 +386,7 @@ export default function DashboardShell({
                     key={item.name}
                     item={item}
                     onClose={() => setMobileMenuOpen(false)}
+                    collapsed={sidebarCollapsed}
                   />
                 ))}
               </div>
@@ -381,14 +396,14 @@ export default function DashboardShell({
             {adminNav.length > 0 && (
               <div>
                 <div
-                  className="
-                    px-2 pb-2
+                  className={`
+                    px-2 pb-2 ${sidebarCollapsed ? "md:hidden" : ""}
                     text-[10px]
                     font-semibold
                     uppercase
                     tracking-[0.12em]
                     text-neutral-600
-                  "
+                  `}
                 >
                   Manajemen
                 </div>
@@ -398,6 +413,7 @@ export default function DashboardShell({
                     key={item.name}
                     item={item}
                     onClose={() => setMobileMenuOpen(false)}
+                    collapsed={sidebarCollapsed}
                   />
                 ))}
               </div>
@@ -407,14 +423,14 @@ export default function DashboardShell({
             {contentNav.length > 0 && (
               <div>
                 <div
-                  className="
-                    px-2 pb-2
+                  className={`
+                    px-2 pb-2 ${sidebarCollapsed ? "md:hidden" : ""}
                     text-[10px]
                     font-semibold
                     uppercase
                     tracking-[0.12em]
                     text-neutral-600
-                  "
+                  `}
                 >
                   Konfigurasi
                 </div>
@@ -424,6 +440,7 @@ export default function DashboardShell({
                     key={item.name}
                     item={item}
                     onClose={() => setMobileMenuOpen(false)}
+                    collapsed={sidebarCollapsed}
                   />
                 ))}
               </div>
@@ -432,14 +449,14 @@ export default function DashboardShell({
 
           {/* User Footer */}
           <div
-            className="
-              p-3
+            className={`
+              ${sidebarCollapsed ? "p-2" : "p-3"}
               border-t border-neutral-900
               bg-black
               shrink-0
-            "
+            `}
           >
-            <div className="flex items-center gap-2.5 mb-3 px-1">
+            <div className={`flex items-center ${sidebarCollapsed ? "md:justify-center" : "gap-2.5"} mb-3 px-1`}>
               <div
                 className="
                   flex items-center justify-center
@@ -456,7 +473,7 @@ export default function DashboardShell({
                 {user.name?.charAt(0).toUpperCase() || "U"}
               </div>
 
-              <div className="overflow-hidden flex-1">
+              <div className={`overflow-hidden flex-1 ${sidebarCollapsed ? "md:hidden" : ""}`}>
                 <p className="text-xs font-medium text-white truncate">
                   {user.name}
                 </p>
@@ -467,7 +484,7 @@ export default function DashboardShell({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-2 px-1">
+            <div className={`flex items-center ${sidebarCollapsed ? "md:flex-col md:gap-2" : "justify-between gap-2"} px-1`}>
               <span
                 className={`
                   inline-flex items-center gap-1
@@ -477,6 +494,7 @@ export default function DashboardShell({
                   rounded-md
                   border
                   ${roleInfo.bg}
+                  ${sidebarCollapsed ? "md:hidden" : ""}
                 `}
               >
                 <RoleIcon className="w-2.5 h-2.5" />
@@ -486,7 +504,7 @@ export default function DashboardShell({
               <button
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="
+                className={`
                   inline-flex items-center gap-1
                   text-xs
                   text-neutral-500
@@ -496,12 +514,14 @@ export default function DashboardShell({
                   rounded-lg
                   transition-all
                   cursor-pointer
-                "
+                  ${sidebarCollapsed ? "md:justify-center md:px-1" : ""}
+                `}
                 title="Keluar"
+                aria-label="Keluar"
               >
                 <LogOut className="w-3.5 h-3.5" />
 
-                <span>
+                <span className={sidebarCollapsed ? "md:hidden" : ""}>
                   {loggingOut ? "..." : "Keluar"}
                 </span>
               </button>
@@ -523,9 +543,11 @@ export default function DashboardShell({
 function NavLink({
   item,
   onClose,
+  collapsed,
 }: {
   item: NavItem;
   onClose: () => void;
+  collapsed: boolean;
 }) {
   const Icon = item.icon;
 
@@ -534,8 +556,8 @@ function NavLink({
       href={item.href}
       onClick={onClose}
       className={`
-        flex items-center justify-between
-        px-3 py-2.5
+        flex items-center ${collapsed ? "md:justify-center md:px-0" : "justify-between px-3"}
+        py-2.5
         rounded-xl
         text-xs
         font-medium
@@ -555,8 +577,10 @@ function NavLink({
             `
         }
       `}
+      title={item.name}
+      aria-label={item.name}
     >
-      <div className="flex items-center gap-2.5">
+      <div className={`flex min-w-0 items-center ${collapsed ? "md:justify-center" : "gap-2.5"}`}>
         <Icon
           className={`
             w-4 h-4
@@ -568,10 +592,10 @@ function NavLink({
           `}
         />
 
-        <span>{item.name}</span>
+        <span className={collapsed ? "md:hidden" : ""}>{item.name}</span>
       </div>
 
-      {item.badge ? (
+      {item.badge && !collapsed ? (
         <span
           className={`
             text-[9px]
@@ -586,7 +610,7 @@ function NavLink({
         >
           {item.badge}
         </span>
-      ) : item.current ? (
+      ) : item.current && !collapsed ? (
         <ChevronRight className="w-3 h-3 text-black/50" />
       ) : null}
     </Link>

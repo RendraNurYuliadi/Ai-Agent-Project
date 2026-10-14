@@ -95,6 +95,7 @@ export interface BotInteractionConfig {
   title?: string;
   subtitle?: string;
   icon?: string;
+  iconUrl?: string;
   footerText?: string;
   quickButtons?: BotQuickButton[];
   options?: GuidedRouteOption[];
@@ -163,6 +164,15 @@ function validLink(value: string): boolean {
   try {
     const url = new URL(value);
     return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function validImageUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password && !url.port;
   } catch {
     return false;
   }
@@ -309,6 +319,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     title: typeof value.title === "string" ? value.title.trim().slice(0, 120) : undefined,
     subtitle: typeof value.subtitle === "string" ? value.subtitle.trim().slice(0, 500) : undefined,
     icon: typeof value.icon === "string" ? value.icon.slice(0, 40) : undefined,
+    iconUrl: typeof value.iconUrl === "string" ? value.iconUrl.trim().slice(0, 2000) : undefined,
     footerText: typeof value.footerText === "string" ? value.footerText.trim().slice(0, 200) : undefined,
     quickButtons,
     options,
@@ -406,6 +417,9 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
 
   if (!ids.has(entryInteractionId)) return { success: false, error: "Entry interaction harus dipilih." };
   for (const interaction of interactions) {
+    if (interaction.type === "welcome_message" && interaction.config.icon === "custom" && !validImageUrl(interaction.config.iconUrl || "")) {
+      return { success: false, error: "Ikon Custom membutuhkan URL gambar HTTPS yang valid." };
+    }
     if (interaction.type === "data_collection") {
       const questions = interaction.config.dataCollectionQuestions || [];
       if (questions.length === 0) return { success: false, error: "Data Collection harus memiliki minimal satu pertanyaan." };

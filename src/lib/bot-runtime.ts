@@ -23,6 +23,7 @@ export interface BotRuntimeMessage {
     title?: string;
     subtitle?: string;
     icon?: string;
+    iconUrl?: string;
     footerText?: string;
     buttons: Array<{ label: string; action: "reply" | "link"; value: string }>;
   };
@@ -190,6 +191,7 @@ export async function initializeBotConversation(
         title: applyPromptVariables(entry.config.title || "", "", user, "", bot.variables || []),
         subtitle: applyPromptVariables(entry.config.subtitle || "", "", user, "", bot.variables || []),
         icon: entry.config.icon || "sparkles",
+        iconUrl: entry.config.iconUrl || "",
         footerText: applyPromptVariables(entry.config.footerText || "", "", user, "", bot.variables || []),
         buttons: quickButtons.map((button) => ({
           ...button,
@@ -404,6 +406,7 @@ export async function processBotTurn(
       title: applyPromptVariables(interaction.config.title || "", message, user, contextSent, bot.variables || [], sessionVariables),
       subtitle: applyPromptVariables(interaction.config.subtitle || "", message, user, contextSent, bot.variables || [], sessionVariables),
       icon: interaction.config.icon || "sparkles",
+      iconUrl: interaction.config.iconUrl || "",
       footerText: applyPromptVariables(interaction.config.footerText || "", message, user, contextSent, bot.variables || [], sessionVariables),
       buttons: (interaction.config.quickButtons || []).map((button) => ({
         ...button,

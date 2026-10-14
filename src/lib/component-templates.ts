@@ -111,11 +111,12 @@ export function validateComponentTemplate(value: unknown): ValidationResult {
   if (title.length > 120) return { success: false, error: "Title maksimal 120 karakter." };
   if (subtitle.length > 300) return { success: false, error: "Subtitle maksimal 300 karakter." };
 
-  if (!Array.isArray(value.articleRefs) || value.articleRefs.length < 1 || value.articleRefs.length > 10) {
-    return { success: false, error: "Pilih 1 sampai 10 artikel Knowledge Base." };
+  const rawArticleRefs = value.articleRefs === undefined ? [] : value.articleRefs;
+  if (!Array.isArray(rawArticleRefs) || rawArticleRefs.length > 10) {
+    return { success: false, error: "Maksimal 10 artikel Knowledge Base dapat dipilih." };
   }
   const articleRefs: ComponentArticleReference[] = [];
-  for (const item of value.articleRefs) {
+  for (const item of rawArticleRefs) {
     if (!isRecord(item) || typeof item.collectionName !== "string" || typeof item.articleId !== "string") {
       return { success: false, error: "Referensi artikel tidak valid." };
     }

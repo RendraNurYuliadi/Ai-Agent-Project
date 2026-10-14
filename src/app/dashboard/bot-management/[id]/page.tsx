@@ -30,6 +30,7 @@ import {
   Database,
   Globe,
   GitBranch,
+  ImagePlus,
   ListChecks,
   Loader2,
   MessageSquare,
@@ -102,10 +103,12 @@ const iconChoices = [
   { id: "bot", label: "Bot", Icon: Bot },
   { id: "message", label: "Message", Icon: MessageSquare },
   { id: "help", label: "Help", Icon: CircleHelp },
+  { id: "custom", label: "Custom", Icon: ImagePlus },
 ];
 
 const BOT_SYSTEM_VARIABLES = [
   "{question}",
+  "{message}",
   "{chatHistory}",
   "{conversationHistory}",
   "{history}",
@@ -118,6 +121,7 @@ const BOT_SYSTEM_VARIABLES = [
   "{date}",
   "{day}",
   "{time}",
+  "{nama_lengkap}",
 ];
 
 const BOT_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection", "data_collection_submitted", "skill_escalation"];
@@ -626,6 +630,18 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                   <dd className="mt-0.5 text-neutral-500">Input user terbaru. Dinamis sesuai chat aktif.</dd>
                 </div>
                 <div>
+                  <dt className="font-mono font-semibold text-neutral-200">{"{chatHistory}"}</dt>
+                  <dd className="mt-0.5 text-neutral-500">Riwayat percakapan pengguna dan bot yang sudah lewat.</dd>
+                </div>
+                <div>
+                  <dt className="font-mono font-semibold text-neutral-200">{"{conversationHistory}"}</dt>
+                  <dd className="mt-0.5 text-neutral-500">Versi history percakapan lengkap dalam konteks aktif.</dd>
+                </div>
+                <div>
+                  <dt className="font-mono font-semibold text-neutral-200">{"{history}"}</dt>
+                  <dd className="mt-0.5 text-neutral-500">Ringkasan riwayat chat yang dapat digunakan dalam prompt.</dd>
+                </div>
+                <div>
                   <dt className="font-mono font-semibold text-neutral-200">{"{context}"}</dt>
                   <dd className="mt-0.5 text-neutral-500">Hasil retrieval KB / data relevan yang sedang dipakai dalam node RAG.</dd>
                 </div>
@@ -644,6 +660,10 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                 <div>
                   <dt className="font-mono font-semibold text-neutral-200">{"{role}"}</dt>
                   <dd className="mt-0.5 text-neutral-500">Role user login saat ini, misalnya admin, manager, public_user.</dd>
+                </div>
+                <div>
+                  <dt className="font-mono font-semibold text-neutral-200">{"{nama_lengkap}"}</dt>
+                  <dd className="mt-0.5 text-neutral-500">Alias nama lengkap sesuai variabel data collection atau data pengguna.</dd>
                 </div>
                 {customVariables.length > 0 && <div className="rounded-md border border-neutral-800 bg-neutral-950/50 p-2">
                   <dt className="mb-2 text-[9px] uppercase tracking-wide text-neutral-500">Variabel manual</dt>
@@ -752,11 +772,14 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-900 px-4 py-3">
             <div>
               <h2 id="interaction-properties-title" className="text-sm font-semibold text-white">Properti interaction</h2>
-              <p className="mt-1 text-[10px] text-neutral-600">{selectedInteraction ? BOT_INTERACTION_LABELS[selectedInteraction.type] : "Pilih node untuk mengatur detail."}</p>
+              <p className="mt-1 text-[10px] text-neutral-600">{selectedInteraction ? `${interactionDisplayName(selectedInteraction)} · ${BOT_INTERACTION_LABELS[selectedInteraction.type]}` : "Pilih node untuk mengatur detail."}</p>
             </div>
             <div className="flex items-center gap-1">
               <button type="button" onClick={() => setConfigOpen(false)} aria-label="Tutup properti" title="Tutup properti" className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-900 hover:text-white"><X className="h-4 w-4" /></button>
-              {selectedInteraction && <button type="button" onClick={() => setConfirmRemoveOpen(true)} disabled={interactions.length <= 1} aria-label="Hapus interaction" title="Hapus interaction" className="rounded-md p-1.5 text-neutral-600 hover:bg-red-950/50 hover:text-red-300 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>}
+              {selectedInteraction && <button type="button" onClick={() => {
+                setConfigOpen(false);
+                setConfirmRemoveOpen(true);
+              }} disabled={interactions.length <= 1} aria-label="Hapus interaction" title="Hapus interaction" className="rounded-md p-1.5 text-neutral-600 hover:bg-red-950/50 hover:text-red-300 disabled:opacity-30"><Trash2 className="h-3.5 w-3.5" /></button>}
             </div>
           </div>
 
@@ -816,6 +839,21 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                         {iconChoices.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                       </select>
                     </label>
+                    {selectedInteraction.config.icon === "custom" && (
+                      <label className="block space-y-1.5 text-[10px] text-neutral-500">
+                        URL gambar custom
+                        <input
+                          type="url"
+                          required
+                          maxLength={2000}
+                          value={selectedInteraction.config.iconUrl || ""}
+                          onChange={(event) => updateConfig({ iconUrl: event.target.value })}
+                          placeholder="https://example.com/icon.png"
+                          className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600"
+                        />
+                        <span className="block text-[9px] text-neutral-600">Gunakan URL gambar publik HTTPS.</span>
+                      </label>
+                    )}
                     <TextField label="Footer text" value={selectedInteraction.config.footerText || ""} onChange={(value) => updateConfig({ footerText: value })} />
                     <div className="space-y-2 border-t border-neutral-900 pt-3">
                       <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-neutral-300">Opsi cepat</span><button type="button" onClick={() => updateConfig({ quickButtons: [...(selectedInteraction.config.quickButtons || []), { label: "", action: "reply", value: "" }] })} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white"><Plus className="h-3 w-3" /> Tambah</button></div>
@@ -1185,7 +1223,6 @@ function PromptSelector({ type, prompts, value, onChange, onSave, variableOption
       </label>
       {selectedPrompt && !editing && <button type="button" onClick={() => { setDraft(selectedPrompt.content); setError(""); setEditing(true); }} className="text-[10px] text-neutral-400 underline hover:text-white">Edit prompt di sini</button>}
       {editing && <div className="space-y-2">
-        <VariableDropdown options={variableOptions || []} onInsert={(item) => setDraft((current) => `${current}${current.trim() ? " " : ""}${item}`)} />
         <textarea aria-label="Isi prompt template" value={draft} onChange={(event) => setDraft(event.target.value)} rows={8} className="w-full resize-y rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs leading-5 text-neutral-200 outline-none focus:border-neutral-600" />
         {error && <p role="alert" className="text-[10px] text-red-300">{error}</p>}
         <div className="flex justify-end gap-2">
@@ -1197,27 +1234,8 @@ function PromptSelector({ type, prompts, value, onChange, onSave, variableOption
   );
 }
 
-function VariableDropdown({ options, onInsert }: { options: string[]; onInsert: (value: string) => void }) {
-  if (!options.length) return null;
-  return (
-    <label className="block space-y-1.5 text-[10px] text-neutral-500">
-      Variabel
-      <select value="" onChange={(event) => {
-        const selected = event.target.value;
-        if (selected) {
-          onInsert(selected);
-          event.target.value = "";
-        }
-      }} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
-        <option value="">Sisipkan variabel...</option>
-        {options.map((option) => <option key={option} value={option}>{option}</option>)}
-      </select>
-    </label>
-  );
-}
-
 function TextField({ label, value, onChange, placeholder, variableOptions }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; variableOptions?: string[] }) {
-  return <div className="space-y-1.5"><VariableDropdown options={variableOptions || []} onInsert={(item) => onChange(`${value}${value.trim() ? " " : ""}${item}`)} /><label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label></div>;
+  return <label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label>;
 }
 
 function DataCollectionQuestionFields({ question, index, canRemove, variableOptions, onChange, onRemove }: {
@@ -1319,7 +1337,7 @@ function DataCollectionValidatorFields({ validator, variableOptions, onChange }:
 }
 
 function TextAreaField({ label, value, onChange, rows = 4, variableOptions }: { label: string; value: string; onChange: (value: string) => void; rows?: number; variableOptions?: string[] }) {
-  return <div className="space-y-1.5"><VariableDropdown options={variableOptions || []} onInsert={(item) => onChange(`${value}${value.trim() ? " " : ""}${item}`)} /><label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="w-full resize-y rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs leading-5 text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label></div>;
+  return <label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="w-full resize-y rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs leading-5 text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label>;
 }
 
 function QuickButtonFields({ button, onChange, onRemove }: { button: BotQuickButton; onChange: (patch: Partial<BotQuickButton>) => void; onRemove: () => void }) {

@@ -427,6 +427,37 @@ export default function KnowledgeBasePage() {
 
   const standardKeys = ["id", "_id", "createdAt", "updatedAt", "createdBy", "updatedBy", "importedBy"];
 
+  const exportCsv = () => {
+    if (!activeKb || articles.length === 0) return;
+
+    const excludedFields = new Set(standardKeys);
+    const fields = ["title", "category", "summary", "content", "detail", "tags"];
+    for (const article of articles) {
+      for (const field of Object.keys(article)) {
+        if (!excludedFields.has(field) && !fields.includes(field)) fields.push(field);
+      }
+    }
+
+    const rows = articles.map((article) => Object.fromEntries(fields.map((field) => {
+      const value = article[field];
+      if (field === "tags" && Array.isArray(value)) return [field, value.join(", ")];
+      if (value && typeof value === "object") return [field, JSON.stringify(value)];
+      return [field, value ?? ""];
+    })));
+    const csv = Papa.unparse({ fields, data: rows }, { delimiter: ";" });
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    const fileName = activeKb.displayName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "knowledge-base";
+    anchor.href = url;
+    anchor.download = `${fileName}-articles.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    notify("success", `Berhasil mengekspor ${articles.length} artikel ke CSV.`);
+  };
+
   const filteredArticles = articles.filter((a) => {
     if (selectedCategory !== "All" && a.category !== selectedCategory) return false;
     if (!articleSearch.trim()) return true;
@@ -507,6 +538,15 @@ export default function KnowledgeBasePage() {
         <div className="flex flex-wrap items-center gap-2.5">
           {activeKb ? (
             <>
+              <button
+                onClick={exportCsv}
+                disabled={articlesLoading || articles.length === 0}
+                title="Ekspor seluruh artikel di Knowledge Base ini"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#111111] hover:bg-[#1a1a1a] border border-neutral-800 text-neutral-300 hover:text-white text-xs font-medium transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-neutral-400" />
+                <span>Export CSV</span>
+              </button>
               {!isReadOnly && (
                 <>
                   <button

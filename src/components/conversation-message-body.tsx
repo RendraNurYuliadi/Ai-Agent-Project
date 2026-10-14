@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, ExternalLink, Sparkles } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, CircleHelp, ExternalLink, MessageSquare, Sparkles } from "lucide-react";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import { FormattedMessage } from "@/components/formatted-message";
 import { ResponseMeta } from "@/components/response-meta";
@@ -62,6 +62,7 @@ export interface ConversationMessageData {
     title?: string;
     subtitle?: string;
     icon?: string;
+    iconUrl?: string;
     footerText?: string;
     buttons?: ConversationMessageButton[];
     quickButtons?: ConversationMessageButton[];
@@ -151,13 +152,14 @@ function RotatingComponents({ components, onReply, disabled }: { components: Con
 
 function BotInteractionView({ data, onReply, disabled }: { data: NonNullable<ConversationMessageData["botInteraction"]>; onReply?: (value: string) => void; disabled: boolean }) {
   const buttons = data.buttons || data.quickButtons || [];
-  const icon = data.icon === "bot" ? "bot" : data.icon === "message" ? "message" : "sparkles";
+  const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
+  const iconLabel = data.icon === "custom" ? "Custom" : data.icon || "Sparkles";
   return <article className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-neutral-800 bg-[#101010] p-3.5 sm:max-w-[360px]">
-    {data.type === "welcome_message" && data.title && <div className="mb-2 flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black"><Sparkles className="h-4 w-4" /></span><h3 className="text-sm font-semibold text-white">{data.title}</h3></div>}
+    {data.type === "welcome_message" && data.title && <div className="mb-2 flex items-center gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white text-black">{data.icon === "custom" && data.iconUrl ? <Image src={getImageProxyUrl(data.iconUrl)} alt="" width={28} height={28} unoptimized className="h-7 w-7 object-cover" /> : <Icon className="h-4 w-4" />}</span><h3 className="text-sm font-semibold text-white">{data.title}</h3></div>}
     {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
     {buttons.length > 0 && <div className="mt-3"><MessageButtons buttons={buttons} onReply={onReply} disabled={disabled} /></div>}
     {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
-    <span className="sr-only">{icon}</span>
+    <span className="sr-only">{iconLabel}</span>
   </article>;
 }
 

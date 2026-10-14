@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
   Blocks,
   Copy,
+  Download,
   Loader2,
   Pencil,
   Plus,
   Save,
   Search,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import { ConfirmDialog } from "@/components/action-feedback";
@@ -62,6 +64,46 @@ const blankTemplate = (): ComponentTemplateInput => ({
   card: blankCard(),
   cards: [blankCard()],
 });
+
+function downloadComponentJson(templates: ComponentTemplate[]) {
+  const components = templates.map((template) => ({
+    name: template.name,
+    type: template.type,
+    title: template.title || "",
+    subtitle: template.subtitle || "",
+    isActive: template.isActive,
+    articleRefs: template.articleRefs || [],
+    buttons: template.buttons || [],
+    card: template.card || blankCard(),
+    cards: template.cards || [],
+  }));
+  const payload = {
+    format: "genai-chatbot-components",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    components,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const baseName = templates.length === 1
+    ? templates[0].name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "component"
+    : "components";
+  link.href = url;
+  link.download = `${baseName}.json`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function extractImportedComponents(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (typeof value === "object" && value !== null) {
+    const components = (value as { components?: unknown }).components;
+    if (Array.isArray(components)) return components;
+    return [value];
+  }
+  throw new Error("JSON harus berupa satu komponen, array, atau objek export Components.");
+}
 
 function ButtonFields({
   buttons,
@@ -210,6 +252,8 @@ export default function ComponentsPage() {
   const [deleting, setDeleting] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const notify = useCallback((type: "success" | "error", message: string) => {
     setNotification({ type, message });
@@ -279,7 +323,7 @@ export default function ComponentsPage() {
       title: template.title || "",
       subtitle: template.subtitle || "",
       isActive: template.isActive,
-      articleRefs: template.articleRefs.map((item) => ({ ...item })),
+      articleRefs: (template.articleRefs || []).map((item) => ({ ...item })),
       buttons: template.buttons.map((item) => ({ ...item })),
       card: { ...template.card, imageHeight: template.card.imageHeight ?? 128, buttons: template.card.buttons.map((item) => ({ ...item })) },
       cards: template.cards.map((card) => ({ ...card, imageHeight: card.imageHeight ?? 128, buttons: card.buttons.map((item) => ({ ...item })) })),
@@ -375,6 +419,34 @@ export default function ComponentsPage() {
     }
   };
 
+  const importComponents = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      const components = extractImportedComponents(parsed);
+      if (components.length === 0 || components.length > 100) {
+        throw new Error("File harus berisi 1 sampai 100 komponen.");
+      }
+      const response = await fetch("/api/components/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ components }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal mengimpor komponen.");
+      await loadData();
+      notify("success", `${data.imported} komponen berhasil diimpor.`);
+    } catch (error) {
+      notify("error", error instanceof Error ? error.message : "File JSON tidak valid.");
+    } finally {
+      setImporting(false);
+      input.value = "";
+    }
+  };
+
   const toggleArticle = (article: ArticleOption) => {
     const selected = form.articleRefs.some((item) =>
       item.collectionName === article.collectionName && item.articleId === article.articleId
@@ -441,6 +513,13 @@ export default function ComponentsPage() {
           <h1 className="text-xl font-semibold text-white">Components</h1>
         </div>
         <div className="flex flex-wrap gap-2">
+          <input ref={importInputRef} type="file" accept=".json,application/json" onChange={(event) => void importComponents(event)} className="hidden" />
+          <button type="button" onClick={() => importInputRef.current?.click()} disabled={importing} className="inline-flex items-center gap-2 rounded-md border border-neutral-700 px-3.5 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-900 disabled:opacity-40">
+            {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Import JSON
+          </button>
+          <button type="button" onClick={() => downloadComponentJson(templates)} disabled={loading || templates.length === 0} className="inline-flex items-center gap-2 rounded-md border border-neutral-700 px-3.5 py-2 text-xs font-medium text-neutral-300 hover:bg-neutral-900 disabled:opacity-40">
+            <Download className="h-4 w-4" /> Export semua
+          </button>
           <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || templates.length === 0 || deletingAll} className="inline-flex items-center gap-2 rounded-md border border-red-900/70 px-3.5 py-2 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-4 w-4" /> Hapus semua ({templates.length})</button>
           <button type="button" onClick={openCreate} className="inline-flex items-center gap-2 rounded-md bg-white px-3.5 py-2 text-xs font-semibold text-black hover:bg-neutral-200"><Plus className="h-4 w-4" /> Buat template</button>
         </div>
@@ -458,11 +537,11 @@ export default function ComponentsPage() {
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-neutral-200">{template.name}</p>
               <p className="mt-0.5 truncate text-[10px] text-neutral-600">
-                {template.articleRefs.map((ref) => articles.find((article) => article.collectionName === ref.collectionName && article.articleId === ref.articleId)?.title || ref.articleId).join(", ")}
+                {(template.articleRefs || []).map((ref) => articles.find((article) => article.collectionName === ref.collectionName && article.articleId === ref.articleId)?.title || ref.articleId).join(", ") || "Belum terhubung ke artikel"}
               </p>
             </div>
             <span className="text-[11px] text-neutral-400">{typeLabels[template.type]}</span>
-            <span className="text-[11px] text-neutral-400">{template.articleRefs.length} artikel</span>
+            <span className="text-[11px] text-neutral-400">{(template.articleRefs || []).length} artikel</span>
             <div className="flex items-center justify-end gap-1">
               <button
                 type="button"
@@ -475,6 +554,9 @@ export default function ComponentsPage() {
               </button>
               <button type="button" onClick={() => void duplicateTemplate(template)} title="Duplikat" aria-label={`Duplikat ${template.name}`} className="rounded p-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-white">
                 <Copy className="h-3.5 w-3.5" />
+              </button>
+              <button type="button" onClick={() => downloadComponentJson([template])} title="Export JSON" aria-label={`Export ${template.name} ke JSON`} className="rounded p-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-white">
+                <Download className="h-3.5 w-3.5" />
               </button>
               <button type="button" onClick={() => openEdit(template)} title="Edit" aria-label={`Edit ${template.name}`} className="rounded p-1.5 text-neutral-500 hover:bg-neutral-800 hover:text-white">
                 <Pencil className="h-3.5 w-3.5" />
@@ -604,10 +686,10 @@ export default function ComponentsPage() {
               <aside className="space-y-4 border-t border-neutral-800 bg-[#080808] p-5 lg:border-l lg:border-t-0">
                 <div>
                   <div className="mb-2 flex items-center justify-between">
-                    <h3 className="text-xs font-semibold text-white">Artikel pemicu</h3>
-                    <span className={`text-[10px] ${form.articleRefs.length > 0 ? "text-neutral-400" : "text-amber-400"}`}>{form.articleRefs.length}/10 dipilih</span>
+                    <h3 className="text-xs font-semibold text-white">Artikel pemicu (opsional)</h3>
+                    <span className="text-[10px] text-neutral-500">{form.articleRefs.length}/10 dipilih</span>
                   </div>
-                  <p className="mb-3 text-[10px] leading-4 text-neutral-600">Template muncul saat retrieval menemukan salah satu artikel terhubung.</p>
+                  <p className="mb-3 text-[10px] leading-4 text-neutral-600">Jika dihubungkan, template muncul saat retrieval menemukan artikel tersebut. Tanpa artikel, template tetap tersimpan tetapi tidak terpicu otomatis oleh pencocokan artikel.</p>
                   <div className="relative mb-2">
                     <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-neutral-600" />
                     <input value={articleSearch} onChange={(event) => setArticleSearch(event.target.value)} placeholder="Cari artikel atau Knowledge Base" className="w-full rounded-md border border-neutral-800 bg-black py-2 pl-8 pr-3 text-xs text-white placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none" />
@@ -682,7 +764,7 @@ export default function ComponentsPage() {
 
             <footer className="flex justify-end gap-2 border-t border-neutral-800 bg-[#0b0b0b] px-5 py-3">
               <button type="button" onClick={() => setModalOpen(false)} className="rounded-md border border-neutral-800 px-3 py-2 text-xs text-neutral-400 hover:bg-neutral-900 hover:text-white">Batal</button>
-              <button type="submit" disabled={saving || form.articleRefs.length < 1 || form.articleRefs.length > 10} className="inline-flex items-center gap-2 rounded-md bg-white px-3.5 py-2 text-xs font-semibold text-black hover:bg-neutral-200 disabled:opacity-40">
+              <button type="submit" disabled={saving || form.articleRefs.length > 10} className="inline-flex items-center gap-2 rounded-md bg-white px-3.5 py-2 text-xs font-semibold text-black hover:bg-neutral-200 disabled:opacity-40">
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                 {saving ? "Menyimpan..." : "Simpan template"}
               </button>
