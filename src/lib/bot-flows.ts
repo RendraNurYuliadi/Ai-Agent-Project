@@ -1,3 +1,11 @@
+import type { ProviderId } from "@/types/providers";
+
+const PROVIDER_IDS: ProviderId[] = [
+  "opencode", "gemini-cli", "kiro", "openrouter", "nvidia", "ollama", "vertex",
+  "gemini", "cloudflare-ai", "poolside", "nous", "byteplus", "kimchi", "agnes",
+  "api-airforce", "bazaarlink", "kilo-gateway", "lmstudio",
+];
+
 export const BOT_INTERACTION_TYPES = [
   "welcome_message",
   "guided_routing",
@@ -108,6 +116,7 @@ export interface BotInteractionConfig {
   fallbackInteractionId?: string;
   promptId?: string;
   provider?: "global" | "lmstudio" | "openrouter";
+  providerId?: ProviderId;
   model?: string;
   lmStudioUrl?: string;
   temperature?: number;
@@ -129,6 +138,29 @@ export interface BotInteraction {
   position: BotPosition;
   config: BotInteractionConfig;
   nextAction: BotNextAction;
+}
+
+export const LLM_INTERACTION_TYPES = [
+  "guided_routing",
+  "small_talk",
+  "rag",
+  "web_search",
+] as const;
+
+export function isLLMInteractionType(type: BotInteractionType): boolean {
+  return (LLM_INTERACTION_TYPES as readonly BotInteractionType[]).includes(type);
+}
+
+export function hasSharedLLMProviderConfig(interactions: readonly BotInteraction[]): boolean {
+  const llmInteractions = interactions.filter((interaction) => isLLMInteractionType(interaction.type));
+  if (llmInteractions.length === 0) return true;
+
+  const firstConfig = llmInteractions[0].config;
+  return Boolean(firstConfig.providerId && firstConfig.model) &&
+    llmInteractions.every((interaction) =>
+      interaction.config.providerId === firstConfig.providerId &&
+      interaction.config.model === firstConfig.model
+    );
 }
 
 export interface BotCustomVariable {
@@ -189,6 +221,9 @@ function parseNextAction(value: unknown): BotNextAction | null {
 
 function parseConfig(value: unknown): BotInteractionConfig | null {
   if (!isRecord(value)) return null;
+  const providerId = typeof value.providerId === "string" && PROVIDER_IDS.includes(value.providerId as ProviderId)
+    ? value.providerId as ProviderId
+    : undefined;
   const provider = value.provider === "lmstudio" || value.provider === "openrouter"
     ? value.provider
     : value.provider === "global" ? "global" : undefined;
@@ -332,6 +367,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     fallbackInteractionId: typeof value.fallbackInteractionId === "string" ? value.fallbackInteractionId.trim() : undefined,
     promptId: typeof value.promptId === "string" ? value.promptId.trim().slice(0, 100) : undefined,
     provider,
+    providerId,
     model: typeof value.model === "string" ? value.model.trim().slice(0, 200) : undefined,
     lmStudioUrl: typeof value.lmStudioUrl === "string" ? value.lmStudioUrl.trim().slice(0, 500) : undefined,
     temperature: typeof value.temperature === "number" && Number.isFinite(value.temperature)
@@ -392,6 +428,9 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     const interactionType = item.type === "text_start" ? "text" : item.type;
     if (!BOT_INTERACTION_TYPES.includes(interactionType as (typeof BOT_INTERACTION_TYPES)[number])) {
       return { success: false, error: "Tipe interaction tidak valid." };
+    }
+    if (isRecord(item.config) && typeof item.config.providerId === "string" && !PROVIDER_IDS.includes(item.config.providerId as ProviderId)) {
+      return { success: false, error: "Provider LLM tidak valid." };
     }
     if (!isRecord(item.position) || typeof item.position.x !== "number" || typeof item.position.y !== "number") {
       return { success: false, error: "Posisi interaction tidak valid." };

@@ -21,7 +21,7 @@ import {
   HardDrive,
   RefreshCw,
 } from "lucide-react";
-import { OPENROUTER_FREE_MODEL } from "@/lib/ai";
+import { OPENROUTER_FREE_MODEL } from "@/lib/ai-constants";
 
 interface Config {
   provider: "lmstudio" | "openrouter";

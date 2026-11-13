@@ -1,5 +1,6 @@
 import { ObjectId, type Db } from "mongodb";
-import { generateAICompletion, getAIConfig } from "@/lib/ai";
+import { generateAICompletion, getAIConfig, getManagedProviderAIConfig } from "@/lib/ai";
+import { isLLMInteractionType } from "@/lib/bot-flows";
 import { searchWeb } from "@/lib/web-search";
 import { smartSearchKB, type ScoredArticle } from "@/lib/smart-search";
 import type { ComponentTemplateInput } from "@/lib/component-templates";
@@ -223,19 +224,41 @@ export async function initializeBotConversation(
   };
 }
 
-function interactionAIConfig(
-  config: Awaited<ReturnType<typeof getAIConfig>>,
-  interaction: BotInteraction
+async function interactionAIConfig(
+  db: Db,
+  interaction: BotInteraction,
+  defaultProvider: "global" | "lmstudio" = "global",
+  interactions: BotInteraction[] = []
 ) {
-  config.provider = interaction.config.provider === "openrouter" ? "openrouter" : "lmstudio";
+  const temperature = interaction.config.temperature;
+  const maxTokens = interaction.config.maxTokens;
+  const sharedConfig = interactions.find((item) =>
+    isLLMInteractionType(item.type) && item.config.providerId && item.config.model
+  )?.config;
+  const providerId = sharedConfig?.providerId || interaction.config.providerId;
+  const model = sharedConfig?.model || interaction.config.model;
+  if (providerId) {
+    return await getManagedProviderAIConfig(db, providerId, model || "", {
+      temperature,
+      maxTokens,
+    });
+  }
+
+  const config = await getAIConfig(db);
+  const legacyProvider = interaction.config.provider;
+  if (legacyProvider === "openrouter" || legacyProvider === "lmstudio") {
+    config.provider = legacyProvider;
+  } else if (defaultProvider === "lmstudio") {
+    config.provider = "lmstudio";
+  }
   if (config.provider === "lmstudio") {
     config.lmStudioUrl = interaction.config.lmStudioUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1";
     config.lmStudioModel = interaction.config.model || config.lmStudioModel;
-  } else {
+  } else if (config.provider === "openrouter") {
     config.openRouterModel = interaction.config.model || config.openRouterModel;
   }
-  config.temperature = interaction.config.temperature ?? config.temperature;
-  config.maxTokens = interaction.config.maxTokens ?? config.maxTokens;
+  config.temperature = temperature ?? config.temperature;
+  config.maxTokens = maxTokens ?? config.maxTokens;
   return config;
 }
 
@@ -326,10 +349,7 @@ export async function processBotTurn(
           const condition = option.prompt || `Pilih route ini jika maksud pengguna sesuai dengan "${option.label}".`;
           return `- Nama route: ${option.label}\n  Variable route: ${routeVariable(option, index)}\n  Kondisi: ${condition}\n  Target interaction: ${targetName}`;
         }).join("\n");
-        const config = await getAIConfig(db);
-        if (interaction.config.provider === "lmstudio" || interaction.config.provider === "openrouter") {
-          interactionAIConfig(config, interaction);
-        }
+        const config = await interactionAIConfig(db, interaction, "global", bot.interactions);
         const routeSessionVariables = Object.fromEntries(Object.entries(dataCollectionState?.answers ?? {}).map(([key, value]) => [key, String(value ?? "")]));
         const routeResult = await generateAICompletion({
           config,
@@ -474,7 +494,7 @@ export async function processBotTurn(
       content = "Skill tujuan belum dipilih. Hubungi pengelola untuk memperbaiki konfigurasi.";
     }
   } else if (interaction.type === "small_talk") {
-    const config = interactionAIConfig(await getAIConfig(db), interaction);
+    const config = await interactionAIConfig(db, interaction, "lmstudio", bot.interactions);
     try {
       const template = await getPromptTemplate(db, interaction.config.promptId, "small_talk") ||
         interaction.config.systemPrompt || "Kamu adalah asisten yang ramah dan ringkas.";
@@ -533,18 +553,7 @@ export async function processBotTurn(
     if (activeCollections.length === 0) {
       content = "Belum ada Knowledge Base aktif yang dipilih untuk interaction ini.";
     } else {
-      const config = await getAIConfig(db);
-      if (interaction.config.provider === "lmstudio" || interaction.config.provider === "openrouter") {
-        config.provider = interaction.config.provider;
-      }
-      if (config.provider === "lmstudio") {
-        config.lmStudioUrl = interaction.config.lmStudioUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1";
-        config.lmStudioModel = interaction.config.model || config.lmStudioModel;
-      } else {
-        config.openRouterModel = interaction.config.model || config.openRouterModel;
-      }
-      config.temperature = interaction.config.temperature ?? config.temperature;
-      config.maxTokens = interaction.config.maxTokens ?? config.maxTokens;
+      const config = await interactionAIConfig(db, interaction, "global", bot.interactions);
       const systemTemplate = await getPromptTemplate(db, interaction.config.promptId, "rag") ||
         interaction.config.systemPrompt || "Jawab berdasarkan knowledge context berikut. Jika informasi tidak tersedia, katakan dengan jujur.\n\n{context}";
       const renderedTemplate = applyPromptVariables(systemTemplate, message, user, contextSent || "Tidak ada artikel relevan ditemukan.", bot.variables || [], sessionVariables);
@@ -587,16 +596,7 @@ export async function processBotTurn(
         contextSent = results.map((result, index) =>
           `[${index + 1}] ${result.title}\nURL: ${result.url}\nCuplikan: ${result.content}`
         ).join("\n\n");
-        const config = await getAIConfig(db);
-        config.provider = interaction.config.provider === "openrouter" ? "openrouter" : "lmstudio";
-        if (config.provider === "lmstudio") {
-          config.lmStudioUrl = interaction.config.lmStudioUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1";
-          config.lmStudioModel = interaction.config.model || config.lmStudioModel;
-        } else {
-          config.openRouterModel = interaction.config.model || config.openRouterModel;
-        }
-        config.temperature = interaction.config.temperature ?? config.temperature;
-        config.maxTokens = interaction.config.maxTokens ?? config.maxTokens;
+        const config = await interactionAIConfig(db, interaction, "lmstudio", bot.interactions);
         const customInstruction = interaction.config.systemPrompt?.trim();
         const systemInstruction = [
           customInstruction,

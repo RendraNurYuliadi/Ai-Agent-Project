@@ -1,6 +1,16 @@
+import "server-only";
 import { Db } from "mongodb";
+import { OPENROUTER_FREE_MODEL } from "@/lib/ai-constants";
+export { OPENROUTER_FREE_MODEL };
+import { buildChatCompletionPayload } from "@/lib/chat-completion-payload";
+import type { ProviderId } from "@/types/providers";
+import {
+  getProviderSummary,
+  getStoredProviderConnection,
+  getStoredProviderApiKey,
+} from "@/lib/providers";
 
-export type AIProvider = "lmstudio" | "openrouter";
+export type AIProvider = ProviderId;
 
 export interface AIConfig {
   provider: AIProvider;
@@ -10,6 +20,10 @@ export interface AIConfig {
   // OpenRouter Config (Public / Cloud)
   openRouterApiKey: string;
   openRouterModel: string;
+  providerId?: ProviderId;
+  providerBaseUrl?: string;
+  providerApiKey?: string;
+  providerModel?: string;
   // Common Settings
   temperature: number;
   maxTokens: number;
@@ -19,8 +33,6 @@ export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
-
-export const OPENROUTER_FREE_MODEL = "openrouter/free";
 
 interface StoredAIConfig {
   provider?: string;
@@ -109,13 +121,12 @@ async function callLMStudio(
   const res = await fetch(`${config.lmStudioUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: config.lmStudioModel,
-      messages: formattedMessages,
-      temperature: temperature ?? config.temperature,
-      max_tokens: maxTokens ?? config.maxTokens,
-      stream: false,
-    }),
+    body: JSON.stringify(buildChatCompletionPayload(
+      config.lmStudioModel,
+      formattedMessages,
+      temperature ?? config.temperature,
+      maxTokens ?? config.maxTokens
+    )),
     signal: AbortSignal.timeout(timeoutMs),
   });
 
@@ -194,12 +205,12 @@ async function callOpenRouter(
       "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
       "X-Title": process.env.NEXT_PUBLIC_APP_NAME || "GenAI Chatbot",
     },
-    body: JSON.stringify({
-      model: config.openRouterModel,
-      messages: formattedMessages,
-      temperature: temperature ?? config.temperature,
-      max_tokens: maxTokens ?? config.maxTokens,
-    }),
+    body: JSON.stringify(buildChatCompletionPayload(
+      config.openRouterModel,
+      formattedMessages,
+      temperature ?? config.temperature,
+      maxTokens ?? config.maxTokens
+    )),
     signal: AbortSignal.timeout(timeoutMs),
   });
 
@@ -221,6 +232,87 @@ async function callOpenRouter(
   return "";
 }
 
+async function callManagedProvider(
+  config: AIConfig,
+  messages: ChatMessage[],
+  systemInstruction?: string,
+  temperature?: number,
+  maxTokens?: number,
+  timeoutMs: number = 30000
+): Promise<string> {
+  const providerId = config.providerId;
+  const provider = providerId ? getProviderSummary(providerId) : undefined;
+  if (!provider?.supported || !config.providerBaseUrl || !config.providerModel) {
+    throw new Error("Konfigurasi provider atau model yang dipilih tidak lengkap.");
+  }
+  if (providerId !== "lmstudio" && !config.providerApiKey) {
+    throw new Error(`API key ${provider.name} belum tersedia.`);
+  }
+
+  const formattedMessages: ChatMessage[] = [];
+  if (systemInstruction) formattedMessages.push({ role: "system", content: systemInstruction });
+  formattedMessages.push(...messages);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  if (config.providerApiKey) headers.Authorization = `Bearer ${config.providerApiKey}`;
+  if (providerId === "openrouter") {
+    headers["HTTP-Referer"] = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    headers["X-Title"] = process.env.NEXT_PUBLIC_APP_NAME || "GenAI Chatbot";
+  }
+
+  const response = await fetch(`${config.providerBaseUrl}/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(buildChatCompletionPayload(
+      config.providerModel,
+      formattedMessages,
+      temperature ?? config.temperature,
+      maxTokens ?? config.maxTokens
+    )),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!response.ok) {
+    const body = await response.text();
+    const safeBody = config.providerApiKey ? body.split(config.providerApiKey).join("[redacted]") : body;
+    throw new Error(`${provider.name} error (${response.status}): ${safeBody.slice(0, 1000) || response.statusText}`);
+  }
+  const data = await response.json();
+  const answer = extractTextFromOpenRouterContent(data.choices?.[0]?.message?.content);
+  if (answer) return answer;
+  throw new Error(`${provider.name} mengembalikan respons tanpa teks.`);
+}
+
+export async function getManagedProviderAIConfig(
+  db: Db,
+  providerId: ProviderId,
+  model: string,
+  settings: { temperature?: number; maxTokens?: number } = {}
+): Promise<AIConfig> {
+  const provider = getProviderSummary(providerId);
+  if (!provider?.supported) throw new Error("Provider ini belum memiliki integrasi API yang tersedia.");
+  const connection = await getStoredProviderConnection(db, providerId);
+  if (!connection?.connected) throw new Error(`${provider.name} belum tersambung.`);
+  if (!model || !connection.selectedModels.includes(model)) {
+    throw new Error(`Model belum dipilih pada daftar model yang digunakan untuk ${provider.name}.`);
+  }
+  const apiKey = await getStoredProviderApiKey(db, providerId);
+  return {
+    provider: providerId,
+    providerId,
+    providerBaseUrl: connection.baseUrl,
+    providerApiKey: apiKey,
+    providerModel: model,
+    lmStudioUrl: connection.baseUrl,
+    lmStudioModel: model,
+    openRouterApiKey: apiKey,
+    openRouterModel: model,
+    temperature: settings.temperature ?? 0.7,
+    maxTokens: settings.maxTokens ?? 1024,
+  };
+}
+
 /**
  * Main completion function: automatically dispatches to LM Studio or OpenRouter
  */
@@ -234,6 +326,9 @@ export async function generateAICompletion(options: {
 }): Promise<string> {
   const { config, messages, systemInstruction, temperature, maxTokens, timeoutMs } = options;
 
+  if (config.providerId) {
+    return await callManagedProvider(config, messages, systemInstruction, temperature, maxTokens, timeoutMs);
+  }
   if (config.provider === "openrouter") {
     return await callOpenRouter(config, messages, systemInstruction, temperature, maxTokens, timeoutMs);
   } else {

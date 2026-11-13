@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
-import { validateBotDefinition } from "@/lib/bot-flows";
+import { hasSharedLLMProviderConfig, validateBotDefinition } from "@/lib/bot-flows";
+import { getProviderSummary } from "@/lib/providers";
+import type { ProviderId, StoredProviderConnection } from "@/types/providers";
 
 function canManage(role: string): boolean {
   return role === "admin" || role === "manager";
@@ -18,6 +20,28 @@ async function hasOnlyActiveKnowledgeBases(
     .find({ collectionName: { $in: requested }, isActive: { $ne: false } }, { projection: { collectionName: 1 } })
     .toArray();
   return new Set(active.map((item) => item.collectionName)).size === requested.length;
+}
+
+async function hasReadyAIProviders(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  interactions: Array<{ config: { providerId?: ProviderId; model?: string } }>
+): Promise<boolean> {
+  const requested = interactions.filter((interaction) => interaction.config.providerId);
+  if (requested.some((interaction) => !getProviderSummary(interaction.config.providerId!)?.supported)) return false;
+  const providerIds = [...new Set(requested.map((interaction) => interaction.config.providerId!))];
+  if (providerIds.length === 0) return true;
+  const connections = await db.collection<StoredProviderConnection>("aiProviderConnections")
+    .find({ providerId: { $in: providerIds } })
+    .toArray();
+  const byId = new Map(connections.map((connection) => [connection.providerId, connection]));
+  return requested.every((interaction) => {
+    const connection = byId.get(interaction.config.providerId!);
+    return Boolean(
+      connection?.connected &&
+      interaction.config.model &&
+      connection.selectedModels.includes(interaction.config.model)
+    );
+  });
 }
 
 async function hasValidEscalationSkills(
@@ -108,6 +132,12 @@ export async function PUT(
     const db = await getDatabase();
     if (!await hasOnlyActiveKnowledgeBases(db, validation.data.interactions)) {
       return NextResponse.json({ error: "RAG hanya dapat menggunakan Knowledge Base yang aktif." }, { status: 400 });
+    }
+    if (!hasSharedLLMProviderConfig(validation.data.interactions)) {
+      return NextResponse.json({ error: "Atur semua interaction AI dengan satu provider tersambung dan model yang sama." }, { status: 400 });
+    }
+    if (!await hasReadyAIProviders(db, validation.data.interactions)) {
+      return NextResponse.json({ error: "Pilih provider yang sudah siap dan model dari daftar model yang digunakan." }, { status: 400 });
     }
     if (!await hasValidEscalationSkills(db, validation.data.interactions)) {
       return NextResponse.json({ error: "Skill Escalation harus memilih skill human yang valid atau skill bot dengan bot flow aktif." }, { status: 400 });

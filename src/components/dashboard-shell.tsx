@@ -23,6 +23,7 @@ import {
   PanelLeftOpen,
   Blocks,
   MessagesSquare,
+  Cpu,
 } from "lucide-react";
 import { UserSession } from "@/lib/auth";
 
@@ -47,7 +48,8 @@ export default function DashboardShell({
   const pathname = usePathname();
   const router = useRouter();
   const isBotFlowEditor = pathname.startsWith("/dashboard/bot-management/") && pathname !== "/dashboard/bot-management";
-  const isFullHeightPage = isBotFlowEditor || [
+  const isProvidersPage = pathname.startsWith("/dashboard/providers");
+  const isFullHeightPage = isBotFlowEditor || isProvidersPage || [
     "/dashboard/chatbot",
     "/dashboard/chat-history",
     "/dashboard/all-conversations",
@@ -114,6 +116,13 @@ export default function DashboardShell({
       href: "/dashboard/skills",
       icon: Sparkles,
       current: pathname.startsWith("/dashboard/skills"),
+      roles: ["admin", "manager"],
+    },
+    {
+      name: "Providers",
+      href: "/dashboard/providers",
+      icon: Cpu,
+      current: pathname.startsWith("/dashboard/providers"),
       roles: ["admin", "manager"],
     },
     {
@@ -216,7 +225,7 @@ export default function DashboardShell({
   );
 
   const adminNav = visibleNav.filter((n) =>
-    ["Users", "Bot Management", "Skills"].includes(n.name)
+    ["Users", "Bot Management", "Skills", "Providers"].includes(n.name)
   );
 
   const contentNav = visibleNav.filter((n) =>
