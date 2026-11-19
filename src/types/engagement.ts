@@ -34,6 +34,7 @@ export interface EngagementWidgetConfig {
   engagementId: string;
   windowId: string;
   entryPointId: string;
+  parentOrigin: string;
   token: string;
   window: EngagementWindow;
 }

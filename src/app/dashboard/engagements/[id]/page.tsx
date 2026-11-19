@@ -247,8 +247,11 @@ export default function EngagementDetailPage() {
 
   const selectedEntry = entryPoints.find((item) => item.id === snippetEntryPointId);
   const selectedWindow = windows.find((item) => item.id === snippetWindowId);
+  const snippetFrameId = selectedWindow
+    ? `engagement-chat-${id}-${selectedWindow.id}`.replace(/[^a-zA-Z0-9_-]/g, "")
+    : "";
   const snippet = selectedEntry && selectedWindow && typeof window !== "undefined"
-    ? `<iframe\n  src="${window.location.origin}/engagement/${id}/${selectedWindow.id}?entryPointId=${encodeURIComponent(selectedEntry.id)}"\n  title="Chat widget"\n  width="380"\n  height="620"\n  style="position:fixed;right:24px;bottom:24px;z-index:9999;border:0;border-radius:${selectedWindow.borderRadius}px;box-shadow:0 12px 40px rgba(0,0,0,.3)"\n  referrerpolicy="strict-origin-when-cross-origin"\n  allow="clipboard-write"\n></iframe>`
+    ? `<iframe\n  id="${snippetFrameId}"\n  src="${window.location.origin}/engagement/${encodeURIComponent(id)}/${encodeURIComponent(selectedWindow.id)}?entryPointId=${encodeURIComponent(selectedEntry.id)}"\n  title="Chat widget"\n  width="72"\n  height="72"\n  style="position:fixed;right:24px;bottom:24px;width:72px;height:72px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);z-index:9999;border:0;background:transparent;transition:width .2s ease,height .2s ease"\n  referrerpolicy="strict-origin-when-cross-origin"\n  allow="clipboard-write"\n></iframe>\n<script>\n(() => {\n  const frame = document.getElementById("${snippetFrameId}");\n  if (!frame) return;\n  const widgetOrigin = new URL(frame.src).origin;\n  window.addEventListener("message", (event) => {\n    if (event.origin !== widgetOrigin || event.source !== frame.contentWindow) return;\n    if (event.data?.type !== "engagement-widget:resize") return;\n    const isOpen = event.data.open === true;\n    frame.style.width = isOpen ? "min(380px, calc(100vw - 32px))" : "72px";\n    frame.style.height = isOpen ? "min(620px, calc(100vh - 32px))" : "72px";\n  });\n})();\n</script>`
     : "";
 
   const copySnippet = async () => {
@@ -450,6 +453,21 @@ export default function EngagementDetailPage() {
                                 <div className="mt-2 flex gap-2"><button type="button" className="engagement-button">Pesan</button><button type="button" className="engagement-button">Informasi</button></div>
                               </div>
                             )}
+                            {component.id === "welcome-message" && (
+                              <article className="engagement-welcome-message engagement-card engagement-component max-w-[280px] overflow-hidden rounded-xl border p-3">
+                                <div className="mb-2 flex items-center gap-2">
+                                  <span className="engagement-welcome-icon flex h-7 w-7 items-center justify-center rounded-md"><MessageCircle className="h-4 w-4" /></span>
+                                  <h3 className="text-sm font-semibold">Selamat datang!</h3>
+                                </div>
+                                <p className="text-xs">Ada yang bisa kami bantu hari ini?</p>
+                                <div className="mt-3"><button type="button" className="engagement-button rounded-lg border px-3 py-2 text-xs">Mulai chat</button></div>
+                              </article>
+                            )}
+                            {component.id === "scrollbar" && (
+                              <div className="engagement-message-list h-[82px] overflow-y-scroll rounded-md border border-neutral-300 bg-white p-2 text-[10px] text-neutral-700">
+                                {["Halo, selamat datang.", "Bagaimana saya bisa membantu?", "Pilih topik yang ingin ditanyakan.", "Anda juga dapat berbicara dengan tim kami.", "Kami siap membantu kapan saja."].map((text) => <p key={text} className="mb-2">{text}</p>)}
+                              </div>
+                            )}
                             {component.id === "input" && <input readOnly value="" placeholder="Tulis pesan..." className="engagement-input w-full" />}
                             {component.id === "send" && <button type="button" className="engagement-send" aria-label="Preview kirim">↑</button>}
                           </div>
@@ -473,6 +491,17 @@ export default function EngagementDetailPage() {
                                   </div>
                                   {openStyleEditor[editorKey] && (
                                     <div className="grid grid-cols-2 gap-2 rounded-md border border-neutral-800 bg-neutral-900 p-2">
+                                      {component.id === "scrollbar" ? (
+                                        <>
+                                          <label className="space-y-1 text-[9px] text-neutral-500">Warna thumb
+                                            <input type="color" value={readCssProperty(css, "--engagement-scrollbar-thumb", "#a3a3a3").match(/^#[0-9a-fA-F]{6}$/)?.[0] || "#a3a3a3"} onChange={(event) => setProperty("--engagement-scrollbar-thumb", event.target.value)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5" />
+                                          </label>
+                                          <label className="space-y-1 text-[9px] text-neutral-500">Warna track
+                                            <input type="color" value={readCssProperty(css, "--engagement-scrollbar-track", "#f4f4f5").match(/^#[0-9a-fA-F]{6}$/)?.[0] || "#f4f4f5"} onChange={(event) => setProperty("--engagement-scrollbar-track", event.target.value)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5" />
+                                          </label>
+                                        </>
+                                      ) : (
+                                        <>
                                       <label className="space-y-1 text-[9px] text-neutral-500">Teks
                                         <input type="color" value={readCssProperty(css, "color", "#18181b")} onChange={(event) => setProperty("color", event.target.value)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5" />
                                       </label>
@@ -491,6 +520,8 @@ export default function EngagementDetailPage() {
                                       <label className="space-y-1 text-[9px] text-neutral-500">Lebar baris
                                         <input type="number" step={0.1} min={1} max={3} value={parseFloat(readCssProperty(css, "line-height", "1.6")) || 1.6} onChange={(event) => setProperty("line-height", event.target.value)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 px-2 text-[10px] text-white" />
                                       </label>
+                                        </>
+                                      )}
                                     </div>
                                   )}
                                   <details>
@@ -533,7 +564,14 @@ export default function EngagementDetailPage() {
                       </div>
                       {item.allowClose && <MoreVertical className="h-4 w-4 shrink-0 text-white/80" />}
                     </div>
-                    <div className="h-[282px] space-y-3 px-3 py-3" style={{ borderColor: item.lineColor }}>
+                    <div className="engagement-message-list h-[282px] space-y-3 overflow-y-auto px-3 py-3" style={{ borderColor: item.lineColor }}>
+                      <article className="engagement-welcome-message engagement-card engagement-component max-w-[210px] overflow-hidden rounded-xl border p-2.5">
+                        <div className="mb-1.5 flex items-center gap-1.5">
+                          <span className="engagement-welcome-icon flex h-6 w-6 items-center justify-center rounded-md"><MessageCircle className="h-3 w-3" /></span>
+                          <h3 className="text-[9px] font-semibold">Selamat datang!</h3>
+                        </div>
+                        <p className="text-[9px] leading-4">Ada yang bisa kami bantu?</p>
+                      </article>
                       <div className="engagement-bot-bubble max-w-[210px] rounded-2xl rounded-tl-sm border px-3 py-2 text-[9px] leading-4 text-zinc-900" style={{ borderColor: item.lineColor, backgroundColor: "#f4f4f5" }}>
                         Halo! Ada yang bisa kami bantu hari ini?
                       </div>
@@ -572,7 +610,7 @@ export default function EngagementDetailPage() {
       <section className={`${activeTab === "embed" ? "block" : "hidden"} space-y-4 rounded-xl border border-neutral-800 bg-neutral-950 p-4 sm:p-5`}>
         <div>
           <h2 className="text-sm font-semibold text-white">Pasang di website</h2>
-          <p className="mt-1 text-xs leading-5 text-neutral-500">Simpan Engagement, pilih entry point dan window, lalu tempel iframe di HTML website pada origin yang sama.</p>
+          <p className="mt-1 text-xs leading-5 text-neutral-500">Simpan Engagement, pilih entry point dan window, lalu tempel kode embed pada website di origin yang sama. Widget muncul sebagai ikon chat dan membuka window saat diklik.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="space-y-1.5">
@@ -598,7 +636,7 @@ export default function EngagementDetailPage() {
         </div>
         <p className="flex items-start gap-2 text-[11px] leading-5 text-neutral-500">
           <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Kode ini menampilkan jendela chat tetap di kanan bawah. Pastikan Engagement aktif dan website telah terdaftar di entry point.
+          Kode ini menampilkan ikon chat di kanan bawah; ukuran iframe membesar saat dibuka dan kembali menjadi ikon setelah percakapan ditutup. Pastikan Engagement aktif dan website telah terdaftar di entry point.
         </p>
       </section>
     </main>

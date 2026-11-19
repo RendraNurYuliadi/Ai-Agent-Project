@@ -124,8 +124,8 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   },
   {
     id: "bot-bubble",
-    name: "Bubble bot",
-    description: "Pesan teks dan respons dari bot.",
+    name: "Bubble jawaban bot",
+    description: "Teks jawaban bot, termasuk warna, tipografi, border, dan rounded.",
     className: "engagement-bot-bubble",
     defaultCss: `.engagement-bot-bubble {\n  color: #18181b;\n  background: #f4f4f5;\n  border: 1px solid #e5e5e5;\n  border-radius: 16px 16px 16px 4px;\n  padding: 10px 12px;\n  font-size: 13px;\n  line-height: 1.6;\n  box-shadow: 0 1px 2px rgba(0, 0, 0, .04);\n}`,
   },
@@ -166,10 +166,61 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   },
   {
     id: "interaction",
-    name: "Bot interaction",
-    description: "Welcome message, guided routing, dan text question.",
+    name: "Guided routing & text question",
+    description: "Tampilan prompt interaksi dan pilihan bot selain welcome message.",
     className: "engagement-component",
     defaultCss: `.engagement-component {\n  max-width: 360px;\n  color: #18181b;\n  background: #ffffff;\n  border: 1px solid #e5e5e5;\n  border-radius: 12px;\n  padding: 14px;\n  font-size: 12px;\n  box-shadow: 0 4px 16px rgba(0, 0, 0, .06);\n}`,
+  },
+  {
+    id: "welcome-message",
+    name: "Welcome message",
+    description: "Desain kartu sambutan, judul, ikon, subtitle, dan tombol welcome.",
+    className: "engagement-welcome-message",
+    defaultCss: `.engagement-welcome-message {
+  max-width: 360px;
+  color: #18181b;
+  background: #ffffff;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  padding: 14px;
+  font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .06);
+}
+.engagement-welcome-message h3 {
+  color: #18181b;
+  font-size: 14px;
+  font-weight: 600;
+}
+.engagement-welcome-message p {
+  color: #52525b;
+  line-height: 1.6;
+}
+.engagement-welcome-message .engagement-welcome-icon {
+  background: #18181b;
+  color: #ffffff;
+}`,
+  },
+  {
+    id: "scrollbar",
+    name: "Scrollbar percakapan",
+    description: "Warna thumb dan track pada area pesan yang dapat digulir.",
+    className: "engagement-message-list",
+    defaultCss: `.engagement-message-list {
+  --engagement-scrollbar-thumb: #a3a3a3;
+  --engagement-scrollbar-track: #f4f4f5;
+  scrollbar-color: var(--engagement-scrollbar-thumb) var(--engagement-scrollbar-track);
+  scrollbar-width: thin;
+}
+.engagement-message-list::-webkit-scrollbar {
+  width: 8px;
+}
+.engagement-message-list::-webkit-scrollbar-track {
+  background: var(--engagement-scrollbar-track);
+}
+.engagement-message-list::-webkit-scrollbar-thumb {
+  background: var(--engagement-scrollbar-thumb);
+  border-radius: 999px;
+}`,
   },
   {
     id: "input",

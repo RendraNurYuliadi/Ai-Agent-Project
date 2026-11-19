@@ -8,7 +8,7 @@ import {
   type ConversationMessageData,
 } from "@/components/conversation-message-body";
 import type { EngagementWidgetConfig } from "@/types/engagement";
-import { scopeEngagementCss } from "@/lib/engagement-theme";
+import { getDefaultComponentStyles, scopeEngagementCss } from "@/lib/engagement-theme";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
 
 interface SessionResponse {
@@ -27,45 +27,47 @@ export default function EngagementChatWidget({
   const [messages, setMessages] = useState<ConversationMessageData[]>([]);
   const [conversationId, setConversationId] = useState("");
   const [visitorToken, setVisitorToken] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
-  const [initializing, setInitializing] = useState(true);
+  const [initializing, setInitializing] = useState(false);
   const [sending, setSending] = useState(false);
   const [botStatus, setBotStatus] = useState("active");
   const [escalationStatus, setEscalationStatus] = useState("bot");
   const [menuOpen, setMenuOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const openingRef = useRef(false);
 
   useEffect(() => {
-    let active = true;
-    fetch("/api/public-engagement/sessions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.token}`,
-      },
-    })
-      .then(async (response) => {
-        const data = await response.json() as SessionResponse & { error?: string };
-        if (!response.ok) throw new Error(data.error || "Gagal memulai chat.");
-        if (!active) return;
-        setConversationId(data.conversationId);
-        setVisitorToken(data.visitorToken);
-        setMessages(data.messages || []);
-        setBotStatus(data.botStatus || "active");
-        setEscalationStatus(data.escalationStatus || "bot");
-      })
-      .catch((loadError: unknown) => {
-        if (active) setError(loadError instanceof Error ? loadError.message : "Gagal memulai chat.");
-      })
-      .finally(() => {
-        if (active) setInitializing(false);
-      });
-
+    const root = document.documentElement;
+    const body = document.body;
+    const previousRootBackground = root.style.backgroundColor;
+    const previousBodyBackground = body.style.backgroundColor;
+    const previousBodyHeight = body.style.height;
+    const previousBodyMinHeight = body.style.minHeight;
+    const previousBodyMargin = body.style.margin;
+    root.style.backgroundColor = "transparent";
+    body.style.backgroundColor = "transparent";
+    body.style.height = "100%";
+    body.style.minHeight = "0";
+    body.style.margin = "0";
     return () => {
-      active = false;
+      root.style.backgroundColor = previousRootBackground;
+      body.style.backgroundColor = previousBodyBackground;
+      body.style.height = previousBodyHeight;
+      body.style.minHeight = previousBodyMinHeight;
+      body.style.margin = previousBodyMargin;
     };
-  }, [config.token]);
+  }, []);
+
+  useEffect(() => {
+    if (window.parent === window) return;
+    window.parent.postMessage(
+      { type: "engagement-widget:resize", open: isOpen },
+      config.parentOrigin
+    );
+  }, [config.parentOrigin, isOpen]);
 
   useEffect(() => {
     const list = messageListRef.current;
@@ -160,6 +162,36 @@ export default function EngagementChatWidget({
     void sendMessage(input);
   };
 
+  const openChat = async () => {
+    setIsOpen(true);
+    setMenuOpen(false);
+    setError("");
+    if (conversationId || openingRef.current) return;
+
+    openingRef.current = true;
+    setInitializing(true);
+    try {
+      const response = await fetch("/api/public-engagement/sessions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.token}`,
+        },
+      });
+      const data = await response.json() as SessionResponse & { error?: string };
+      if (!response.ok) throw new Error(data.error || "Gagal memulai chat.");
+      setConversationId(data.conversationId);
+      setVisitorToken(data.visitorToken);
+      setMessages(data.messages || []);
+      setBotStatus(data.botStatus || "active");
+      setEscalationStatus(data.escalationStatus || "bot");
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Gagal memulai chat.");
+    } finally {
+      openingRef.current = false;
+      setInitializing(false);
+    }
+  };
+
   const closeConversation = async () => {
     if (!conversationId || !visitorToken || closing) return;
     setClosing(true);
@@ -179,6 +211,12 @@ export default function EngagementChatWidget({
       if (!response.ok) throw new Error(data.error || "Percakapan gagal ditutup.");
       setBotStatus(data.botStatus || "closed");
       setEscalationStatus(data.escalationStatus || "closed");
+      setMessages([]);
+      setConversationId("");
+      setVisitorToken("");
+      setInput("");
+      setError("");
+      setIsOpen(false);
     } catch (closeError) {
       setError(closeError instanceof Error ? closeError.message : "Percakapan gagal ditutup.");
     } finally {
@@ -194,15 +232,34 @@ export default function EngagementChatWidget({
   const conversationUnavailable = botStatus === "closed";
   const isWaitingForAgent = escalationStatus === "pending";
   const menuAllowed = config.window.allowClose !== false;
+  const componentStyles = {
+    ...getDefaultComponentStyles(),
+    ...(config.window.componentStyles || {}),
+  };
+
+  if (!isOpen) {
+    return (
+      <button
+        type="button"
+        onClick={() => void openChat()}
+        aria-label={`Buka chat ${config.window.title}`}
+        title={config.window.title}
+        className="engagement-launcher flex h-16 w-16 items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+        style={{ backgroundColor: config.window.accentColor, border: `1px solid ${config.window.lineColor}` }}
+      >
+        {initializing ? <Loader2 className="h-6 w-6 animate-spin" /> : <MessageCircle className="h-7 w-7" />}
+      </button>
+    );
+  }
 
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(
-        Object.values(config.window.componentStyles || {}).join("\n"),
+        Object.values(componentStyles).join("\n"),
         `.engagement-window-${config.windowId}`
       ) }} />
       <main
-        className={`engagement-window-${config.windowId} engagement-widget flex h-screen min-h-[420px] flex-col overflow-hidden text-white`}
+        className={`engagement-window-${config.windowId} engagement-widget flex h-full min-h-0 w-full flex-col overflow-hidden text-white`}
         style={{ ...accentStyle, backgroundColor: "var(--engagement-background)", borderRadius: `${config.window.borderRadius}px` }}
       >
       <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4" style={{ backgroundColor: "var(--engagement-accent)", borderColor: "var(--engagement-line)" }}>
@@ -243,7 +300,7 @@ export default function EngagementChatWidget({
         )}
       </header>
 
-      <div ref={messageListRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
+      <div ref={messageListRef} className="engagement-message-list min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
         {initializing && (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-neutral-400">
             <Loader2 className="h-4 w-4 animate-spin" /> Menghubungkan chat...
@@ -253,6 +310,7 @@ export default function EngagementChatWidget({
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-neutral-400">
             <WifiOff className="h-5 w-5" />
             <p>{error}</p>
+            {!conversationId && <button type="button" onClick={() => void openChat()} className="rounded-lg border border-neutral-700 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800">Coba lagi</button>}
           </div>
         )}
         {messages.map((message) => (

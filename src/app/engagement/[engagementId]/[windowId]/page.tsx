@@ -44,6 +44,7 @@ export default async function EngagementWidgetPage({
     engagementId,
     windowId,
     entryPointId: entryPoint.id,
+    parentOrigin: entryPoint.origin,
     token: await signEngagementWidgetToken({
       engagementId,
       windowId,

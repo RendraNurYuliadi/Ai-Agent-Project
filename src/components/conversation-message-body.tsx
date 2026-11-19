@@ -154,8 +154,9 @@ function BotInteractionView({ data, onReply, disabled, imageProxyToken }: { data
   const buttons = data.buttons || data.quickButtons || [];
   const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
   const iconLabel = data.icon === "custom" ? "Custom" : data.icon || "Sparkles";
-  return <article className="engagement-card engagement-component w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-neutral-800 bg-[#101010] p-3.5 sm:max-w-[360px]">
-    {data.type === "welcome_message" && data.title && <div className="mb-2 flex items-center gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white text-black">{data.icon === "custom" && data.iconUrl ? <Image src={getImageProxyUrl(data.iconUrl, imageProxyToken)} alt="" width={28} height={28} unoptimized className="h-7 w-7 object-cover" /> : <Icon className="h-4 w-4" />}</span><h3 className="text-sm font-semibold text-white">{data.title}</h3></div>}
+  const isWelcomeMessage = data.type === "welcome_message";
+  return <article className={`engagement-card engagement-component ${isWelcomeMessage ? "engagement-welcome-message" : ""} w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-neutral-800 bg-[#101010] p-3.5 sm:max-w-[360px]`}>
+    {isWelcomeMessage && data.title && <div className="mb-2 flex items-center gap-2"><span className="engagement-welcome-icon flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white text-black">{data.icon === "custom" && data.iconUrl ? <Image src={getImageProxyUrl(data.iconUrl, imageProxyToken)} alt="" width={28} height={28} unoptimized className="h-7 w-7 object-cover" /> : <Icon className="h-4 w-4" />}</span><h3 className="text-sm font-semibold text-white">{data.title}</h3></div>}
     {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
     {buttons.length > 0 && <div className="mt-3"><MessageButtons buttons={buttons} onReply={onReply} disabled={disabled} /></div>}
     {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
