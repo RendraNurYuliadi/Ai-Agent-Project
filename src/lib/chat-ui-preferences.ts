@@ -1,0 +1,77 @@
+export const CHAT_SCROLL_ANIMATION_STORAGE_KEY = "ai-chatbot:chat-scroll-animation";
+export const CHAT_SCROLL_ANIMATION_STYLE_STORAGE_KEY = "ai-chatbot:chat-scroll-animation-style";
+export const CHAT_SCROLL_ANIMATION_STYLES = [
+  { value: "fade", label: "Fade", description: "Bubble memudar masuk." },
+  { value: "slide", label: "Slide kiri / kanan", description: "Bot dari kiri, pesan Anda dari kanan." },
+  { value: "pop", label: "Pop", description: "Bubble muncul dengan efek membesar." },
+  { value: "rise", label: "Naik", description: "Bubble bergerak naik dari bawah." },
+  { value: "blur", label: "Blur", description: "Bubble muncul dari efek blur." },
+] as const;
+export type ChatScrollAnimationStyle = (typeof CHAT_SCROLL_ANIMATION_STYLES)[number]["value"];
+
+const subscribers = new Set<() => void>();
+let readErrorLogged = false;
+
+const notifySubscribers = () => {
+  subscribers.forEach((subscriber) => subscriber());
+};
+
+const handleStorage = (event: StorageEvent) => {
+  if (
+    event.key === CHAT_SCROLL_ANIMATION_STORAGE_KEY ||
+    event.key === CHAT_SCROLL_ANIMATION_STYLE_STORAGE_KEY ||
+    event.key === null
+  ) {
+    notifySubscribers();
+  }
+};
+
+export function subscribeToChatScrollAnimation(subscriber: () => void): () => void {
+  subscribers.add(subscriber);
+  if (subscribers.size === 1 && typeof window !== "undefined") {
+    window.addEventListener("storage", handleStorage);
+  }
+  return () => {
+    subscribers.delete(subscriber);
+    if (subscribers.size === 0 && typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorage);
+    }
+  };
+}
+
+export function getChatScrollAnimationSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(CHAT_SCROLL_ANIMATION_STORAGE_KEY) === "true";
+  } catch (error) {
+    if (!readErrorLogged) {
+      console.error("Could not read chat animation setting:", error);
+      readErrorLogged = true;
+    }
+    return false;
+  }
+}
+
+export function getChatScrollAnimationStyleSnapshot(): ChatScrollAnimationStyle {
+  if (typeof window === "undefined") return "fade";
+  try {
+    const storedStyle = window.localStorage.getItem(CHAT_SCROLL_ANIMATION_STYLE_STORAGE_KEY);
+    return CHAT_SCROLL_ANIMATION_STYLES.find((style) => style.value === storedStyle)?.value || "fade";
+  } catch (error) {
+    if (!readErrorLogged) {
+      console.error("Could not read chat animation setting:", error);
+      readErrorLogged = true;
+    }
+    return "fade";
+  }
+}
+
+export function setChatScrollAnimationPreference(enabled: boolean): void {
+  window.localStorage.setItem(CHAT_SCROLL_ANIMATION_STORAGE_KEY, String(enabled));
+  notifySubscribers();
+}
+
+export function setChatScrollAnimationStylePreference(style: ChatScrollAnimationStyle): void {
+  window.localStorage.setItem(CHAT_SCROLL_ANIMATION_STYLE_STORAGE_KEY, style);
+  notifySubscribers();
+}

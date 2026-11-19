@@ -67,6 +67,65 @@ body {
   animation: chat-message-enter 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+@keyframes chat-scroll-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes chat-scroll-slide-from-left {
+  from { opacity: 0; transform: translate3d(-32px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes chat-scroll-slide-from-right {
+  from { opacity: 0; transform: translate3d(32px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes chat-scroll-pop {
+  0% { opacity: 0; transform: scale(0.72); }
+  75% { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes chat-scroll-rise {
+  from { opacity: 0; transform: translate3d(0, 26px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes chat-scroll-blur {
+  from { opacity: 0; filter: blur(10px); transform: scale(1.02); }
+  to { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+
+.chat-scroll-reveal-active[data-chat-animation="fade"] {
+  animation: chat-scroll-fade 520ms ease both;
+}
+
+.chat-scroll-reveal-active[data-chat-animation="slide"][data-chat-role="assistant"] {
+  animation: chat-scroll-slide-from-left 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.chat-scroll-reveal-active[data-chat-animation="slide"][data-chat-role="user"] {
+  animation: chat-scroll-slide-from-right 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.chat-scroll-reveal-active[data-chat-animation="pop"] {
+  animation: chat-scroll-pop 500ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.chat-scroll-reveal-active[data-chat-animation="rise"] {
+  animation: chat-scroll-rise 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.chat-scroll-reveal-active[data-chat-animation="blur"] {
+  animation: chat-scroll-blur 620ms ease both;
+}
+
 .chat-component-enter {
   animation: chat-component-enter 340ms cubic-bezier(0.2, 0.8, 0.2, 1) 90ms both;
 }
@@ -133,6 +192,12 @@ body {
 
   .chat-message-enter,
   .chat-component-enter,
+  .chat-scroll-reveal-active[data-chat-animation="fade"],
+  .chat-scroll-reveal-active[data-chat-animation="slide"][data-chat-role="assistant"],
+  .chat-scroll-reveal-active[data-chat-animation="slide"][data-chat-role="user"],
+  .chat-scroll-reveal-active[data-chat-animation="pop"],
+  .chat-scroll-reveal-active[data-chat-animation="rise"],
+  .chat-scroll-reveal-active[data-chat-animation="blur"],
   .splash-logo,
   .splash-message,
   .splash-dot,

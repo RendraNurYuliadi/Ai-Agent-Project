@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
-import { initializeBotConversation } from "@/lib/bot-runtime";
+import { DataCollectionAIError, initializeBotConversation } from "@/lib/bot-runtime";
 import { getConversationRelations } from "@/lib/conversation-details";
 
 // GET /api/conversations — list conversations for current user
@@ -219,6 +219,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("POST conversations error:", err);
+    if (err instanceof DataCollectionAIError) {
+      return NextResponse.json({ error: err.message }, { status: 502 });
+    }
     return NextResponse.json({ error: "Failed to create conversation" }, { status: 500 });
   }
 }

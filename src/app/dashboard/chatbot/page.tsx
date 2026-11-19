@@ -20,6 +20,11 @@ import {
 } from "lucide-react";
 import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
 import { ConversationMessageBody, type ConversationMessageComponent, type ConversationMessageData } from "@/components/conversation-message-body";
+import {
+  getChatScrollAnimationSnapshot,
+  getChatScrollAnimationStyleSnapshot,
+  subscribeToChatScrollAnimation,
+} from "@/lib/chat-ui-preferences";
 
 interface SpeechRecognitionResultEventLike {
   resultIndex: number;
@@ -209,6 +214,17 @@ export default function ChatbotPage() {
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [enteringMessageId, setEnteringMessageId] = useState<string | null>(null);
+  const [revealedChatMessageIds, setRevealedChatMessageIds] = useState<Set<string>>(() => new Set());
+  const chatScrollAnimationEnabled = useSyncExternalStore(
+    subscribeToChatScrollAnimation,
+    getChatScrollAnimationSnapshot,
+    () => false
+  );
+  const chatScrollAnimationStyle = useSyncExternalStore(
+    subscribeToChatScrollAnimation,
+    getChatScrollAnimationStyleSnapshot,
+    () => "fade"
+  );
   const [skills, setSkills] = useState<ChatSkill[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [selectedSkillId, setSelectedSkillId] = useState("");
@@ -255,6 +271,34 @@ export default function ChatbotPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container || !chatScrollAnimationEnabled || typeof IntersectionObserver === "undefined") return;
+    const messageElements = Array.from(container.querySelectorAll<HTMLElement>("[data-chat-message]"));
+    const observer = new IntersectionObserver((entries) => {
+      const visibleIds = entries.flatMap((entry) => {
+        if (!entry.isIntersecting || !(entry.target instanceof HTMLElement)) return [];
+        const messageId = entry.target.dataset.chatMessage;
+        if (!messageId) return [];
+        observer.unobserve(entry.target);
+        return [messageId];
+      });
+      if (visibleIds.length) {
+        setRevealedChatMessageIds((current) => {
+          const next = new Set(current);
+          visibleIds.forEach((id) => next.add(id));
+          return next;
+        });
+      }
+    }, { root: container, threshold: 0.12 });
+    messageElements.forEach((element) => {
+      if (element.dataset.chatMessage && !revealedChatMessageIds.has(element.dataset.chatMessage)) {
+        observer.observe(element);
+      }
+    });
+    return () => observer.disconnect();
+  }, [activeConvId, chatScrollAnimationEnabled, loadingMessages, messages, revealedChatMessageIds]);
 
   useEffect(() => {
     return () => {
@@ -950,13 +994,16 @@ export default function ChatbotPage() {
                 return (
                   <div
                     key={msg.id}
+                    data-chat-message={msg.id}
+                    data-chat-role={msg.role}
+                    data-chat-animation={chatScrollAnimationStyle}
                     onAnimationEnd={(event) => {
                       if (event.target === event.currentTarget) {
                         setEnteringMessageId((current) => current === msg.id ? null : current);
                       }
                     }}
                     className={`flex w-full min-w-0 items-start gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"
-                      } ${enteringMessageId === msg.id ? "chat-message-enter" : ""}`}
+                      } ${enteringMessageId === msg.id ? "chat-message-enter" : ""} ${chatScrollAnimationEnabled ? "chat-scroll-reveal" : ""} ${chatScrollAnimationEnabled && revealedChatMessageIds.has(msg.id) ? "chat-scroll-reveal-active" : ""}`}
                   >
                     {/* Avatar */}
                     {isUser ? (

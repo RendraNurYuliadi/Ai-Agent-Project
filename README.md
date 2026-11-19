@@ -21,6 +21,7 @@ Chatbot generatif dapat memberi jawaban yang lancar, tetapi jawaban dapat tidak 
 - Smart Search yang memberi skor relevansi artikel dan mengambil maksimal lima artikel teratas sebagai konteks AI.
 - Pengelolaan prompt, flow dialog, skill, dan reusable component.
 - Riwayat percakapan dan informasi sumber artikel yang cocok.
+- Engagement widget iframe untuk menyematkan skill bot aktif pada website dengan entry point/origin yang diizinkan.
 - Pilihan provider AI: LM Studio untuk server yang dapat dijangkau aplikasi, atau OpenRouter untuk model cloud.
 
 ## Konsep AI
@@ -92,6 +93,7 @@ Database yang digunakan aplikasi bernama `aiChatbot`. MongoDB bersifat fleksibel
 | `prompts` | Template prompt berdasarkan jenisnya |
 | `genaiConfig` | Provider dan parameter generasi yang dipilih |
 | `skills` | Skill yang menghubungkan user bot dengan bot flow |
+| `engagements` | Konfigurasi widget website, allowlist entry point, dan chat windows yang terhubung ke skill bot |
 | `components` | Template tombol, kartu, carousel, dan referensi artikel |
 | `flowDialogs` | Flow dialog yang disimpan sebagai nodes dan edges |
 | `knowledgeBase` | Collection artikel lama untuk kompatibilitas endpoint terdahulu |
@@ -102,6 +104,8 @@ Dokumen memakai `_id` ObjectId bawaan MongoDB serta timestamp seperti `createdAt
 
 - Endpoint terlindungi memeriksa sesi dan role pengguna.
 - Password pengguna di-hash sebelum disimpan. Token sesi disimpan dalam cookie HttpOnly.
+- Widget Engagement hanya dapat dimuat dari origin yang terdaftar. API publik menggunakan token widget bertanda tangan dan token acak terpisah untuk membatasi setiap percakapan visitor.
+- Daftarkan origin lengkap (misalnya `https://contoh.com`) dan pasang snippet iframe yang dihasilkan dashboard pada origin tersebut. Pastikan browser mengirim referrer origin agar validasi entry point dapat berjalan.
 - `MONGODB_URI`, `JWT_SECRET`, dan `OPENROUTER_API_KEY` adalah rahasia server. Jangan commit `.env.local` atau menuliskan nilai rahasia ke README.
 - `localhost` pada `LM_STUDIO_URL` hanya menunjuk ke mesin yang menjalankan aplikasi. Untuk deployment Vercel, gunakan provider cloud atau alamat LM Studio yang dapat dijangkau server.
 - Smart Search berbasis kata, bukan pemahaman semantik. Pertanyaan dengan istilah berbeda dari artikel dapat memperoleh skor rendah.
@@ -147,6 +151,16 @@ npm run build
 npm run start
 npm run lint
 ```
+
+## Menyematkan Engagement di Website
+
+1. Masuk ke dashboard dengan role admin atau manager, lalu buka **Engagement** dan buat konfigurasi baru.
+2. Tambahkan entry point berupa origin website lengkap, misalnya `https://contoh.com`.
+3. Tambahkan chat window, pilih skill yang sudah terhubung ke bot aktif, lalu atur judul, subjudul, dan warna header.
+4. Simpan konfigurasi, aktifkan Engagement, lalu pilih entry point dan chat window untuk menyalin snippet iframe.
+5. Tempel snippet ke HTML website. Iframe akan menjalankan flow bot terpilih, termasuk interaction, komponen pesan, dan generasi AI yang sudah dikonfigurasi.
+
+Setiap window memiliki percakapan visitor sendiri. Percakapan disimpan pada collection `conversations` dengan sumber Engagement; balasan agen dan eskalasi mengikuti mekanisme conversation/escalation yang sudah ada.
 
 `npm run seed` menambahkan data contoh untuk pengembangan/demo. Tinjau `scripts/seed.mjs` sebelum menjalankannya dan jangan gunakan akun atau data seed sebagai konfigurasi produksi.
 

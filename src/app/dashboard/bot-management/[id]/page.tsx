@@ -127,11 +127,12 @@ const BOT_SYSTEM_VARIABLES = [
   "{nama_lengkap}",
 ];
 
-const BOT_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection", "data_collection_submitted", "skill_escalation"];
+const BOT_AI_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection_ai"];
+const BOT_NON_AI_TOOL_TYPES: BotInteractionType[] = ["skill_escalation", "data_collection_submitted", "data_collection"];
 const BOT_INTERACTION_TYPES_GROUPED: BotInteractionType[] = ["welcome_message", "text", "text_question"];
 
 function getBotVariableOptions(customVariables: BotCustomVariable[] = [], interactions: BotInteraction[] = [], interactionType?: BotInteractionType) {
-  const dataCollectionVariables = [...new Set(interactions.flatMap((interaction) => interaction.type === "data_collection"
+  const dataCollectionVariables = [...new Set(interactions.flatMap((interaction) => interaction.type === "data_collection" || interaction.type === "data_collection_ai"
     ? (interaction.config.dataCollectionQuestions || []).map((item) => `{${(item.variable || item.name || "").trim()}}`).filter(Boolean)
     : []))];
   const customNames = customVariables.filter((item) => item.name.trim()).map((item) => `{${item.name.trim()}}`);
@@ -150,6 +151,7 @@ function interactionDisplayName(interaction: Pick<BotInteraction, "type" | "conf
 function nodeSummary(interaction: BotInteraction): string {
   if (interaction.type === "guided_routing") return `${interaction.config.options?.length || 0} route · LLM`;
   if (interaction.type === "web_search") return `${interaction.config.webSearchMaxResults || 5} sumber web · LLM`;
+  if (interaction.type === "data_collection_ai") return `${interaction.config.dataCollectionQuestions?.length || 0} pertanyaan · LLM`;
   if (interaction.type === "data_collection") return `${interaction.config.dataCollectionQuestions?.length || 0} pertanyaan · Webhook`;
   if (interaction.type === "data_collection_submitted") return `${interaction.config.dataCollectionSubmittedFields?.length || 0} field · Capture`;
   if (interaction.type === "skill_escalation") return "Alihkan percakapan ke human";
@@ -164,6 +166,8 @@ function InteractionNode({ data, selected }: NodeProps<FlowCanvasNode>) {
       ? Bot
       : data.interactionType === "web_search"
         ? Globe
+        : data.interactionType === "data_collection_ai"
+          ? Bot
         : data.interactionType === "data_collection"
           ? ListChecks
           : data.interactionType === "data_collection_submitted"
@@ -313,13 +317,26 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
     case "welcome_message":
       return { title: "Selamat datang", subtitle: "Ada yang bisa kami bantu?", icon: "sparkles", footerText: "", quickButtons: [] };
     case "guided_routing":
-      return { text: "Pilih topik yang ingin dibahas.", promptId, options: [], fallbackMessageEnabled: true };
+      return { text: "Pilih topik yang ingin dibahas.", temperature: 0, maxTokens: 64, promptId, options: [], fallbackMessageEnabled: true };
     case "small_talk":
       return { temperature: 0.8, maxTokens: 400, promptId, systemPrompt: "Kamu adalah asisten yang ramah dan ringkas." };
     case "rag":
       return { temperature: 0.7, maxTokens: 1024, ragDocumentMaxResults: 5, knowledgeBases: [], promptId, systemPrompt: "Jawab berdasarkan knowledge context. Jika informasi tidak tersedia, sampaikan dengan jujur.\n\n{context}" };
     case "web_search":
       return { temperature: 0.7, maxTokens: 1024, webSearchMaxResults: 5 };
+    case "data_collection_ai":
+      return {
+        temperature: 0.7,
+        maxTokens: 400,
+        dataCollectionAiRules: "Ajukan pertanyaan dengan sopan, singkat, dan mudah dipahami. Minta hanya satu informasi dalam satu waktu.",
+        dataCollectionQuestions: [{
+          name: "nama_lengkap",
+          question: "",
+          questionPrompt: "Tanyakan nama lengkap pengguna.",
+          exampleQuestion: "Siapa nama lengkap Anda?",
+          variable: "nama_lengkap",
+        }],
+      };
     case "data_collection":
       return { dataCollectionQuestions: [{ name: "nama_lengkap", question: "Siapa nama lengkap Anda?", variable: "nama_lengkap" }] };
     case "data_collection_submitted":
@@ -639,7 +656,8 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
   const editorRowsClass = interactionsOpen ? "grid-rows-[auto_minmax(0,1fr)] xl:grid-rows-1" : "grid-rows-[minmax(0,1fr)] xl:grid-rows-1";
   const availableVariableOptions = getBotVariableOptions(customVariables, interactions, selectedInteraction?.type);
   const groupedInteractionTypes = [
-    { label: "Tools", types: BOT_TOOL_TYPES },
+    { label: "Tools dengan Gen AI", types: BOT_AI_TOOL_TYPES },
+    { label: "Tools tanpa AI", types: BOT_NON_AI_TOOL_TYPES },
     { label: "Interaction", types: BOT_INTERACTION_TYPES_GROUPED },
   ];
 
@@ -811,8 +829,8 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
           </ReactFlow>
         </section>
 
-        {showConfiguration && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfigOpen(false); }}>
-          <section role="dialog" aria-modal="true" aria-labelledby="interaction-properties-title" className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-neutral-800 bg-[#080808] shadow-2xl">
+        {showConfiguration && <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm sm:p-8" onMouseDown={(event) => { if (event.target === event.currentTarget) setConfigOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="interaction-properties-title" className="flex max-h-[92dvh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-neutral-800 bg-[#080808] shadow-2xl">
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-neutral-900 px-4 py-3">
             <div>
               <h2 id="interaction-properties-title" className="text-sm font-semibold text-white">Properti interaction</h2>
@@ -827,8 +845,9 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(16rem,0.85fr)_minmax(0,1.7fr)]">
+          <aside className="min-w-0 space-y-4">
             {selectedInteraction && <div className="space-y-1.5 rounded-md border border-neutral-800 bg-neutral-950/50 p-3">
               <TextField
                 label="Nama interaction"
@@ -871,9 +890,11 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                 {interactions.map((item) => <option key={item.id} value={item.id}>{interactionDisplayName(item)}</option>)}
               </select>
             </label>
+          </aside>
 
+          <div className="min-w-0">
             {selectedInteraction ? (
-              <>
+              <div className="space-y-4">
                 {selectedInteraction.type === "welcome_message" && (
                   <div className="space-y-3">
                     <TextField label="Title" value={selectedInteraction.config.title || ""} onChange={(value) => updateConfig({ title: value })} />
@@ -948,6 +969,7 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                       prompts={prompts}
                       onChange={updateConfig}
                     />
+                    <LLMParameterFields config={selectedInteraction.config} defaultTemperature={0} defaultMaxTokens={64} onChange={updateConfig} />
                     <div className="space-y-2 border-t border-neutral-900 pt-3">
                       <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-neutral-300">Pilihan route</span><button type="button" onClick={() => updateConfig({ options: [...(selectedInteraction.config.options || []), { label: "", variable: "", prompt: "", targetInteractionId: otherInteractions[0]?.id || "" }] })} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white"><Plus className="h-3 w-3" /> Tambah</button></div>
                       {(selectedInteraction.config.options || []).map((option, index) => <GuidedOptionFields key={`${selectedInteraction.id}-route-${index}`} option={option} interactions={otherInteractions} onChange={(patch) => setGuidedOption(index, patch)} onRemove={() => updateConfig({ options: selectedInteraction.config.options?.filter((_, itemIndex) => itemIndex !== index) })} />)}
@@ -958,12 +980,7 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                 {selectedInteraction.type === "small_talk" && (
                   <div className="space-y-3">
                     <ProviderModelFields config={selectedInteraction.config} providers={providerOptions} interactionType={selectedInteraction.type} prompts={prompts} onChange={updateConfig} />
-                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Temperature: {selectedInteraction.config.temperature ?? 0.8}
-                      <input type="range" min="0" max="2" step="0.1" value={selectedInteraction.config.temperature ?? 0.8} onChange={(event) => updateConfig({ temperature: Number(event.target.value) })} className="w-full accent-white" />
-                    </label>
-                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Max output tokens
-                      <input type="number" min="64" max="8192" value={selectedInteraction.config.maxTokens ?? 400} onChange={(event) => updateConfig({ maxTokens: Math.max(64, Math.min(8192, Number(event.target.value) || 400)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
-                    </label>
+                    <LLMParameterFields config={selectedInteraction.config} defaultTemperature={0.8} defaultMaxTokens={400} onChange={updateConfig} />
                     <PromptSelector type="small_talk" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} variableOptions={availableVariableOptions} />
                   </div>
                 )}
@@ -971,12 +988,7 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                 {selectedInteraction.type === "web_search" && (
                   <div className="space-y-3">
                     <ProviderModelFields config={selectedInteraction.config} providers={providerOptions} interactionType={selectedInteraction.type} prompts={prompts} onChange={updateConfig} />
-                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Temperature: {selectedInteraction.config.temperature ?? 0.7}
-                      <input type="range" min="0" max="2" step="0.1" value={selectedInteraction.config.temperature ?? 0.7} onChange={(event) => updateConfig({ temperature: Number(event.target.value) })} className="w-full accent-white" />
-                    </label>
-                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Max output tokens
-                      <input type="number" min="64" max="8192" value={selectedInteraction.config.maxTokens ?? 1024} onChange={(event) => updateConfig({ maxTokens: Math.max(64, Math.min(8192, Number(event.target.value) || 1024)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
-                    </label>
+                    <LLMParameterFields config={selectedInteraction.config} defaultTemperature={0.7} defaultMaxTokens={1024} onChange={updateConfig} />
                     <div className="border-t border-neutral-900 pt-3" />
                     <label className="block space-y-1.5 text-[10px] text-neutral-500">Jumlah sumber web
                       <input type="number" min="1" max="10" value={selectedInteraction.config.webSearchMaxResults ?? 5} onChange={(event) => updateConfig({ webSearchMaxResults: Math.max(1, Math.min(10, Number(event.target.value) || 5)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
@@ -986,11 +998,25 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                   </div>
                 )}
 
-                {selectedInteraction.type === "data_collection" && (
+                {(selectedInteraction.type === "data_collection" || selectedInteraction.type === "data_collection_ai") && (
                   <div className="space-y-3">
+                    {selectedInteraction.type === "data_collection_ai" && <>
+                      <ProviderModelFields config={selectedInteraction.config} providers={providerOptions} interactionType={selectedInteraction.type} prompts={prompts} onChange={updateConfig} />
+                      <LLMParameterFields config={selectedInteraction.config} defaultTemperature={0.7} defaultMaxTokens={400} onChange={updateConfig} />
+                      <TextAreaField label="General rules untuk seluruh pengumpulan data" value={selectedInteraction.config.dataCollectionAiRules || ""} onChange={(value) => updateConfig({ dataCollectionAiRules: value })} rows={5} variableOptions={availableVariableOptions} />
+                    </>}
                     <div className="space-y-2 border-t border-neutral-900 pt-3">
-                      <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-neutral-300">Daftar pertanyaan</span><button type="button" disabled={(selectedInteraction.config.dataCollectionQuestions?.length || 0) >= 30} onClick={() => updateConfig({ dataCollectionQuestions: [...(selectedInteraction.config.dataCollectionQuestions || []), { name: `pertanyaan_${(selectedInteraction.config.dataCollectionQuestions?.length || 0) + 1}`, question: "", variable: `jawaban_${(selectedInteraction.config.dataCollectionQuestions?.length || 0) + 1}` }] })} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white disabled:opacity-40"><Plus className="h-3 w-3" />Tambah</button></div>
-                      {(selectedInteraction.config.dataCollectionQuestions || []).map((question, index) => <DataCollectionQuestionFields key={`${selectedInteraction.id}-data-question-${index}`} question={question} index={index} canRemove={(selectedInteraction.config.dataCollectionQuestions?.length || 0) > 1} variableOptions={availableVariableOptions} onChange={(patch) => {
+                      <div className="flex items-center justify-between"><span className="text-[10px] font-medium text-neutral-300">Daftar pertanyaan</span><button type="button" disabled={(selectedInteraction.config.dataCollectionQuestions?.length || 0) >= 30} onClick={() => {
+                        const nextIndex = (selectedInteraction.config.dataCollectionQuestions?.length || 0) + 1;
+                        const aiMode = selectedInteraction.type === "data_collection_ai";
+                        updateConfig({ dataCollectionQuestions: [...(selectedInteraction.config.dataCollectionQuestions || []), {
+                          name: `pertanyaan_${nextIndex}`,
+                          question: "",
+                          ...(aiMode ? { questionPrompt: "", exampleQuestion: "" } : {}),
+                          variable: `jawaban_${nextIndex}`,
+                        }] });
+                      }} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white disabled:opacity-40"><Plus className="h-3 w-3" />Tambah</button></div>
+                      {(selectedInteraction.config.dataCollectionQuestions || []).map((question, index) => <DataCollectionQuestionFields key={`${selectedInteraction.id}-data-question-${index}`} question={question} index={index} aiMode={selectedInteraction.type === "data_collection_ai"} canRemove={(selectedInteraction.config.dataCollectionQuestions?.length || 0) > 1} variableOptions={availableVariableOptions} onChange={(patch) => {
                         const questions = [...(selectedInteraction.config.dataCollectionQuestions || [])];
                         questions[index] = { ...questions[index], ...patch };
                         updateConfig({ dataCollectionQuestions: questions });
@@ -1091,12 +1117,7 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                       <input type="number" min="1" max="10" value={selectedInteraction.config.ragDocumentMaxResults ?? 5} onChange={(event) => updateConfig({ ragDocumentMaxResults: Math.max(1, Math.min(10, Number(event.target.value) || 5)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
                     </label>
                     <ProviderModelFields config={selectedInteraction.config} providers={providerOptions} interactionType={selectedInteraction.type} prompts={prompts} onChange={updateConfig} />
-                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Temperature: {selectedInteraction.config.temperature ?? 0.7}
-                      <input type="range" min="0" max="2" step="0.1" value={selectedInteraction.config.temperature ?? 0.7} onChange={(event) => updateConfig({ temperature: Number(event.target.value) })} className="w-full accent-white" />
-                    </label>
-                    <label className="block space-y-1.5 text-[10px] text-neutral-500">Max output tokens
-                      <input type="number" min="64" max="8192" value={selectedInteraction.config.maxTokens ?? 1024} onChange={(event) => updateConfig({ maxTokens: Math.max(64, Math.min(8192, Number(event.target.value) || 1024)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
-                    </label>
+                    <LLMParameterFields config={selectedInteraction.config} defaultTemperature={0.7} defaultMaxTokens={1024} onChange={updateConfig} />
                     <PromptSelector type="rag" prompts={prompts} value={selectedInteraction.config.promptId || ""} onChange={(value) => updateConfig({ promptId: value })} onSave={savePromptTemplate} variableOptions={availableVariableOptions} />
                     <div className="space-y-2 border-t border-neutral-900 pt-3">
                       <p className="text-[10px] font-medium text-neutral-300">Knowledge Base aktif</p>
@@ -1139,8 +1160,9 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                   </label>}
                   <p className="text-[9px] leading-4 text-neutral-600">Hubungkan handle antar-node di canvas untuk mengatur next interaction secara visual.</p>
                 </div>}
-              </>
+              </div>
             ) : <p className="rounded-md border border-dashed border-neutral-800 px-3 py-8 text-center text-[10px] text-neutral-600">Pilih node di canvas atau tambahkan interaction.</p>}
+          </div>
           </div>
           </div>
           </section>
@@ -1238,7 +1260,7 @@ function ProviderModelFields({
         </select>
       </label>
       <p className="text-[9px] leading-4 text-neutral-600">
-        Provider dan model ini dipakai bersama oleh Guided Routing, Small Talk, RAG, dan Web Search.
+        Provider dan model ini dipakai bersama oleh Guided Routing, Small Talk, RAG, Web Search, dan AI Data Collection.
       </p>
       {!selectedProvider && (
         <p className="text-[10px] leading-4 text-neutral-600">
@@ -1300,6 +1322,12 @@ function createLLMPayloadPreview(
     systemInstruction = template.includes("{context}")
       ? template.replace(/\{context\}/g, "<konteks Knowledge Base dari runtime>")
       : `${template}\n\nKNOWLEDGE CONTEXT:\n<dynamic context Knowledge Base>`;
+  } else if (interactionType === "data_collection_ai") {
+    systemInstruction = [
+      config.dataCollectionAiRules?.trim(),
+      "Buat satu pertanyaan singkat dan natural untuk disampaikan langsung kepada pengguna berdasarkan prompt dan contoh. Keluarkan hanya teks pertanyaannya.",
+      `Nama pertanyaan: <nama pertanyaan>\nPrompt pertanyaan: <prompt per pertanyaan>\nContoh pertanyaan: <contoh pertanyaan>`,
+    ].filter(Boolean).join("\n\n");
   } else {
     systemInstruction = [
       config.systemPrompt?.trim(),
@@ -1308,12 +1336,8 @@ function createLLMPayloadPreview(
     ].filter(Boolean).join("\n\n");
   }
 
-  const temperature = interactionType === "guided_routing"
-    ? 0
-    : config.temperature ?? (interactionType === "small_talk" ? 0.8 : 0.7);
-  const maxTokens = interactionType === "guided_routing"
-    ? 60
-    : config.maxTokens ?? (interactionType === "small_talk" ? 400 : 1024);
+  const temperature = config.temperature ?? (interactionType === "guided_routing" ? 0 : interactionType === "small_talk" ? 0.8 : 0.7);
+  const maxTokens = config.maxTokens ?? (interactionType === "guided_routing" ? 64 : interactionType === "small_talk" || interactionType === "data_collection_ai" ? 400 : 1024);
   return JSON.stringify(buildChatCompletionPayload(
     config.model || "<model>",
     [
@@ -1329,10 +1353,29 @@ function TextField({ label, value, onChange, placeholder, variableOptions }: { l
   return <label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label>;
 }
 
-function DataCollectionQuestionFields({ question, index, canRemove, variableOptions, onChange, onRemove }: {
+function LLMParameterFields({ config, defaultTemperature, defaultMaxTokens, onChange }: {
+  config: BotInteractionConfig;
+  defaultTemperature: number;
+  defaultMaxTokens: number;
+  onChange: (patch: Partial<BotInteractionConfig>) => void;
+}) {
+  const temperature = config.temperature ?? defaultTemperature;
+  const maxTokens = config.maxTokens ?? defaultMaxTokens;
+  return <>
+    <label className="block space-y-1.5 text-[10px] text-neutral-500">Temperature: {temperature}
+      <input type="range" min="0" max="2" step="0.1" value={temperature} onChange={(event) => onChange({ temperature: Number(event.target.value) })} className="w-full accent-white" />
+    </label>
+    <label className="block space-y-1.5 text-[10px] text-neutral-500">Max output tokens
+      <input type="number" min="64" max="8192" value={maxTokens} onChange={(event) => onChange({ maxTokens: Math.max(64, Math.min(8192, Number(event.target.value) || defaultMaxTokens)) })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600" />
+    </label>
+  </>;
+}
+
+function DataCollectionQuestionFields({ question, index, canRemove, aiMode, variableOptions, onChange, onRemove }: {
   question: DataCollectionQuestion;
   index: number;
   canRemove: boolean;
+  aiMode: boolean;
   variableOptions?: string[];
   onChange: (patch: Partial<DataCollectionQuestion>) => void;
   onRemove: () => void;
@@ -1353,7 +1396,10 @@ function DataCollectionQuestionFields({ question, index, canRemove, variableOpti
   return <div className="space-y-2 rounded-md border border-neutral-900 bg-black p-2.5">
     <div className="flex items-center justify-between"><span className="text-[9px] font-medium uppercase text-neutral-600">Pertanyaan {index + 1}</span><button type="button" onClick={onRemove} disabled={!canRemove} aria-label={`Hapus pertanyaan ${index + 1}`} className="rounded p-1 text-neutral-600 hover:text-red-300 disabled:opacity-30"><Trash2 className="h-3 w-3" /></button></div>
     <TextField label="Nama pertanyaan" value={question.name} onChange={(value) => onChange({ name: value })} placeholder="nama_lengkap" />
-    <TextAreaField label="Pertanyaan text" value={question.question} onChange={(value) => onChange({ question: value })} rows={2} variableOptions={variableOptions} />
+    {aiMode ? <>
+      <TextAreaField label="Prompt pertanyaan untuk LLM" value={question.questionPrompt || ""} onChange={(value) => onChange({ questionPrompt: value })} rows={3} variableOptions={variableOptions} />
+      <TextAreaField label="Contoh pertanyaan" value={question.exampleQuestion || ""} onChange={(value) => onChange({ exampleQuestion: value })} rows={2} variableOptions={variableOptions} />
+    </> : <TextAreaField label="Pertanyaan text" value={question.question} onChange={(value) => onChange({ question: value })} rows={2} variableOptions={variableOptions} />}
     <TextField label="Variable jawaban" value={question.variable || question.name} onChange={(value) => onChange({ variable: value })} placeholder="nama_lengkap" />
     <div className="space-y-2 border-t border-neutral-900 pt-2">
       <span className="text-[9px] font-medium text-neutral-400">Komponen pertanyaan</span>

@@ -4,7 +4,7 @@ import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import { smartSearchKB, ScoredArticle } from "@/lib/smart-search";
 import { getAIConfig, generateAICompletion } from "@/lib/ai";
-import { initializeBotConversation, processBotTurn } from "@/lib/bot-runtime";
+import { DataCollectionAIError, initializeBotConversation, processBotTurn } from "@/lib/bot-runtime";
 
 // POST /api/conversations/[id]/messages — add message & get AI reply
 export async function POST(
@@ -560,6 +560,9 @@ KNOWLEDGE CONTEXT:
     });
   } catch (err) {
     console.error("POST messages error:", err);
+    if (err instanceof DataCollectionAIError) {
+      return NextResponse.json({ error: err.message }, { status: 502 });
+    }
     return NextResponse.json({ error: "Failed to process message" }, { status: 500 });
   }
 }

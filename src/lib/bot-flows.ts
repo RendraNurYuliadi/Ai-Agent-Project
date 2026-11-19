@@ -8,6 +8,7 @@ export const BOT_INTERACTION_TYPES = [
   "small_talk",
   "rag",
   "web_search",
+  "data_collection_ai",
   "data_collection",
   "data_collection_submitted",
   "skill_escalation",
@@ -23,6 +24,7 @@ export const BOT_INTERACTION_LABELS: Record<BotInteractionType, string> = {
   small_talk: "Small Talk",
   rag: "RAG",
   web_search: "Web Search",
+  data_collection_ai: "AI Data Collection",
   data_collection: "Data Collection",
   data_collection_submitted: "Data Collection Submitted",
   skill_escalation: "Skill Escalation",
@@ -57,6 +59,8 @@ export interface GuidedRouteOption {
 export interface DataCollectionQuestion {
   name: string;
   question: string;
+  questionPrompt?: string;
+  exampleQuestion?: string;
   variable: string;
   components?: DataCollectionComponent[];
 }
@@ -119,6 +123,7 @@ export interface BotInteractionConfig {
   webSearchMaxResults?: number;
   ragDocumentMaxResults?: number;
   dataCollectionQuestions?: DataCollectionQuestion[];
+  dataCollectionAiRules?: string;
   dataCollectionValidator?: DataCollectionValidator;
   dataCollectionSubmittedFields?: DataCollectionSubmittedField[];
   knowledgeBases?: string[];
@@ -140,6 +145,7 @@ export const LLM_INTERACTION_TYPES = [
   "small_talk",
   "rag",
   "web_search",
+  "data_collection_ai",
 ] as const;
 
 export function isLLMInteractionType(type: BotInteractionType): boolean {
@@ -251,9 +257,17 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
       const name = typeof item.name === "string" ? item.name.trim().slice(0, 80) : "";
       const question = typeof item.question === "string" && item.question.trim()
         ? item.question.trim().slice(0, 500)
+        : typeof item.questionPrompt === "string" && item.questionPrompt.trim()
+          ? item.questionPrompt.trim().slice(0, 500)
         : typeof item.prompt === "string" && item.prompt.trim()
           ? item.prompt.trim().slice(0, 500)
           : "";
+      const questionPrompt = typeof item.questionPrompt === "string" && item.questionPrompt.trim()
+        ? item.questionPrompt.trim().slice(0, 1000)
+        : undefined;
+      const exampleQuestion = typeof item.exampleQuestion === "string" && item.exampleQuestion.trim()
+        ? item.exampleQuestion.trim().slice(0, 500)
+        : undefined;
       const variable = typeof item.variable === "string" && item.variable.trim()
         ? item.variable.trim().slice(0, 80)
         : typeof item.name === "string" && item.name.trim()
@@ -309,7 +323,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
           }];
         })
         : [];
-      return [{ name, question, variable, components }];
+      return [{ name, question, questionPrompt, exampleQuestion, variable, components }];
     })
     : undefined;
   const dataCollectionValidator = isRecord(value.dataCollectionValidator)
@@ -354,6 +368,9 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     text: typeof value.text === "string" ? value.text.trim().slice(0, 4000) : undefined,
     question: typeof value.question === "string" ? value.question.trim().slice(0, 1000) : undefined,
     systemPrompt: typeof value.systemPrompt === "string" ? value.systemPrompt.trim().slice(0, 4000) : undefined,
+    dataCollectionAiRules: typeof value.dataCollectionAiRules === "string"
+      ? value.dataCollectionAiRules.trim().slice(0, 4000)
+      : undefined,
     fallbackMessage: typeof value.fallbackMessage === "string" ? value.fallbackMessage.trim().slice(0, 1000) : undefined,
     fallbackMessageEnabled: typeof value.fallbackMessageEnabled === "boolean" ? value.fallbackMessageEnabled : undefined,
     fallbackMechanismEnabled: typeof value.fallbackMechanismEnabled === "boolean" ? value.fallbackMechanismEnabled : undefined,
@@ -430,8 +447,8 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     const config = parseConfig(item.config);
     const nextAction = parseNextAction(item.nextAction);
     if (!config || !nextAction) return { success: false, error: "Konfigurasi atau next action interaction tidak valid." };
-    if (item.type === "data_collection" && isRecord(item.config) && Array.isArray(item.config.dataCollectionQuestions) && config.dataCollectionQuestions?.length !== item.config.dataCollectionQuestions.length) {
-      return { success: false, error: "Semua pertanyaan Data Collection harus memiliki nama, tipe, dan prompt yang valid." };
+    if ((item.type === "data_collection" || item.type === "data_collection_ai") && isRecord(item.config) && Array.isArray(item.config.dataCollectionQuestions) && config.dataCollectionQuestions?.length !== item.config.dataCollectionQuestions.length) {
+      return { success: false, error: "Semua pertanyaan Data Collection harus memiliki nama, variabel, dan prompt yang valid." };
     }
     if (item.type === "data_collection_submitted" && isRecord(item.config) && Array.isArray(item.config.dataCollectionSubmittedFields) && config.dataCollectionSubmittedFields?.length !== item.config.dataCollectionSubmittedFields.length) {
       return { success: false, error: "Semua field Data Collection Submitted harus memiliki nama dan variabel." };
@@ -451,12 +468,23 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     if (interaction.type === "welcome_message" && interaction.config.icon === "custom" && !validImageUrl(interaction.config.iconUrl || "")) {
       return { success: false, error: "Ikon Custom membutuhkan URL gambar HTTPS yang valid." };
     }
-    if (interaction.type === "data_collection") {
+    if (interaction.type === "data_collection" || interaction.type === "data_collection_ai") {
       const questions = interaction.config.dataCollectionQuestions || [];
       if (questions.length === 0) return { success: false, error: "Data Collection harus memiliki minimal satu pertanyaan." };
       if (questions.length > 30) return { success: false, error: "Data Collection maksimal memiliki 30 pertanyaan." };
       const names = questions.map((question) => question.name.toLocaleLowerCase());
       if (new Set(names).size !== names.length) return { success: false, error: "Nama pertanyaan Data Collection harus unik." };
+      if (interaction.type === "data_collection" && questions.some((question) => !question.question.trim())) {
+        return { success: false, error: "Setiap pertanyaan Data Collection harus memiliki teks pertanyaan." };
+      }
+      if (interaction.type === "data_collection_ai") {
+        if (!interaction.config.dataCollectionAiRules?.trim()) {
+          return { success: false, error: "AI Data Collection harus memiliki general rules." };
+        }
+        if (questions.some((question) => !question.questionPrompt?.trim() || !question.exampleQuestion?.trim())) {
+          return { success: false, error: "Setiap pertanyaan AI Data Collection harus memiliki prompt dan contoh pertanyaan." };
+        }
+      }
     }
     if (interaction.type === "guided_routing") {
       const options = interaction.config.options || [];

@@ -53,6 +53,13 @@ export interface DataCollectionState {
   completed?: boolean;
 }
 
+export class DataCollectionAIError extends Error {
+  constructor() {
+    super("AI Data Collection gagal membuat pertanyaan. Periksa konfigurasi provider/model dan coba lagi.");
+    this.name = "DataCollectionAIError";
+  }
+}
+
 function formatConversationHistory(
   messages: Array<{ role?: string; content?: string }> = [],
   limit = 20
@@ -145,6 +152,10 @@ function stateForAction(interaction: BotInteraction): Pick<BotRuntimeResult, "cu
   return { currentInteractionId: null, botStatus: "ended" };
 }
 
+function isDataCollectionInteraction(interaction: BotInteraction | undefined): boolean {
+  return interaction?.type === "data_collection" || interaction?.type === "data_collection_ai";
+}
+
 export async function initializeBotConversation(
   db: Db,
   bot: Pick<BotDefinitionInput, "entryInteractionId" | "interactions" | "variables">,
@@ -160,15 +171,15 @@ export async function initializeBotConversation(
   const state = stateForAction(entry);
   const welcome = entry.type === "welcome_message";
   const textQuestion = entry.type === "text_question";
-  const dataCollection = entry.type === "data_collection";
+  const dataCollection = isDataCollectionInteraction(entry);
   const nextInteractionId = entry.nextAction.type === "interaction" ? entry.nextAction.interactionId : "";
   const nextInteraction = nextInteractionId
     ? bot.interactions.find((item) => item.id === nextInteractionId)
     : undefined;
-  const initialDataCollection = dataCollection ? entry : welcome && nextInteraction?.type === "data_collection" ? nextInteraction : null;
+  const initialDataCollection = dataCollection ? entry : welcome && isDataCollectionInteraction(nextInteraction) ? nextInteraction : null;
   const firstDataQuestion = initialDataCollection?.config.dataCollectionQuestions?.[0];
   const firstDataPrompt = initialDataCollection && firstDataQuestion
-    ? phraseDataQuestion(firstDataQuestion, user, bot.variables || [])
+    ? await phraseDataQuestion(db, initialDataCollection, firstDataQuestion, user, bot.variables || [], {}, bot.interactions)
     : "";
   const quickButtons = entry.config.quickButtons || [];
   const messages: BotRuntimeMessage[] = [];
@@ -253,13 +264,39 @@ async function interactionAIConfig(
   return config;
 }
 
-function phraseDataQuestion(
+async function phraseDataQuestion(
+  db: Db,
+  interaction: BotInteraction,
   question: DataCollectionQuestion,
   user: { name?: string; fullName?: string; email?: string; username?: string; role?: string },
   customVariables: Array<{ name: string; value: string }> = [],
-  sessionVariables: Record<string, string> = {}
-): string {
-  return applyPromptVariables(question.question, "", user, "", customVariables, sessionVariables);
+  sessionVariables: Record<string, string> = {},
+  interactions: BotInteraction[] = []
+): Promise<string> {
+  if (interaction.type !== "data_collection_ai") {
+    return applyPromptVariables(question.question, "", user, "", customVariables, sessionVariables);
+  }
+  try {
+    const config = await interactionAIConfig(db, interaction, "global", interactions);
+    const rules = applyPromptVariables(interaction.config.dataCollectionAiRules || "", "", user, "", customVariables, sessionVariables);
+    const prompt = applyPromptVariables(question.questionPrompt || question.question, "", user, "", customVariables, sessionVariables);
+    const example = applyPromptVariables(question.exampleQuestion || "", "", user, "", customVariables, sessionVariables);
+    const result = await generateAICompletion({
+      config,
+      messages: [{ role: "user", content: `Nama pertanyaan: ${question.name}\nPrompt pertanyaan: ${prompt}\nContoh pertanyaan: ${example}` }],
+      systemInstruction: [
+        rules,
+        "Buat satu pertanyaan singkat dan natural untuk disampaikan langsung kepada pengguna berdasarkan prompt dan contoh. Gunakan aturan umum sebagai panduan, jangan menjawab pertanyaan tersebut, dan keluarkan hanya teks pertanyaannya.",
+      ].filter(Boolean).join("\n\n"),
+      temperature: config.temperature,
+      maxTokens: config.maxTokens,
+    });
+    if (!result.trim()) throw new Error("Model menghasilkan pertanyaan kosong.");
+    return result.trim();
+  } catch (error) {
+    console.error("AI Data Collection question generation failed:", error);
+    throw new DataCollectionAIError();
+  }
 }
 
 function dataQuestionComponents(
@@ -346,8 +383,8 @@ export async function processBotTurn(
           config,
           messages: [{ role: "user", content: message.trim() }],
           systemInstruction: `${applyPromptVariables(template, message, user, "", bot.variables || [], routeSessionVariables)}\n\nDaftar route yang valid:\n${routeChoices}\n\nTentukan route yang paling cocok dengan pesan pengguna. Jawab hanya dengan satu variable route dari daftar di atas.`,
-          temperature: 0,
-          maxTokens: 60,
+          temperature: interaction.config.temperature ?? 0,
+          maxTokens: interaction.config.maxTokens ?? 64,
           timeoutMs: 10000,
         });
         const normalizedResult = normalizeRouteLabel(routeResult);
@@ -609,7 +646,7 @@ export async function processBotTurn(
     } catch (error) {
       content = error instanceof Error ? error.message : "Pencarian web gagal. Silakan coba lagi.";
     }
-  } else if (interaction.type === "data_collection") {
+  } else if (isDataCollectionInteraction(interaction)) {
     const questions = interaction.config.dataCollectionQuestions || [];
     if (questions.length === 0) {
       content = "Data Collection belum memiliki daftar pertanyaan. Minta admin melengkapi konfigurasinya.";
@@ -655,7 +692,7 @@ export async function processBotTurn(
       };
       if (!currentState || guidedTargetSelected) {
         dataCollectionState = { interactionId: interaction.id, questionIndex: 0, answers: {}, stage: "collecting" };
-        content = phraseDataQuestion(questions[0], user, bot.variables || []);
+        content = await phraseDataQuestion(db, interaction, questions[0], user, bot.variables || [], {}, bot.interactions);
         uiComponents = dataQuestionComponents(questions[0], user, bot.variables || []);
       } else if (currentState.stage === "confirm") {
         const currentAnswerVariables = answerVariables(currentState.answers);
@@ -684,7 +721,7 @@ export async function processBotTurn(
           const question = questions[selectedIndex];
           const variables = answerVariables(currentState.answers);
           dataCollectionState = { ...currentState, questionIndex: selectedIndex, stage: "collecting", reviewing: true };
-          content = phraseDataQuestion(question, user, bot.variables || [], variables);
+          content = await phraseDataQuestion(db, interaction, question, user, bot.variables || [], variables, bot.interactions);
           uiComponents = dataQuestionComponents(question, user, bot.variables || [], variables);
         }
       } else {
@@ -703,7 +740,7 @@ export async function processBotTurn(
             const nextQuestion = questions[nextQuestionIndex];
             if (nextQuestion) {
               dataCollectionState = { interactionId: interaction.id, questionIndex: nextQuestionIndex, answers, stage: "collecting" };
-              content = phraseDataQuestion(nextQuestion, user, bot.variables || [], variables);
+              content = await phraseDataQuestion(db, interaction, nextQuestion, user, bot.variables || [], variables, bot.interactions);
               uiComponents = dataQuestionComponents(nextQuestion, user, bot.variables || [], variables);
             } else {
               if (validator) {
@@ -740,12 +777,12 @@ export async function processBotTurn(
   }
 
   const nextDataCollectionId = interaction?.nextAction.type === "interaction" ? interaction.nextAction.interactionId : "";
-  if (!guidedTargetSelected && interaction && interaction.type !== "data_collection" && nextDataCollectionId) {
+  if (!guidedTargetSelected && interaction && !isDataCollectionInteraction(interaction) && nextDataCollectionId) {
     const nextInteraction = bot.interactions.find((item) => item.id === nextDataCollectionId);
     const firstQuestion = nextInteraction?.config.dataCollectionQuestions?.[0];
-    if (nextInteraction?.type === "data_collection" && firstQuestion) {
+    if (nextInteraction && isDataCollectionInteraction(nextInteraction) && firstQuestion) {
       dataCollectionState = { interactionId: nextInteraction.id, questionIndex: 0, answers: {}, stage: "collecting" };
-      const nextPrompt = phraseDataQuestion(firstQuestion, user, bot.variables || []);
+      const nextPrompt = await phraseDataQuestion(db, nextInteraction, firstQuestion, user, bot.variables || [], {}, bot.interactions);
       content = content ? `${content}\n\n${nextPrompt}` : nextPrompt;
       uiComponents = dataQuestionComponents(firstQuestion, user, bot.variables || []);
       interaction = nextInteraction;
@@ -753,7 +790,7 @@ export async function processBotTurn(
     }
   }
 
-  const dataCollectionInProgress = interaction.type === "data_collection" && dataCollectionState?.interactionId === interaction.id && !dataCollectionState.completed;
+  const dataCollectionInProgress = isDataCollectionInteraction(interaction) && dataCollectionState?.interactionId === interaction.id && !dataCollectionState.completed;
   const fallbackMechanismEnabled = interaction.type === "guided_routing" ? interaction.config.fallbackMechanismEnabled !== false : true;
   const guidedRouteFailed = interaction.type === "guided_routing" && !guidedTargetSelected && fallbackMechanismEnabled;
   const state = escalation
@@ -765,7 +802,7 @@ export async function processBotTurn(
       : interaction.type === "guided_routing" && !fallbackMechanismEnabled
         ? { currentInteractionId: interaction.id, botStatus: "active" as const }
         : stateForAction(interaction);
-  const silent = (interaction.type === "data_collection" && Boolean(dataCollectionState?.completed)) || Boolean((escalation || botTransfer) && !content);
+  const silent = (isDataCollectionInteraction(interaction) && Boolean(dataCollectionState?.completed)) || Boolean((escalation || botTransfer) && !content);
 
   if (advanceToNextInteraction && interaction.nextAction.type === "interaction") {
     return processBotTurn(

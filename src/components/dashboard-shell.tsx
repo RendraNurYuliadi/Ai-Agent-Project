@@ -24,6 +24,7 @@ import {
   Blocks,
   MessagesSquare,
   Cpu,
+  Settings2,
 } from "lucide-react";
 import { UserSession } from "@/lib/auth";
 
@@ -105,6 +106,12 @@ export default function DashboardShell({
       current: pathname.startsWith("/dashboard/chatbot"),
     },
     {
+      name: "Setting",
+      href: "/dashboard/settings",
+      icon: Settings2,
+      current: pathname.startsWith("/dashboard/settings"),
+    },
+    {
       name: "Bot Management",
       href: "/dashboard/bot-management",
       icon: GitBranch,
@@ -116,6 +123,13 @@ export default function DashboardShell({
       href: "/dashboard/skills",
       icon: Sparkles,
       current: pathname.startsWith("/dashboard/skills"),
+      roles: ["admin", "manager"],
+    },
+    {
+      name: "Engagement",
+      href: "/dashboard/engagements",
+      icon: MessagesSquare,
+      current: pathname.startsWith("/dashboard/engagements"),
       roles: ["admin", "manager"],
     },
     {
@@ -221,11 +235,11 @@ export default function DashboardShell({
   const RoleIcon = roleInfo.icon;
 
   const mainNav = visibleNav.filter((n) =>
-    ["Dashboard", "Chatbot", "Chat History", "Escalation Queue", "All Conversations", "LLM Gateway"].includes(n.name)
+    ["Dashboard", "Chatbot", "Setting", "Chat History", "Escalation Queue", "All Conversations", "LLM Gateway"].includes(n.name)
   );
 
   const adminNav = visibleNav.filter((n) =>
-    ["Users", "Bot Management", "Skills", "Providers"].includes(n.name)
+    ["Users", "Bot Management", "Skills", "Engagement", "Providers"].includes(n.name)
   );
 
   const contentNav = visibleNav.filter((n) =>
