@@ -235,10 +235,7 @@ function getSharedLLMProviderConfig(
 
   for (const interaction of interactions) {
     if (!isLLMInteractionType(interaction.type)) continue;
-    const configuredProviderId = interaction.config.providerId ||
-      (interaction.config.provider === "lmstudio" || interaction.config.provider === "openrouter"
-        ? interaction.config.provider
-        : undefined);
+    const configuredProviderId = interaction.config.providerId;
     const provider = configuredProviderId ? readyProviders.get(configuredProviderId) : undefined;
     if (!provider) continue;
 
@@ -263,7 +260,6 @@ function synchronizeLLMProviderConfig(
         provider: undefined,
         providerId: sharedConfig?.providerId,
         model: sharedConfig?.model || "",
-        lmStudioUrl: undefined,
       },
     }
     : interaction);
@@ -443,7 +439,6 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
       ...("provider" in patch ? { provider: patch.provider } : {}),
       ...("providerId" in patch ? { providerId: patch.providerId } : {}),
       ...("model" in patch ? { model: patch.model } : {}),
-      ...("lmStudioUrl" in patch ? { lmStudioUrl: patch.lmStudioUrl } : {}),
     };
     const syncProvider = Object.keys(sharedProviderPatch).length > 0;
     const updated = interactions.map((item) => {
@@ -1215,8 +1210,7 @@ function ProviderModelFields({
   const readyProviders = providers.filter((provider) =>
     provider.supported && provider.ready && provider.selectedModels.length > 0
   );
-  const configuredProviderId = config.providerId ||
-    (config.provider === "lmstudio" || config.provider === "openrouter" ? config.provider : "");
+  const configuredProviderId = config.providerId || "";
   const selectedProvider = readyProviders.find((provider) => provider.id === configuredProviderId);
   const selectedValue = selectedProvider?.id || "";
   const models = selectedProvider?.selectedModels || [];
@@ -1227,7 +1221,7 @@ function ProviderModelFields({
       <label className="block space-y-1.5 text-[10px] text-neutral-500">LLM provider
         <select value={selectedValue} onChange={(event) => {
           if (!event.target.value) {
-            onChange({ provider: undefined, providerId: undefined, model: "", lmStudioUrl: undefined });
+            onChange({ provider: undefined, providerId: undefined, model: "" });
             return;
           }
           const provider = readyProviders.find((item) => item.id === event.target.value);
@@ -1236,7 +1230,6 @@ function ProviderModelFields({
               provider: undefined,
               providerId: provider.id,
               model: provider.selectedModels[0] || "",
-              lmStudioUrl: undefined,
             });
           }
         }} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">

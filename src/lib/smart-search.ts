@@ -269,7 +269,7 @@ export async function smartSearchKB(
   // 7. Ambil maksimal 5 artikel terbaik (Top 5)
   const topArticles = allScored.slice(0, maxResults);
 
-  // Buat formatted context untuk dikirim ke LM Studio
+  // Format context untuk request completion
   let formattedContext = "";
   if (topArticles.length > 0) {
     formattedContext = topArticles
@@ -301,7 +301,7 @@ export async function smartSearchKB(
 }
 
 /**
- * Format pesan konteks untuk dikirim ke LM Studio
+ * Format pesan konteks untuk request completion
  */
 export function buildLMStudioPayload(
   query: string,

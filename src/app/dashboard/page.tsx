@@ -48,11 +48,10 @@ export default async function DashboardPage() {
     if (r._id) rolesMap[r._id] = r.count;
   });
 
-  // 2. Fetch Chatbot, Prompts & GenAI Config
-  const [totalConversations, totalPrompts, genaiConfigDoc] = await Promise.all([
+  // 2. Fetch Chatbot and prompt totals
+  const [totalConversations, totalPrompts] = await Promise.all([
     db.collection("conversations").countDocuments(),
     db.collection("prompts").countDocuments(),
-    db.collection("genaiConfig").findOne({ key: "lmstudio" }),
   ]);
 
   // 3. Dynamic Knowledge Base Collections (only user-created collections)
@@ -270,14 +269,10 @@ export default async function DashboardPage() {
           </div>
 
           <div className="mt-4 pt-3 border-t border-neutral-900 flex items-center justify-between text-xs text-neutral-500">
-            <span className="text-neutral-300 truncate max-w-[120px]">
-              {genaiConfigDoc?.provider === "openrouter"
-                ? (genaiConfigDoc?.openRouterModel?.split("/").pop()?.replace(":free", "") || "OpenRouter")
-                : (genaiConfigDoc?.model || "LM Studio")}
-            </span>
+            <span className="text-neutral-300 truncate max-w-[120px]">NVIDIA NIM</span>
 
             <Link
-              href="/dashboard/genai-route"
+              href="/dashboard/providers"
               className="text-neutral-400 hover:text-white inline-flex items-center gap-0.5 transition-colors"
             >
               Route <ArrowRight className="w-3 h-3" />
@@ -472,7 +467,7 @@ export default async function DashboardPage() {
               </Link>
 
               <Link
-                href="/dashboard/genai-route"
+                href="/dashboard/providers"
                 className="p-2.5 rounded-xl bg-black/50 border border-neutral-900 hover:border-neutral-700 hover:bg-neutral-900 text-neutral-400 hover:text-white transition-all flex items-center gap-2"
               >
                 <Route className="w-3.5 h-3.5 text-neutral-300" />

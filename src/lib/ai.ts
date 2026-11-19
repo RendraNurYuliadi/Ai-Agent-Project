@@ -1,28 +1,25 @@
 import "server-only";
 import { Db } from "mongodb";
-import { OPENROUTER_FREE_MODEL } from "@/lib/ai-constants";
-export { OPENROUTER_FREE_MODEL };
+import { getDatabase } from "@/lib/mongodb";
 import { buildChatCompletionPayload } from "@/lib/chat-completion-payload";
 import type { ProviderId } from "@/types/providers";
 import {
   getProviderSummary,
   getStoredProviderConnection,
-  getStoredProviderApiKey,
+  getStoredProviderApiKeys,
+  getActiveProviderApiKeyIndex,
+  setActiveProviderApiKeyIndex,
 } from "@/lib/providers";
 
 export type AIProvider = ProviderId;
 
 export interface AIConfig {
   provider: AIProvider;
-  // LM Studio Config (Local)
-  lmStudioUrl: string;
-  lmStudioModel: string;
-  // OpenRouter Config (Public / Cloud)
-  openRouterApiKey: string;
-  openRouterModel: string;
   providerId?: ProviderId;
   providerBaseUrl?: string;
   providerApiKey?: string;
+  providerApiKeys?: string[];
+  providerApiKeyIndex?: number;
   providerModel?: string;
   // Common Settings
   temperature: number;
@@ -35,32 +32,9 @@ export interface ChatMessage {
 }
 
 interface StoredAIConfig {
-  provider?: string;
-  baseUrl?: string;
-  model?: string;
-  openRouterModel?: string;
   temperature?: number;
   maxTokens?: number;
 }
-
-export function isOpenRouterFreeModel(model: string): boolean {
-  return model === OPENROUTER_FREE_MODEL || model.endsWith(":free");
-}
-
-// Daftar model OpenRouter gratis yang populer dan stabil
-export const OPENROUTER_FREE_MODELS = [
-  { id: OPENROUTER_FREE_MODEL, label: "OpenRouter Free", desc: "Hanya model gratis" },
-  { id: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B Instruct", desc: "Meta · Gratis" },
-  { id: "meta-llama/llama-3.1-8b-instruct:free", label: "Llama 3.1 8B Instruct", desc: "Meta · Gratis · Cepat" },
-  { id: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash", desc: "Google · Gratis" },
-  { id: "google/gemma-3-27b-it:free", label: "Gemma 3 27B IT", desc: "Google · Gratis" },
-  { id: "google/gemma-3-12b-it:free", label: "Gemma 3 12B IT", desc: "Google · Gratis" },
-  { id: "microsoft/phi-4:free", label: "Phi-4", desc: "Microsoft · Gratis" },
-  { id: "mistralai/mistral-7b-instruct:free", label: "Mistral 7B Instruct", desc: "Mistral · Gratis · Cepat" },
-  { id: "qwen/qwen3-8b:free", label: "Qwen3 8B", desc: "Alibaba · Gratis" },
-  { id: "deepseek/deepseek-r1:free", label: "DeepSeek R1", desc: "DeepSeek · Gratis · Reasoning" },
-  { id: "nvidia/llama-3.1-nemotron-70b-instruct:free", label: "Nemotron 70B", desc: "NVIDIA · Gratis" },
-];
 
 /**
  * Retrieve active AI configuration, merging DB preferences with Environment Variables.
@@ -69,90 +43,60 @@ export async function getAIConfig(db?: Db | null): Promise<AIConfig> {
   let doc: StoredAIConfig | null = null;
   if (db) {
     try {
-      doc = ((await db.collection("genaiConfig").findOne({ key: "active_config" })) ||
-        (await db.collection("genaiConfig").findOne({ key: "lmstudio" }))) as unknown as StoredAIConfig | null;
+      doc = (await db.collection("genaiConfig").findOne({ key: "active_config" })) as StoredAIConfig | null;
     } catch {
       doc = null;
     }
   }
 
-  const defaultProvider: AIProvider =
-    (process.env.AI_PROVIDER as AIProvider) === "openrouter" ? "openrouter" : "lmstudio";
-  const provider: AIProvider =
-    doc?.provider === "openrouter" || doc?.provider === "lmstudio"
-      ? doc.provider
-      : defaultProvider;
-  const savedOpenRouterModel = typeof doc?.openRouterModel === "string" ? doc.openRouterModel : "";
-  const environmentOpenRouterModel = process.env.OPENROUTER_MODEL || "";
+  const provider: AIProvider = "nvidia";
+  let providerBaseUrl: string | undefined;
+  let providerApiKey: string | undefined;
+  let providerApiKeys: string[] | undefined;
+  let providerApiKeyIndex: number | undefined;
+  let providerModel: string | undefined;
+  if (db) {
+    try {
+      const connection = await getStoredProviderConnection(db, "nvidia");
+      if (
+        connection?.connected &&
+        connection.freeEndpointCatalogVerified &&
+        connection.selectedModels.some((model) => connection.availableModels.includes(model))
+      ) {
+        providerBaseUrl = connection.baseUrl;
+        providerApiKeys = await getStoredProviderApiKeys(db, "nvidia", connection);
+        providerApiKeyIndex = getActiveProviderApiKeyIndex(connection, providerApiKeys.length);
+        providerApiKey = providerApiKeys[providerApiKeyIndex];
+        providerModel = connection.selectedModels.find((model) => connection.availableModels.includes(model));
+      }
+    } catch {
+      providerBaseUrl = undefined;
+      providerApiKey = undefined;
+      providerApiKeys = undefined;
+      providerApiKeyIndex = undefined;
+      providerModel = undefined;
+    }
+  }
 
   return {
     provider,
-    lmStudioUrl: doc?.baseUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1",
-    lmStudioModel: doc?.model || process.env.LM_STUDIO_MODEL || "local-model",
-    openRouterApiKey: process.env.OPENROUTER_API_KEY || "",
-    openRouterModel:
-      isOpenRouterFreeModel(savedOpenRouterModel)
-        ? savedOpenRouterModel
-        : isOpenRouterFreeModel(environmentOpenRouterModel)
-          ? environmentOpenRouterModel
-          : OPENROUTER_FREE_MODEL,
+    providerId: "nvidia",
+    providerBaseUrl,
+    providerApiKey,
+    providerApiKeys,
+    providerApiKeyIndex,
+    providerModel,
     temperature: doc?.temperature ?? 0.7,
     maxTokens: doc?.maxTokens ?? 1024,
   };
 }
 
-/**
- * Call LM Studio (OpenAI-compatible local server)
- */
-async function callLMStudio(
-  config: AIConfig,
-  messages: ChatMessage[],
-  systemInstruction?: string,
-  temperature?: number,
-  maxTokens?: number,
-  timeoutMs: number = 30000
-): Promise<string> {
-  const formattedMessages: ChatMessage[] = [];
-  if (systemInstruction) {
-    formattedMessages.push({ role: "system", content: systemInstruction });
-  }
-  formattedMessages.push(...messages);
-
-  const res = await fetch(`${config.lmStudioUrl}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(buildChatCompletionPayload(
-      config.lmStudioModel,
-      formattedMessages,
-      temperature ?? config.temperature,
-      maxTokens ?? config.maxTokens
-    )),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`LM Studio error (${res.status}): ${errorText || res.statusText}`);
-  }
-
-  const data = await res.json();
-  const answer = data.choices?.[0]?.message?.content;
-  if (typeof answer !== "string") {
-    throw new Error("Format respons LM Studio tidak valid");
-  }
-  return answer;
-}
-
-/**
- * Call OpenRouter (OpenAI-compatible cloud API with free models)
- * Docs: https://openrouter.ai/docs
- */
-function extractTextFromOpenRouterContent(value: unknown): string | null {
+function extractTextFromProviderContent(value: unknown): string | null {
   if (typeof value === "string") return value.trim() || null;
   if (Array.isArray(value)) {
     const textParts: string[] = [];
     for (const item of value) {
-      const extracted = extractTextFromOpenRouterContent(item);
+      const extracted = extractTextFromProviderContent(item);
       if (extracted) textParts.push(extracted);
     }
     return textParts.join("\n").trim() || null;
@@ -162,74 +106,19 @@ function extractTextFromOpenRouterContent(value: unknown): string | null {
     const preferredKeys = ["text", "content", "value", "message", "output", "answer", "reasoning"];
     for (const key of preferredKeys) {
       const candidate = record[key];
-      const extracted = extractTextFromOpenRouterContent(candidate);
+      const extracted = extractTextFromProviderContent(candidate);
       if (extracted) return extracted;
     }
 
     const nestedValues = Object.values(record);
     for (const nested of nestedValues) {
       if (nested && typeof nested === "object") {
-        const extracted = extractTextFromOpenRouterContent(nested);
+        const extracted = extractTextFromProviderContent(nested);
         if (extracted) return extracted;
       }
     }
   }
   return null;
-}
-
-async function callOpenRouter(
-  config: AIConfig,
-  messages: ChatMessage[],
-  systemInstruction?: string,
-  temperature?: number,
-  maxTokens?: number,
-  timeoutMs: number = 30000
-): Promise<string> {
-  if (!config.openRouterApiKey) {
-    throw new Error(
-      "OPENROUTER_API_KEY belum dikonfigurasi. Dapatkan API key gratis di https://openrouter.ai/keys"
-    );
-  }
-
-  const formattedMessages: ChatMessage[] = [];
-  if (systemInstruction) {
-    formattedMessages.push({ role: "system", content: systemInstruction });
-  }
-  formattedMessages.push(...messages);
-
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.openRouterApiKey}`,
-      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-      "X-Title": process.env.NEXT_PUBLIC_APP_NAME || "GenAI Chatbot",
-    },
-    body: JSON.stringify(buildChatCompletionPayload(
-      config.openRouterModel,
-      formattedMessages,
-      temperature ?? config.temperature,
-      maxTokens ?? config.maxTokens
-    )),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    const message =
-      errorData?.error?.message || `HTTP ${res.status} (${res.statusText})`;
-    throw new Error(`OpenRouter error: ${message}`);
-  }
-
-  const data = await res.json();
-  const answer = extractTextFromOpenRouterContent(data.choices?.[0]?.message?.content);
-  if (answer) return answer;
-
-  const altAnswer = extractTextFromOpenRouterContent(data.choices?.[0]?.message);
-  if (altAnswer) return altAnswer;
-
-  console.warn("OpenRouter returned non-text content; continuing with empty result.", JSON.stringify(data).slice(0, 1200));
-  return "";
 }
 
 async function callManagedProvider(
@@ -242,46 +131,78 @@ async function callManagedProvider(
 ): Promise<string> {
   const providerId = config.providerId;
   const provider = providerId ? getProviderSummary(providerId) : undefined;
-  if (!provider?.supported || !config.providerBaseUrl || !config.providerModel) {
+  if (!providerId || !provider?.supported || !config.providerBaseUrl || !config.providerModel) {
     throw new Error("Konfigurasi provider atau model yang dipilih tidak lengkap.");
   }
-  if (providerId !== "lmstudio" && !config.providerApiKey) {
+  if (!config.providerApiKey) {
     throw new Error(`API key ${provider.name} belum tersedia.`);
   }
-
   const formattedMessages: ChatMessage[] = [];
   if (systemInstruction) formattedMessages.push({ role: "system", content: systemInstruction });
   formattedMessages.push(...messages);
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  if (config.providerApiKey) headers.Authorization = `Bearer ${config.providerApiKey}`;
-  if (providerId === "openrouter") {
-    headers["HTTP-Referer"] = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    headers["X-Title"] = process.env.NEXT_PUBLIC_APP_NAME || "GenAI Chatbot";
+  const apiKeys = config.providerApiKeys?.length ? config.providerApiKeys : [config.providerApiKey];
+  const configuredIndex = config.providerApiKeyIndex;
+  const startIndex = configuredIndex !== undefined &&
+    Number.isInteger(configuredIndex) &&
+    configuredIndex >= 0 &&
+    configuredIndex < apiKeys.length
+    ? configuredIndex
+    : 0;
+  const failures: string[] = [];
+
+  for (let attempt = 0; attempt < apiKeys.length; attempt += 1) {
+    const index = (startIndex + attempt) % apiKeys.length;
+    const apiKey = apiKeys[index];
+    try {
+      const response = await fetch(`${config.providerBaseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify(buildChatCompletionPayload(
+          config.providerModel,
+          formattedMessages,
+          temperature ?? config.temperature,
+          maxTokens ?? config.maxTokens
+        )),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!response.ok) {
+        const body = await response.text();
+        const safeBody = body.split(apiKey).join("[redacted]");
+        throw new Error(`${provider.name} error (${response.status}): ${safeBody.slice(0, 1000) || response.statusText}`);
+      }
+      const data = await response.json();
+      const answer = extractTextFromProviderContent(data.choices?.[0]?.message?.content);
+      if (!answer) throw new Error(`${provider.name} mengembalikan respons tanpa teks.`);
+      return answer;
+    } catch (error) {
+      failures.push(`API key ${index + 1}: ${error instanceof Error ? error.message : "Permintaan gagal."}`);
+      const nextIndex = (index + 1) % apiKeys.length;
+      try {
+        const db = await getDatabase();
+        await setActiveProviderApiKeyIndex(db, providerId, nextIndex);
+        config.providerApiKeyIndex = nextIndex;
+      } catch (rotationError) {
+        throw new Error(
+          `${failures[failures.length - 1]} Gagal menyimpan posisi failover: ${
+            rotationError instanceof Error ? rotationError.message : "Kesalahan database."
+          }`
+        );
+      }
+    }
   }
 
-  const response = await fetch(`${config.providerBaseUrl}/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(buildChatCompletionPayload(
-      config.providerModel,
-      formattedMessages,
-      temperature ?? config.temperature,
-      maxTokens ?? config.maxTokens
-    )),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!response.ok) {
-    const body = await response.text();
-    const safeBody = config.providerApiKey ? body.split(config.providerApiKey).join("[redacted]") : body;
-    throw new Error(`${provider.name} error (${response.status}): ${safeBody.slice(0, 1000) || response.statusText}`);
+  try {
+    const db = await getDatabase();
+    await setActiveProviderApiKeyIndex(db, providerId, 0);
+    config.providerApiKeyIndex = 0;
+  } catch (rotationError) {
+    throw new Error(`Semua API key gagal dan posisi key tidak dapat diatur ulang: ${rotationError instanceof Error ? rotationError.message : "Kesalahan database."}`);
   }
-  const data = await response.json();
-  const answer = extractTextFromOpenRouterContent(data.choices?.[0]?.message?.content);
-  if (answer) return answer;
-  throw new Error(`${provider.name} mengembalikan respons tanpa teks.`);
+  throw new Error(`Semua ${apiKeys.length} API key gagal. Posisi diatur kembali ke API key 1. ${failures.join(" | ")}`);
 }
 
 export async function getManagedProviderAIConfig(
@@ -294,27 +215,33 @@ export async function getManagedProviderAIConfig(
   if (!provider?.supported) throw new Error("Provider ini belum memiliki integrasi API yang tersedia.");
   const connection = await getStoredProviderConnection(db, providerId);
   if (!connection?.connected) throw new Error(`${provider.name} belum tersambung.`);
+  if (providerId === "nvidia" && !connection.freeEndpointCatalogVerified) {
+    throw new Error("Uji koneksi ulang NVIDIA NIM untuk memverifikasi Free Endpoint sebelum menggunakan model.");
+  }
+  if (providerId === "nvidia" && !connection.availableModels.includes(model)) {
+    throw new Error(`Model ${model} belum terverifikasi sebagai Free Endpoint dari katalog NVIDIA.`);
+  }
   if (!model || !connection.selectedModels.includes(model)) {
     throw new Error(`Model belum dipilih pada daftar model yang digunakan untuk ${provider.name}.`);
   }
-  const apiKey = await getStoredProviderApiKey(db, providerId);
+  const apiKeys = await getStoredProviderApiKeys(db, providerId, connection);
+  if (!apiKeys.length) throw new Error(`API key ${provider.name} belum tersedia.`);
+  const apiKeyIndex = getActiveProviderApiKeyIndex(connection, apiKeys.length);
   return {
     provider: providerId,
     providerId,
     providerBaseUrl: connection.baseUrl,
-    providerApiKey: apiKey,
+    providerApiKey: apiKeys[apiKeyIndex],
+    providerApiKeys: apiKeys,
+    providerApiKeyIndex: apiKeyIndex,
     providerModel: model,
-    lmStudioUrl: connection.baseUrl,
-    lmStudioModel: model,
-    openRouterApiKey: apiKey,
-    openRouterModel: model,
     temperature: settings.temperature ?? 0.7,
     maxTokens: settings.maxTokens ?? 1024,
   };
 }
 
 /**
- * Main completion function: automatically dispatches to LM Studio or OpenRouter
+ * Main completion function for the configured NVIDIA NIM model.
  */
 export async function generateAICompletion(options: {
   config: AIConfig;
@@ -329,132 +256,5 @@ export async function generateAICompletion(options: {
   if (config.providerId) {
     return await callManagedProvider(config, messages, systemInstruction, temperature, maxTokens, timeoutMs);
   }
-  if (config.provider === "openrouter") {
-    return await callOpenRouter(config, messages, systemInstruction, temperature, maxTokens, timeoutMs);
-  } else {
-    return await callLMStudio(config, messages, systemInstruction, temperature, maxTokens, timeoutMs);
-  }
-}
-
-/**
- * Test connectivity to LM Studio
- */
-export async function testLMStudioConnection(baseUrl: string) {
-  const testUrl = baseUrl || "http://localhost:1234/v1";
-  const res = await fetch(`${testUrl}/models`, {
-    method: "GET",
-    headers: { "Content-Type": "application/json" },
-    signal: AbortSignal.timeout(5000),
-  });
-
-  if (!res.ok) {
-    throw new Error(
-      `LM Studio tidak merespons (Status: ${res.status}). Pastikan server sudah berjalan di ${testUrl}`
-    );
-  }
-
-  const data = await res.json();
-  const models = data.data?.map((m: { id: string }) => m.id) || [];
-  return {
-    success: true,
-    message: `LM Studio terhubung di ${testUrl}!`,
-    models,
-  };
-}
-
-/**
- * Return available free OpenRouter models without making a chat request.
- */
-export async function getOpenRouterFreeModels(apiKey: string): Promise<string[]> {
-  if (!apiKey || !apiKey.trim()) {
-    throw new Error(
-      "API Key OpenRouter tidak boleh kosong. Dapatkan gratis di https://openrouter.ai/keys"
-    );
-  }
-
-  const modelsRes = await fetch("https://openrouter.ai/api/v1/models", {
-    headers: { Authorization: `Bearer ${apiKey.trim()}` },
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!modelsRes.ok) {
-    throw new Error(`Gagal mengambil model OpenRouter (HTTP ${modelsRes.status}).`);
-  }
-
-  const modelsData = await modelsRes.json();
-  const freeModels = (modelsData.data as Array<{ id: string; pricing?: { prompt: string } }>)
-    ?.filter((item) => item.id.endsWith(":free"))
-    ?.map((item) => item.id)
-    ?.slice(0, 100) || [];
-
-  return [OPENROUTER_FREE_MODEL, ...freeModels.filter((id) => id !== OPENROUTER_FREE_MODEL)];
-}
-
-export async function getOpenRouterModels(apiKey: string): Promise<string[]> {
-  if (!apiKey || !apiKey.trim()) {
-    throw new Error("OPENROUTER_API_KEY belum dikonfigurasi di file .env.local.");
-  }
-
-  const response = await fetch("https://openrouter.ai/api/v1/models", {
-    headers: { Authorization: `Bearer ${apiKey.trim()}` },
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!response.ok) {
-    throw new Error(`Gagal menguji koneksi OpenRouter (HTTP ${response.status}).`);
-  }
-
-  const data = await response.json();
-  const models = (data.data as Array<{ id?: string }> | undefined)
-    ?.flatMap((item) => typeof item.id === "string" ? [item.id] : []) || [];
-  return [OPENROUTER_FREE_MODEL, ...models.filter((id) => id !== OPENROUTER_FREE_MODEL)];
-}
-
-/**
- * Test connectivity to OpenRouter and return available free models
- */
-export async function testOpenRouterConnection(apiKey: string, model: string) {
-  void model;
-  if (!apiKey || !apiKey.trim()) {
-    throw new Error(
-      "API Key OpenRouter tidak boleh kosong. Dapatkan gratis di https://openrouter.ai/keys"
-    );
-  }
-
-  const targetModel = isOpenRouterFreeModel(model) ? model : OPENROUTER_FREE_MODEL;
-
-  // Quick ping test with minimal tokens
-  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey.trim()}`,
-      "HTTP-Referer": "http://localhost:3000",
-      "X-Title": "GenAI Chatbot",
-    },
-    body: JSON.stringify({
-      model: targetModel,
-      messages: [{ role: "user", content: "Hi" }],
-      max_tokens: 5,
-    }),
-    signal: AbortSignal.timeout(15000),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    const msg =
-      errorData?.error?.message || `HTTP ${res.status} (${res.statusText})`;
-    throw new Error(`Koneksi OpenRouter gagal: ${msg}`);
-  }
-
-  let availableModels: string[] = [];
-  try {
-    availableModels = await getOpenRouterFreeModels(apiKey);
-  } catch {
-    // The connection result remains valid even if the model catalog is unavailable.
-  }
-
-  return {
-    success: true,
-    message: `OpenRouter terhubung! Model '${targetModel}' siap digunakan.`,
-    models: availableModels,
-  };
+  throw new Error("Konfigurasi NVIDIA NIM belum dipilih pada provider dan model bot.");
 }

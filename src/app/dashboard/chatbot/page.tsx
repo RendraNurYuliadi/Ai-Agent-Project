@@ -173,38 +173,17 @@ function getAvatarGradient(role: string): string {
 }
 
 interface GatewayModelOptions {
-  provider: "lmstudio" | "openrouter";
   model: string;
-  models: string[];
 }
 
 async function loadGatewayModelOptions(): Promise<GatewayModelOptions> {
-  const configResponse = await fetch("/api/genai-route/config");
-  if (!configResponse.ok) throw new Error("Gagal memuat konfigurasi model.");
-  const configData = await configResponse.json();
-  const provider = configData.config.provider === "openrouter" ? "openrouter" : "lmstudio";
-  const model = provider === "openrouter"
-    ? configData.config.openRouterModel
-    : configData.config.model;
-
-  let models: string[] = [];
-  try {
-    const modelsResponse = await fetch("/api/genai-route/test", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        provider,
-        baseUrl: configData.config.baseUrl,
-        listModelsOnly: true,
-      }),
-    });
-    const modelsData = await modelsResponse.json();
-    if (modelsResponse.ok && modelsData.success && Array.isArray(modelsData.models)) {
-      models = modelsData.models;
-    }
-  } catch {}
-
-  return { provider, model, models };
+  const providerResponse = await fetch("/api/providers");
+  if (!providerResponse.ok) throw new Error("Gagal memuat konfigurasi NVIDIA NIM.");
+  const providerData = await providerResponse.json();
+  const provider = (providerData.providers as Array<{ id: string; ready?: boolean; selectedModels?: string[] }>)
+    .find((item) => item.id === "nvidia" && item.ready);
+  const models = provider?.selectedModels || [];
+  return { model: models[0] || "" };
 }
 
 function BotInteractionCard({
@@ -237,8 +216,7 @@ export default function ChatbotPage() {
   const [conversationStatus, setConversationStatus] = useState("active");
   const [escalationStatus, setEscalationStatus] = useState<"pending" | "accepted" | null>(null);
   const [input, setInput] = useState("");
-  const [chatModelProvider, setChatModelProvider] = useState<"lmstudio" | "openrouter">("lmstudio");
-  const [chatModel, setChatModel] = useState("local-model");
+  const [chatModel, setChatModel] = useState("");
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -334,9 +312,8 @@ export default function ChatbotPage() {
       .catch(() => setSkills([]))
       .finally(() => setSkillsLoading(false));
     loadGatewayModelOptions()
-      .then(({ provider, model }) => {
-        setChatModelProvider(provider);
-        setChatModel(model || (provider === "openrouter" ? "openrouter/free" : "local-model"));
+      .then(({ model }) => {
+        setChatModel(model || "Belum ada model");
       })
       .catch(() => {});
 
@@ -850,7 +827,7 @@ export default function ChatbotPage() {
 
                 <p className="flex max-w-36 items-center gap-1 truncate text-[10px] text-neutral-500 sm:max-w-64">
                   <Cpu className="w-2.5 h-2.5" />
-                  {escalationStatus === "pending" ? "Menunggu human agent menerima" : escalationStatus === "accepted" ? "Ditangani human agent" : selectedSkill ? `${selectedSkill.name} · ${selectedSkill.botUser?.fullName || selectedSkill.botUser?.name || "Bot"}` : activeBot ? "Bot flow aktif (fallback)" : `${chatModelProvider === "openrouter" ? "OpenRouter" : "LM Studio"} • ${chatModel}`}
+                  {escalationStatus === "pending" ? "Menunggu human agent menerima" : escalationStatus === "accepted" ? "Ditangani human agent" : selectedSkill ? `${selectedSkill.name} · ${selectedSkill.botUser?.fullName || selectedSkill.botUser?.name || "Bot"}` : activeBot ? "Bot flow aktif (fallback)" : `NVIDIA NIM • ${chatModel}`}
                 </p>
               </div>
             </div>

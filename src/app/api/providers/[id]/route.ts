@@ -49,6 +49,9 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
     const input = body as { selectedModels?: unknown };
     const db = await getDatabase();
     const existing = await getStoredProviderConnection(db, provider.id);
+    if (!existing?.freeEndpointCatalogVerified) {
+      return NextResponse.json({ error: "Uji koneksi ulang untuk memverifikasi daftar Free Endpoint NVIDIA sebelum memilih model." }, { status: 409 });
+    }
     const selectedModelsInput: unknown[] | null = Array.isArray(input.selectedModels)
       ? input.selectedModels
       : null;
@@ -63,7 +66,7 @@ export async function PUT(req: NextRequest, { params }: RouteContext) {
       return NextResponse.json({ error: "Daftar model yang dipilih tidak valid." }, { status: 400 });
     }
     if (requestedModels.some((model) => !existing.availableModels.includes(model))) {
-      return NextResponse.json({ error: "Model hanya dapat digunakan setelah tersedia dari hasil uji koneksi." }, { status: 400 });
+      return NextResponse.json({ error: "Model hanya dapat digunakan setelah terverifikasi sebagai Free Endpoint dari katalog NVIDIA." }, { status: 400 });
     }
 
     const bots = await db.collection<{ name?: string; interactions?: Array<{ config?: { providerId?: string; model?: string } }> }>("bots")

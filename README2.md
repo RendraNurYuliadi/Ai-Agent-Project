@@ -175,64 +175,81 @@ Secara teknis, aplikasi memanggil endpoint chat/completions yang kompatibel Open
 
 ## 5. Cara Kerja Chatbot / Mekanisme Sistem
 
-### 5.1 User membuka chat
+### 5.1 Conversation dan skill yang dipilih
 
-Saat user masuk ke halaman chatbot, sistem akan mengambil skill/bot yang relevan lalu membuat conversation baru jika belum ada.
+Saat conversation dibuat, sistem menyimpan user pemilik, skill yang dipilih, pesan awal, dan state flow.
 
-### 5.2 Bot memulai dengan welcome interaction
+- Skill yang terhubung ke bot flow menjalankan entry interaction milik bot tersebut.
+- Skill yang ditugaskan langsung ke user human membuat conversation berstatus `pending` dan mengarahkannya ke Escalation Queue penerima skill. Pesan perkenalan dari skill dapat ditampilkan jika diaktifkan.
+- Jika tidak ada skill bot yang dipilih, aplikasi dapat memakai active bot global yang dikonfigurasi.
 
-Bot bisa mulai dengan:
+### 5.2 Pemilihan interaction
 
-- welcome message
-- quick reply
-- text question
-- route pilihan
+Pada setiap pesan, runtime membaca `currentInteractionId` conversation. Jika belum ada state aktif atau flow sebelumnya selesai, runtime memulai dari entry interaction bot. Handler interaction ditentukan oleh tipe node yang sedang aktif; tidak semua pesan melewati RAG.
 
-Welcome interaction bisa menampilkan teks dinamis seperti nama user, tanggal, role, dll.
+`nextAction` menentukan node berikutnya, mengakhiri flow, atau menutup conversation. Guided Routing dapat memilih target node berdasarkan route yang dibuat di editor.
 
-### 5.3 Guided Routing
+### 5.3 Welcome Message dan Guided Routing
 
-Ketika user mengirim pesan, bot mengecek interaction type yang aktif. Jika bot punya guided_routing, sistem akan melihat apakah input cocok dengan route yang sudah didefinisikan.
+Welcome Message dapat menampilkan judul, subtitle, quick reply, footer, variabel user, serta ikon bawaan atau gambar custom. Pesan sambutan awal dibuat saat conversation bot diinisialisasi.
 
-Jika cocok, bot akan mengarahkan ke interaction tertentu. Jika tidak cocok, sistem bisa memanggil LLM untuk mengklasifikasikan intent user ke route yang valid.
+Guided Routing bekerja dengan urutan berikut:
 
-### 5.4 Retrieval (RAG)
+1. Runtime membandingkan pesan user dengan label dan variable route setelah normalisasi.
+2. Jika cocok langsung, target interaction route tersebut dipilih tanpa klasifikasi LLM.
+3. Jika tidak cocok, runtime dapat meminta LLM memilih salah satu variable route yang tersedia.
+4. Jika klasifikasi gagal atau tidak menemukan target, fallback mechanism dapat mengarahkan ke fallback interaction atau tetap pada node routing. Pesan fallback dapat diaktifkan atau dimatikan.
 
-Untuk pertanyaan yang butuh data, program menjalankan retrieval dari Knowledge Base.
+### 5.4 RAG: pencarian di Knowledge Base
 
-Prosesnya:
+RAG digunakan ketika flow mencapai interaction `rag`. Knowledge Base yang dicari dibatasi pada koleksi yang dipilih di konfigurasi interaction dan masih aktif.
 
-1. query dibersihkan dari tanda baca dan stopwords
-2. query di-tokenisasi
-3. kata kunci dibandingkan dengan field artikel, seperti:
-   - title
-   - category
-   - summary
-   - detail
-   - content
-   - tags
-   - field tambahan lain
-4. tiap artikel diberi skor relevansi
-5. artikel diurutkan dari skor tertinggi
-6. diambil maksimal 5 artikel paling relevan
+Urutannya:
 
-Ini adalah Smart Search. Artinya retrieval tidak menggunakan embedding atau vector database, tetapi teknik scoring berbasis keyword dan relevansi textual.
+1. Pesan user dinormalisasi menjadi huruf kecil dan tanda baca diganti spasi.
+2. Query dipecah menjadi token; stopwords umum bahasa Indonesia dan Inggris dibuang. Jika semua token terbuang, token asli dipakai sebagai fallback.
+3. Semua artikel di koleksi target diperiksa. Pencocokan dilakukan pada `title`, `tags`, `category`, `summary`, `detail`, `content`, serta field tambahan yang berisi string.
+4. Smart Search memberi bobot berbeda: kecocokan judul paling kuat, disusul tag/kategori, ringkasan/detail, konten, dan field tambahan. Kecocokan frasa dan cakupan keyword juga mendapat bonus.
+5. Artikel tanpa skor positif dibuang; sisanya diurutkan dari skor tertinggi. Jumlah hasil dapat diatur pada interaction, default 5 dan maksimal 10.
+6. Field artikel yang relevan dirangkai menjadi `knowledge context`, termasuk kategori, tag, ringkasan, detail, dan konten.
+7. Context bersama pertanyaan user dikirim ke LM Studio atau OpenRouter sesuai provider/model pada interaction. Prompt RAG meminta model berpegang pada context dan mengakui bila informasi tidak ditemukan.
+8. Artikel teratas, skor, dan matched keywords ikut dikirim sebagai metadata untuk ditampilkan di chat.
 
-### 5.5 Context dikirim ke LLM
+Smart Search ini berbasis lexical/keyword scoring, bukan embedding, vector database, atau semantic vector search. Karena itu kualitas hasil dipengaruhi istilah yang dipakai user dan istilah pada artikel.
 
-Setelah retrieval, sistem membuat "knowledge context" dari artikel yang relevan. Context itu lalu dikirim bersama pertanyaan user ke model AI.
+### 5.5 Web Search: pencarian di internet
 
-LLM kemudian menjawab berdasarkan konteks tersebut, bukan hanya dari memorinya sendiri.
+Web Search adalah interaction terpisah dari RAG. Query berasal dari pesan user dan pencarian dilakukan server menggunakan halaman hasil Bing; LLM bukan mesin pencarinya.
 
-### 5.6 Jawaban dikeluarkan dan disimpan
+1. Runtime mengirim query ke Bing dengan bahasa hasil `id-ID`. Panjang query dibatasi 1.000 karakter.
+2. Jumlah hasil dapat diatur 1-10, dengan default 5.
+3. Parser mengambil judul, URL, dan snippet dari hasil pencarian Bing, lalu menormalisasi URL redirect dan mengabaikan URL hasil yang tidak valid atau berupa file media/dokumen.
+4. Server mencoba mengambil halaman hasil teratas. Pengambilan dibatasi timeout dan ukuran HTML; beberapa halaman diproses bersamaan.
+5. Dari halaman yang dapat dibaca, script/style/navigation dan elemen non-konten dibuang. Teks diutamakan dari `<article>` atau `<main>`, lalu dibatasi hingga 6.000 karakter.
+6. Jika host atau halaman tidak dapat diakses, tipe kontennya tidak didukung, atau request gagal, sistem memakai snippet dari Bing sebagai fallback.
+7. Judul, URL, dan cuplikan halaman dirangkai menjadi context sumber web. Model LM Studio atau OpenRouter yang dipilih pada interaction kemudian membuat jawaban.
+8. Instruksi default meminta model menjawab hanya berdasarkan sumber, memperlakukan isi halaman sebagai data (bukan instruksi), menghindari klaim tanpa dukungan, dan memberi sitasi seperti `[1](URL)`. Sumber juga dikirim sebagai metadata dan ditampilkan pada pesan.
 
-Jawaban hasil AI disimpan ke conversation. Selain itu, sistem juga menyimpan:
+Web Search membutuhkan akses internet dari server. Bing dapat mengubah markup hasil pencarian dan sebagian situs membatasi akses otomatis, sehingga sumber kadang hanya memiliki snippet, bukan isi halaman lengkap.
 
-- top articles
-- matched keywords
-- generation duration
-- metadata interaction
-- component UI yang relevan
+### 5.6 Small Talk
+
+Small Talk mengirim pesan user langsung ke provider/model yang dipilih dengan system prompt small talk. Interaction ini tidak menjalankan retrieval Knowledge Base atau Web Search secara otomatis.
+
+### 5.7 Components dari hasil retrieval
+
+Setelah RAG memperoleh hasil, runtime memeriksa artikel teratas. Reusable component yang aktif akan ditampilkan jika salah satu `articleRefs`-nya memiliki pasangan `collectionName` dan `articleId` yang sama dengan artikel pemicu.
+
+Relasi artikel bersifat opsional saat membuat component. Component tanpa relasi tetap dapat disimpan dan diekspor, tetapi tidak terpicu otomatis oleh retrieval. Component berelasi ditampilkan bersama jawaban RAG dan menyertakan metadata artikel pemicunya.
+
+### 5.8 Skill Escalation dan data yang disimpan
+
+Skill Escalation dapat mengarahkan conversation ke skill bot aktif atau ke user human:
+
+- Tujuan bot memindahkan conversation ke bot flow tujuan dan melanjutkan respons bot.
+- Tujuan human mengubah status menjadi `pending`, mencatat skill serta penerima, dan memasukkan conversation ke Escalation Queue penerima tersebut. Human agent menerima conversation sebelum dapat membalas.
+
+Pesan assistant, status conversation, state flow, sumber retrieval/Web Search, dan metadata yang terkait disimpan dalam MongoDB.
 
 ---
 
@@ -264,6 +281,7 @@ Setiap bot terdiri dari interaction-node. Contoh interaction yang ada:
 - data_collection_submitted
 - skill_escalation
 - text_question
+- text (pesan statis di dalam flow)
 
 Setiap interaction punya:
 
@@ -304,13 +322,7 @@ Contoh penggunaan:
 
 ### 6.5 Prompt dan System Instruction
 
-Prompt sangat penting untuk memengaruhi kualitas jawaban. Aplikasi menyimpan prompt berdasarkan tipe interaction, misalnya:
-
-- routing prompt
-- rag prompt
-- small talk prompt
-
-Prompt bisa dikustomisasi supaya bot lebih fokus dan konsisten.
+Prompt tersimpan dapat digunakan untuk Guided Routing, RAG, dan Small Talk. Web Search memiliki instruksi jawaban pada konfigurasi interaction sendiri; instruksi default-nya membatasi jawaban pada sumber web dan meminta sitasi. Instruksi dan variabel bot dapat disesuaikan agar perilaku tiap node lebih fokus dan konsisten.
 
 ### 6.6 Knowledge Base
 
@@ -325,7 +337,7 @@ Bot bisa menampilkan komponen UI seperti:
 - Cards
 - Carousel
 
-Komponen ini bisa terkait dengan artikel tertentu di KB, jadi saat artikel paling relevan ditemukan, component yang relevan bisa muncul bersamaan dengan jawaban.
+Komponen ini bisa dibuat tanpa artikel atau dihubungkan ke maksimal 10 artikel. Jika dihubungkan, component aktif dapat muncul otomatis ketika artikel pemicu ditemukan pada hasil teratas retrieval. Tanpa relasi artikel, component tidak dipicu otomatis oleh RAG.
 
 ---
 
@@ -355,62 +367,55 @@ Runtime juga menangani:
 - history conversation
 - AI config yang dipilih sesuai provider
 
-### Flow runtime sederhana
+### Flow runtime berdasarkan tipe interaction
 
 ```mermaid
 flowchart TD
-    U[User Input] --> B[Bot Runtime]
-    B --> R[Check current interaction]
-    R --> G{Guided Routing?}
-    G -->|Yes| A[Select target interaction]
-    G -->|No| L[AI classify route or fallback]
-    A --> K[Knowledge Base Search]
-    L --> K
-    K --> S[Smart Search / Top 5 Articles]
-    S --> C[Build context]
-    C --> M[LLM Generate Answer]
-    M --> D[Render bot message + UI components]
-    D --> DB[(MongoDB Save)]
+    U[User message] --> R[Resolve current interaction]
+    R --> T{Interaction type}
+    T -->|Guided Routing| G[Match route or classify with LLM]
+    G --> N[Route target or fallback]
+    T -->|RAG| K[Search selected active KBs]
+    K --> S[Score articles and build context]
+    S --> C[LLM answer from KB context]
+    C --> P[Match active components to top article]
+    T -->|Web Search| W[Bing search results]
+    W --> X[Fetch/extract pages or use snippets]
+    X --> Y[LLM answer with web citations]
+    T -->|Small Talk| A[LLM answer from small-talk prompt]
+    T -->|Data Collection| D[Collect and validate fields]
+    T -->|Skill Escalation| E{Target recipient}
+    E -->|Bot| B[Transfer to bot flow]
+    E -->|Human| H[Pending Escalation Queue]
+    N --> O[Apply nextAction]
+    P --> O
+    Y --> O
+    A --> O
+    D --> O
+    B --> O
+    H --> O
+    O --> M[Render response and metadata]
+    M --> DB[(MongoDB conversation state)]
 ```
 
 ---
 
-## 8. Cara Bot Membaca Data dan Menyusun Jawaban
+## 8. Perbedaan RAG dan Web Search
 
-Data yang dibaca bot biasanya berasal dari:
+Keduanya sama-sama dapat menyusun context untuk LLM, tetapi sumber dan proses retrieval-nya berbeda:
 
-- Knowledge Base collection
-- bot definition
-- interaction config
-- prompt template
-- session variables
-- conversation history
+| Aspek | RAG | Web Search |
+|---|---|---|
+| Sumber | Artikel pada Knowledge Base yang dipilih | Hasil pencarian internet dari Bing |
+| Retrieval | Smart Search berbasis token dan bobot field artikel | Parsing halaman hasil pencarian dan ekstraksi halaman web |
+| Data yang masuk ke LLM | Artikel top hasil scoring | Cuplikan atau teks halaman web yang berhasil diambil |
+| Pemilih sumber | Jumlah dokumen RAG, default 5 | Jumlah sumber web, default 5 |
+| Konteks | Knowledge context dari artikel internal | Judul, URL, dan cuplikan sumber web |
+| UI sumber | Artikel teratas, skor, matched keywords | Tautan sumber web dan sitasi |
 
-### Proses membaca data
+RAG lebih sesuai untuk pengetahuan internal yang dikelola dan dikurasi. Web Search lebih sesuai untuk informasi yang perlu dicari dari web. Tidak ada kewajiban menjalankan keduanya pada setiap turn: yang dijalankan adalah interaction aktif di flow.
 
-1. user mengirim pertanyaan
-2. bot mengecek interaction tujuan
-3. system mengambil Knowledge Base yang dipilih pada interaction
-4. smart search mengurutkan artikel berdasarkan relevansi
-5. sistem mengambil top 5 artikel
-6. context dibuat dan dijadikan bahan untuk model
-7. model merangkum jawaban dari informasi tersebut
-
-### Kenapa perlu retrieval?
-
-Karena model tidak bisa mengingat semua data internal organisasi secara akurat. Retrieval membantu model fokus pada fakta yang memang relevan dengan pertanyaan user.
-
-### Batasan
-
-Aplikasi ini belum memakai vector search atau embedding-based semantic retrieval. Saat ini retrieval masih berbasis:
-
-- normalisasi text
-- tokenisasi
-- stopword removal
-- matching keyword
-- scoring berdasarkan bobot relevansi
-
-Artinya hasilnya sangat bergantung pada kata kunci yang ada di data dan kualitas isi artikel.
+Keduanya tetap bergantung pada kualitas sumber. RAG dapat tidak menemukan istilah yang cocok; Web Search dapat gagal mengakses Bing atau halaman tujuan. LLM diberi instruksi untuk menyatakan keterbatasan ketika context tidak cukup, tetapi keluaran tetap perlu ditinjau untuk penggunaan penting.
 
 ---
 
@@ -420,9 +425,13 @@ Fitur ini sangat menarik karena bot tidak hanya menjawab teks, tetapi juga menam
 
 ### Mekanismenya
 
-- Saat retrieval menemukan artikel paling relevan, sistem memeriksa apakah artikel punya referensi component
-- Jika ada, runtime akan mencari reusable component yang terhubung ke artikel tersebut
-- Component yang sesuai lalu ditampilkan di chat bersama jawaban assistant
+1. Interaction RAG menjalankan Smart Search pada koleksi yang dipilih.
+2. Runtime mengambil artikel pertama pada hasil yang sudah diurutkan sebagai `triggerArticle`.
+3. Runtime hanya memeriksa component yang `isActive: true`.
+4. Component cocok jika salah satu referensi artikelnya memiliki `collectionName` dan `articleId` sama persis dengan `triggerArticle`.
+5. Component yang cocok dikirim bersama jawaban assistant, dengan `triggeredBy` berisi artikel pemicu.
+
+Satu component dapat ditautkan ke beberapa artikel dan satu artikel dapat memicu beberapa component. Artikel pemicu diambil dari hasil teratas, bukan dari semua hasil RAG. Component tanpa artikel tetap valid untuk penggunaan/manual konfigurasi lain, tetapi tidak akan muncul otomatis melalui mekanisme ini. Web Search tidak memicu reusable component berbasis `articleRefs` karena sumbernya bukan artikel KB.
 
 Jenis component yang didukung:
 
@@ -445,15 +454,16 @@ Jadi komponen bukan muncul sembarangan. Ia dipicu oleh konteks artikel yang pali
 
 ### 10.1 Tool / Interaction Type
 
-- Welcome Message: sapaan dan menu awal
-- Guided Routing: menyambungkan user ke node yang tepat
-- Small Talk: chat non-faktual / percakapan ringan
-- RAG: pencarian + jawaban berbasis Knowledge Base
-- Web Search: cari informasi di web
-- Data Collection: kumpulkan data user bertahap
-- Data Collection Submitted: proses validasi dan simpan hasil
-- Skill Escalation: alihkan ke bot/skill lain atau human assistance
-- Text Question: pertanyaan langsung yang masuk ke flow
+- Welcome Message: sapaan, quick reply, variabel user, footer, serta ikon bawaan/custom.
+- Guided Routing: cocokkan label/variable route langsung atau klasifikasikan dengan LLM, lalu menuju target/fallback.
+- Small Talk: buat balasan percakapan memakai prompt dan provider/model yang dikonfigurasi; tidak melakukan retrieval otomatis.
+- RAG: cari artikel pada Knowledge Base aktif yang dipilih, susun context, lalu minta LLM menjawab dari context tersebut.
+- Web Search: cari hasil Bing, ambil halaman/snippet, kirim sumber sebagai context ke LLM, dan tampilkan sumber/sitasi.
+- Data Collection: tanyakan field satu per satu, simpan jawaban sebagai state, dan dapat meminta konfirmasi/review.
+- Data Collection Submitted: ambil variabel yang ditentukan dan simpan capture sebagai record.
+- Skill Escalation: transfer ke bot flow aktif atau buat eskalasi `pending` ke user human di Escalation Queue.
+- Text Question: tampilkan pertanyaan pada interaction agar user memberi input.
+- Text: kirim teks statis dari konfigurasi node.
 
 ### 10.2 Tools bagi Admin
 
@@ -465,6 +475,9 @@ Dalam dashboard, admin memiliki tools seperti:
 - AI Provider Setting
 - Conversation Monitoring
 - User & Role Management
+- Skills untuk menghubungkan user human/bot ke alur dan mengatur pesan perkenalan skill human
+- Components untuk membuat, mengimpor/mengekspor JSON, serta menghubungkan template ke artikel pemicu
+- Import/export CSV artikel Knowledge Base
 
 Ini membuat aplikasi terlihat seperti platform AI agent builder, bukan hanya aplikasi chatbot biasa.
 
@@ -474,15 +487,13 @@ Ini membuat aplikasi terlihat seperti platform AI agent builder, bukan hanya apl
 
 Data dalam aplikasi bergerak seperti ini:
 
-1. User login dan masuk ke dashboard/chatbot
-2. User memilih bot/skill
-3. Bot runtime membaca conversation dan state
-4. Input user diproses oleh routing/fallback
-5. Retrieval mengambil artikel dari KB
-6. Context dikirim ke model AI
-7. Model membangun jawaban
-8. UI menampilkan jawaban + component yang relevan
-9. Semua data disimpan ke MongoDB
+1. User login, membuka chatbot, dan memilih skill jika diminta.
+2. Conversation dibuat untuk bot flow pilihan, active bot, atau langsung sebagai eskalasi human.
+3. Untuk setiap pesan, runtime membaca `currentInteractionId` dan konfigurasi node tersebut.
+4. Node menjalankan proses yang sesuai: route, RAG, Web Search, Small Talk, pengumpulan data, atau transfer.
+5. Jika node memakai LLM, provider menerima pesan user, system instruction, dan context retrieval bila ada.
+6. UI merender balasan, metadata artikel/sumber web, serta reusable component yang cocok.
+7. Runtime menyimpan pesan dan state terbaru ke MongoDB; `nextAction` menentukan langkah flow berikutnya.
 
 ---
 
@@ -490,11 +501,11 @@ Data dalam aplikasi bergerak seperti ini:
 
 ### Versi Singkat (untuk pitch 2-3 menit)
 
-> “Proyek ini adalah AI chatbot platform yang menggabungkan bot flow, Knowledge Base, dan LLM dalam satu sistem. Admin bisa membuat alur chatbot, mengelola pengetahuan, mengatur prompt, dan memilih provider AI. Saat user bertanya, sistem pertama-tama memilih route yang tepat, mengambil artikel relevan dari Knowledge Base, lalu mengirim konteks tersebut ke model LLM untuk menghasilkan jawaban yang lebih akurat. Bot juga bisa menampilkan komponen interaktif seperti tombol, card, dan carousel sesuai konteks jawaban. Teknologi yang dipakai adalah Next.js, MongoDB, LM Studio/OpenRouter, dan sistem custom bot runtime yang mengelola flow dan retrieval.”
+> “Proyek ini adalah AI chatbot platform yang menggabungkan bot flow, Knowledge Base, dan LLM dalam satu sistem. Admin bisa membuat alur chatbot, mengelola pengetahuan, mengatur prompt, dan memilih provider AI. Sesuai node flow yang dicapai, bot dapat melakukan RAG dari artikel internal, Web Search dari Bing, Small Talk, pengumpulan data, atau eskalasi ke human. Jawaban dapat disertai sumber dan komponen interaktif seperti tombol, card, dan carousel. Teknologi yang dipakai adalah Next.js, MongoDB, LM Studio/OpenRouter, serta custom bot runtime.”
 
 ### Versi Lengkap (untuk demo ke audiens teknis)
 
-> “Aplikasi ini adalah AI agent platform untuk mengelola chatbot secara terstruktur. Di satu sisi, ada dashboard admin untuk membuat bot dan mengatur data; di sisi lain, ada runtime bot yang mengelola flow percakapan. Saat user bertanya, bot dapat memilih interaction route, melakukan smart search di Knowledge Base, mengambil artikel relevan, dan menyerahkan konteks ke model LLM untuk menjawab. Hasilnya bukan hanya teks, tetapi juga komponen interaktif yang tertaut ke artikel yang relevan. Proyek ini memanfaatkan Next.js, MongoDB, serta provider AI seperti LM Studio dan OpenRouter. Arsitekturnya menggabungkan flow-driven chatbot, retrieval-based generation, dan reusable UI components untuk pengalaman chatbot yang lebih informatif dan kaya interaksi.”
+> “Aplikasi ini adalah AI agent platform untuk mengelola chatbot secara terstruktur. Admin membuat bot sebagai interaction graph, mengelola KB, prompt, skill, dan reusable component. Setiap pesan diproses oleh node yang sedang aktif: Guided Routing dapat memilih target, RAG mencari artikel internal, Web Search mencari sumber internet, dan Skill Escalation dapat meneruskan conversation ke bot atau human. Untuk node generatif, runtime mengirim pertanyaan dan context yang sesuai ke LM Studio atau OpenRouter. Hasilnya dapat mencakup jawaban, sitasi, artikel terkait, tombol, card, atau carousel. Arsitektur ini menggabungkan flow-driven conversation, retrieval, generation, dan human handoff.”
 
 ---
 
@@ -521,8 +532,12 @@ Proyek ini cocok untuk demo karena menunjukkan satu hal penting: AI bukan hanya 
 - src/lib/ai.ts
 - src/lib/bot-runtime.ts
 - src/lib/smart-search.ts
+- src/lib/web-search.ts
 - src/lib/bot-flows.ts
+- src/lib/component-templates.ts
 - src/app/dashboard/chatbot/page.tsx
+- src/app/api/conversations/[id]/messages/route.ts
+- src/app/api/escalation-queue/route.ts
 - src/app/dashboard/knowledge-base/page.tsx
 - src/app/dashboard/bot-management/[id]/page.tsx
 - src/app/api/conversations/[id]/messages/route.ts

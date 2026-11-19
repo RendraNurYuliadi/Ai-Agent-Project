@@ -1,10 +1,6 @@
 import type { ProviderId } from "@/types/providers";
 
-const PROVIDER_IDS: ProviderId[] = [
-  "opencode", "gemini-cli", "kiro", "openrouter", "nvidia", "ollama", "vertex",
-  "gemini", "cloudflare-ai", "poolside", "nous", "byteplus", "kimchi", "agnes",
-  "api-airforce", "bazaarlink", "kilo-gateway", "lmstudio",
-];
+const PROVIDER_IDS: ProviderId[] = ["nvidia"];
 
 export const BOT_INTERACTION_TYPES = [
   "welcome_message",
@@ -115,10 +111,9 @@ export interface BotInteractionConfig {
   fallbackMechanismEnabled?: boolean;
   fallbackInteractionId?: string;
   promptId?: string;
-  provider?: "global" | "lmstudio" | "openrouter";
+  provider?: "global";
   providerId?: ProviderId;
   model?: string;
-  lmStudioUrl?: string;
   temperature?: number;
   maxTokens?: number;
   webSearchMaxResults?: number;
@@ -224,9 +219,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
   const providerId = typeof value.providerId === "string" && PROVIDER_IDS.includes(value.providerId as ProviderId)
     ? value.providerId as ProviderId
     : undefined;
-  const provider = value.provider === "lmstudio" || value.provider === "openrouter"
-    ? value.provider
-    : value.provider === "global" ? "global" : undefined;
+  const provider = value.provider === "global" ? "global" : undefined;
   const quickButtons = Array.isArray(value.quickButtons)
     ? value.quickButtons.slice(0, 8).flatMap((item) => {
       if (!isRecord(item)) return [];
@@ -369,7 +362,6 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     provider,
     providerId,
     model: typeof value.model === "string" ? value.model.trim().slice(0, 200) : undefined,
-    lmStudioUrl: typeof value.lmStudioUrl === "string" ? value.lmStudioUrl.trim().slice(0, 500) : undefined,
     temperature: typeof value.temperature === "number" && Number.isFinite(value.temperature)
       ? Math.max(0, Math.min(2, value.temperature))
       : undefined,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
-import { getAIConfig, isOpenRouterFreeModel, OPENROUTER_FREE_MODEL } from "@/lib/ai";
+import { getAIConfig } from "@/lib/ai";
 
 // GET /api/genai-route/config
 export async function GET(req: NextRequest) {
@@ -15,12 +15,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       config: {
         provider: config.provider,
-        // LM Studio
-        baseUrl: config.lmStudioUrl,
-        model: config.lmStudioModel,
-        // OpenRouter
-        openRouterModel: config.openRouterModel,
-        // Common
+        model: config.providerModel || "",
         temperature: config.temperature,
         maxTokens: config.maxTokens,
       },
@@ -37,47 +32,21 @@ export async function PUT(req: NextRequest) {
   if (session.role !== "admin") return NextResponse.json({ error: "Admin only" }, { status: 403 });
 
   try {
-    const {
-      provider,
-      baseUrl,
-      model,
-      openRouterModel,
-      temperature,
-      maxTokens,
-    } = await req.json();
+    const { temperature, maxTokens } = await req.json();
 
     const db = await getDatabase();
-    const selectedOpenRouterModel =
-      typeof openRouterModel === "string" && isOpenRouterFreeModel(openRouterModel)
-        ? openRouterModel
-        : OPENROUTER_FREE_MODEL;
-
     const updatePayload = {
-      provider: provider === "openrouter" ? "openrouter" : "lmstudio",
-      // LM Studio fields
-      baseUrl: baseUrl || "http://localhost:1234/v1",
-      model: model || "local-model",
-      // OpenRouter fields
-      openRouterModel: selectedOpenRouterModel,
-      // Common
+      provider: "nvidia",
       temperature: typeof temperature === "number" ? temperature : 0.7,
       maxTokens: typeof maxTokens === "number" ? maxTokens : 1024,
       updatedAt: new Date(),
     };
 
-    // Update both keys for backward compatibility
-    await Promise.all([
-      db.collection("genaiConfig").updateOne(
-        { key: "active_config" },
-        { $set: updatePayload, $unset: { openRouterApiKey: "" } },
-        { upsert: true }
-      ),
-      db.collection("genaiConfig").updateOne(
-        { key: "lmstudio" },
-        { $set: updatePayload, $unset: { openRouterApiKey: "" } },
-        { upsert: true }
-      ),
-    ]);
+    await db.collection("genaiConfig").updateOne(
+      { key: "active_config" },
+      { $set: updatePayload, $unset: { openRouterApiKey: "", baseUrl: "", model: "", openRouterModel: "" } },
+      { upsert: true }
+    );
 
     return NextResponse.json({ success: true, config: updatePayload });
   } catch {

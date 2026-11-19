@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import {
-  encryptProviderSecret,
   fetchProviderModels,
+  getActiveProviderApiKeyIndex,
   getProviderSummary,
-  getStoredProviderApiKey,
+  getStoredProviderApiKeys,
   getStoredProviderConnection,
   normalizeProviderBaseUrl,
+  setActiveProviderApiKeyIndex,
   toProviderConnectionSummary,
 } from "@/lib/providers";
 import type { StoredProviderConnection } from "@/types/providers";
@@ -25,12 +26,10 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
   if (!provider) return NextResponse.json({ error: "Provider tidak ditemukan." }, { status: 404 });
   if (!provider.supported) return NextResponse.json({ error: provider.setupNote || "Integrasi provider belum tersedia." }, { status: 400 });
 
-  let input: { apiKey?: unknown; baseUrl?: unknown } = {};
+  let input: { baseUrl?: unknown } = {};
   try {
     const body: unknown = await req.json();
-    if (body && typeof body === "object" && !Array.isArray(body)) {
-      input = body as { apiKey?: unknown; baseUrl?: unknown };
-    }
+    if (body && typeof body === "object" && !Array.isArray(body)) input = body as { baseUrl?: unknown };
   } catch {
     return NextResponse.json({ success: false, error: "Data uji koneksi tidak valid." }, { status: 400 });
   }
@@ -50,52 +49,68 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : "Base URL provider tidak valid." }, { status: 400 });
   }
 
-  let apiKey = "";
-  if (provider.id !== "lmstudio") {
-    const suppliedKey = typeof input.apiKey === "string" ? input.apiKey.trim() : "";
-    if (suppliedKey.length > 4096) {
-      return NextResponse.json({ success: false, error: "API key terlalu panjang." }, { status: 400 });
-    }
+  let apiKeys: string[];
+  try {
+    apiKeys = await getStoredProviderApiKeys(db, provider.id, connection);
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      error: error instanceof Error ? error.message : "Gagal membaca API key provider.",
+    }, { status: 500 });
+  }
+  if (!apiKeys.length) {
+    return NextResponse.json({ success: false, error: "Tambahkan API key sebelum menguji koneksi." }, { status: 400 });
+  }
+
+  const startIndex = getActiveProviderApiKeyIndex(connection, apiKeys.length);
+  let catalog: Awaited<ReturnType<typeof fetchProviderModels>> | undefined;
+  let successfulIndex = -1;
+  const failures: string[] = [];
+  for (let attempt = 0; attempt < apiKeys.length; attempt += 1) {
+    const index = (startIndex + attempt) % apiKeys.length;
     try {
-      apiKey = suppliedKey || await getStoredProviderApiKey(db, provider.id);
+      catalog = await fetchProviderModels(provider.id, apiKeys[index], baseUrl);
+      successfulIndex = index;
+      break;
     } catch (error) {
+      failures.push(`API key ${index + 1}: ${error instanceof Error ? error.message : "Uji koneksi gagal."}`);
+      if (attempt < apiKeys.length - 1) {
+        try {
+          await setActiveProviderApiKeyIndex(db, provider.id, (index + 1) % apiKeys.length);
+        } catch (rotationError) {
+          return NextResponse.json({
+            success: false,
+            error: rotationError instanceof Error ? rotationError.message : "Gagal menyimpan posisi API key berikutnya.",
+          }, { status: 500 });
+        }
+      }
+    }
+  }
+  if (!catalog || successfulIndex < 0) {
+    try {
+      await setActiveProviderApiKeyIndex(db, provider.id, 0);
+    } catch (rotationError) {
       return NextResponse.json({
         success: false,
-        error: error instanceof Error ? error.message : "API key provider wajib diisi.",
-      }, { status: 400 });
+        error: rotationError instanceof Error ? rotationError.message : "Gagal mengatur ulang posisi API key.",
+      }, { status: 500 });
     }
-  }
-
-  let models: string[];
-  try {
-    models = await fetchProviderModels(provider.id, apiKey, baseUrl);
-  } catch (error) {
     return NextResponse.json({
       success: false,
-      error: error instanceof Error ? error.message : "Gagal menguji koneksi provider.",
+      error: `Semua ${apiKeys.length} API key gagal. Posisi diatur kembali ke API key 1. ${failures.join(" | ")}`,
     }, { status: 502 });
-  }
-
-  let encryptedApiKey: string | undefined;
-  try {
-    encryptedApiKey = provider.id === "lmstudio"
-      ? connection?.encryptedApiKey
-      : typeof input.apiKey === "string" && input.apiKey.trim()
-        ? encryptProviderSecret(apiKey)
-        : connection?.encryptedApiKey;
-  } catch (error) {
-    return NextResponse.json({
-      success: false,
-      error: error instanceof Error ? error.message : "Gagal mengenkripsi kredensial provider.",
-    }, { status: 503 });
   }
 
   const next: StoredProviderConnection = {
     providerId: provider.id,
-    ...(encryptedApiKey ? { encryptedApiKey } : {}),
+    ...(connection?.encryptedApiKeys ? { encryptedApiKeys: connection.encryptedApiKeys } : {}),
+    ...(connection?.encryptedApiKey ? { encryptedApiKey: connection.encryptedApiKey } : {}),
+    activeApiKeyIndex: successfulIndex,
     baseUrl,
-    availableModels: models,
-    selectedModels: connection?.selectedModels || [],
+    availableModels: catalog.models,
+    modelDetails: catalog.modelDetails,
+    selectedModels: (connection?.selectedModels || []).filter((model) => catalog.models.includes(model)),
+    freeEndpointCatalogVerified: true,
     connected: true,
     lastTestAt: new Date(),
     updatedAt: new Date(),
@@ -108,7 +123,7 @@ export async function POST(req: NextRequest, { params }: RouteContext) {
     );
     return NextResponse.json({
       success: true,
-      message: `Koneksi ${provider.name} berhasil. ${models.length} model tersedia.`,
+      message: `Koneksi ${provider.name} berhasil menggunakan API key ${successfulIndex + 1}. ${catalog.models.length} Free Endpoint dari katalog NVIDIA terverifikasi.`,
       provider: toProviderConnectionSummary(provider, next),
     });
   } catch (error) {

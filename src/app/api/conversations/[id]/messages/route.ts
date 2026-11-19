@@ -3,7 +3,7 @@ import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import { ObjectId } from "mongodb";
 import { smartSearchKB, ScoredArticle } from "@/lib/smart-search";
-import { getAIConfig, generateAICompletion, isOpenRouterFreeModel } from "@/lib/ai";
+import { getAIConfig, generateAICompletion } from "@/lib/ai";
 import { initializeBotConversation, processBotTurn } from "@/lib/bot-runtime";
 
 // POST /api/conversations/[id]/messages — add message & get AI reply
@@ -291,13 +291,11 @@ export async function POST(
         .replace(/\{name\}/g, () => session.name || "User")
         .replace(/\{email\}/g, () => session.email || "");
 
-    // Load AI config (LM Studio local or Google AI Studio Gemini)
+    // Load NVIDIA NIM config for the selected free catalog model.
     const aiConfig = await getAIConfig(db);
     const requestedModel = typeof body.model === "string" ? body.model.trim() : "";
-    if (requestedModel && aiConfig.provider === "lmstudio") {
-      aiConfig.lmStudioModel = requestedModel;
-    } else if (requestedModel && isOpenRouterFreeModel(requestedModel)) {
-      aiConfig.openRouterModel = requestedModel;
+    if (requestedModel && requestedModel !== aiConfig.providerModel) {
+      console.warn("Ignoring unconfigured chat model request:", requestedModel);
     }
 
     // Get the route prompt
@@ -476,7 +474,7 @@ KNOWLEDGE CONTEXT:
       messageType,
       lmStudioAvailable: aiAvailable,
       aiProvider: aiConfig.provider,
-      aiModel: aiConfig.provider === "openrouter" ? aiConfig.openRouterModel : aiConfig.lmStudioModel,
+      aiModel: aiConfig.providerModel || "",
       generationDurationMs: Date.now() - generationStartedAt,
       uiComponents,
       topArticles: topArticles.map((a) => ({

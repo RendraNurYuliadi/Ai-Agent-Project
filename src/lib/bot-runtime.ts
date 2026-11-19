@@ -227,7 +227,7 @@ export async function initializeBotConversation(
 async function interactionAIConfig(
   db: Db,
   interaction: BotInteraction,
-  defaultProvider: "global" | "lmstudio" = "global",
+  defaultProvider: "global" | "nvidia" = "global",
   interactions: BotInteraction[] = []
 ) {
   const temperature = interaction.config.temperature;
@@ -245,17 +245,8 @@ async function interactionAIConfig(
   }
 
   const config = await getAIConfig(db);
-  const legacyProvider = interaction.config.provider;
-  if (legacyProvider === "openrouter" || legacyProvider === "lmstudio") {
-    config.provider = legacyProvider;
-  } else if (defaultProvider === "lmstudio") {
-    config.provider = "lmstudio";
-  }
-  if (config.provider === "lmstudio") {
-    config.lmStudioUrl = interaction.config.lmStudioUrl || process.env.LM_STUDIO_URL || "http://localhost:1234/v1";
-    config.lmStudioModel = interaction.config.model || config.lmStudioModel;
-  } else if (config.provider === "openrouter") {
-    config.openRouterModel = interaction.config.model || config.openRouterModel;
+  if (defaultProvider === "nvidia") {
+    config.provider = "nvidia";
   }
   config.temperature = temperature ?? config.temperature;
   config.maxTokens = maxTokens ?? config.maxTokens;
@@ -494,7 +485,7 @@ export async function processBotTurn(
       content = "Skill tujuan belum dipilih. Hubungi pengelola untuk memperbaiki konfigurasi.";
     }
   } else if (interaction.type === "small_talk") {
-    const config = await interactionAIConfig(db, interaction, "lmstudio", bot.interactions);
+    const config = await interactionAIConfig(db, interaction, "nvidia", bot.interactions);
     try {
       const template = await getPromptTemplate(db, interaction.config.promptId, "small_talk") ||
         interaction.config.systemPrompt || "Kamu adalah asisten yang ramah dan ringkas.";
@@ -596,7 +587,7 @@ export async function processBotTurn(
         contextSent = results.map((result, index) =>
           `[${index + 1}] ${result.title}\nURL: ${result.url}\nCuplikan: ${result.content}`
         ).join("\n\n");
-        const config = await interactionAIConfig(db, interaction, "lmstudio", bot.interactions);
+        const config = await interactionAIConfig(db, interaction, "nvidia", bot.interactions);
         const customInstruction = interaction.config.systemPrompt?.trim();
         const systemInstruction = [
           customInstruction,

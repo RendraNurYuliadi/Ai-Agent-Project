@@ -1,22 +1,4 @@
-export type ProviderId =
-  | "opencode"
-  | "gemini-cli"
-  | "kiro"
-  | "openrouter"
-  | "nvidia"
-  | "ollama"
-  | "vertex"
-  | "gemini"
-  | "cloudflare-ai"
-  | "poolside"
-  | "nous"
-  | "byteplus"
-  | "kimchi"
-  | "agnes"
-  | "api-airforce"
-  | "bazaarlink"
-  | "kilo-gateway"
-  | "lmstudio";
+export type ProviderId = "nvidia";
 
 export interface ProviderSummary {
   id: ProviderId;
@@ -34,18 +16,29 @@ export interface ProviderConnectionSummary extends ProviderSummary {
   connected: boolean;
   ready: boolean;
   hasApiKey: boolean;
+  apiKeyCount: number;
   availableModels: string[];
+  modelDetails?: Record<string, ProviderModelDetails>;
   selectedModels: string[];
   baseUrl: string;
   lastTestAt?: string;
 }
 
+export interface ProviderModelDetails {
+  inputModalities: string[];
+  outputModalities: string[];
+}
+
 export interface StoredProviderConnection {
   providerId: ProviderId;
   encryptedApiKey?: string;
+  encryptedApiKeys?: string[];
+  activeApiKeyIndex?: number;
   baseUrl: string;
   availableModels: string[];
+  modelDetails?: Record<string, ProviderModelDetails>;
   selectedModels: string[];
+  freeEndpointCatalogVerified?: boolean;
   connected: boolean;
   lastTestAt?: Date;
   updatedAt: Date;
