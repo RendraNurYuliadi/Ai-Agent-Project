@@ -55,6 +55,7 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
     const accentValue = typeof candidate.accentColor === "string" ? candidate.accentColor.trim() : "";
     const accentColor = accentValue.toLowerCase() === "#2563eb" ? "#171717" : accentValue;
     const headerIconUrl = typeof candidate.headerIconUrl === "string" ? candidate.headerIconUrl.trim() : "";
+    const sendIconUrl = typeof candidate.sendIconUrl === "string" ? candidate.sendIconUrl.trim() : "";
     const backgroundValue = typeof candidate.backgroundColor === "string" ? candidate.backgroundColor.trim() : "";
     const lineValue = typeof candidate.lineColor === "string" ? candidate.lineColor.trim() : "";
     const backgroundColor = backgroundValue.toLowerCase() === "#080808" ? "#ffffff" : (backgroundValue || "#ffffff");
@@ -83,13 +84,15 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
           .replace(/expression\s*\([^)]*\)/gi, "")
           .replace(/behavior\s*:/gi, "")
       : "";
-    if (headerIconUrl && headerIconUrl.length > 2048) return null;
-    if (headerIconUrl) {
-      try {
-        const iconUrl = new URL(headerIconUrl);
-        if (!["http:", "https:"].includes(iconUrl.protocol) || iconUrl.username || iconUrl.password) return null;
-      } catch {
-        return null;
+    for (const imageUrl of [headerIconUrl, sendIconUrl]) {
+      if (imageUrl.length > 2048) return null;
+      if (imageUrl) {
+        try {
+          const iconUrl = new URL(imageUrl);
+          if (!["http:", "https:"].includes(iconUrl.protocol) || iconUrl.username || iconUrl.password) return null;
+        } catch {
+          return null;
+        }
       }
     }
     if (
@@ -113,6 +116,7 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
       subtitle,
       accentColor,
       headerIconUrl,
+      sendIconUrl,
       backgroundColor,
       lineColor,
       borderRadius,

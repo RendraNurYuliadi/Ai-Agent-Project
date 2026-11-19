@@ -12,6 +12,7 @@ export interface EngagementWindow {
   subtitle: string;
   accentColor: string;
   headerIconUrl: string;
+  sendIconUrl: string;
   backgroundColor: string;
   lineColor: string;
   borderRadius: number;

@@ -85,10 +85,10 @@ function MessageButtons({
         type="button"
         onClick={() => onReply?.(button.value)}
         disabled={disabled || !onReply}
-        className="engagement-button rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800 disabled:opacity-40"
+        className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs transition-colors hover:brightness-95 disabled:opacity-40"
       >{button.label}</button>
     ) : (
-      <a key={`${button.label}-${index}`} href={button.value} target="_blank" rel="noopener noreferrer" className="engagement-button inline-flex items-center gap-1.5 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-xs text-neutral-200 transition-colors hover:border-neutral-500 hover:bg-neutral-800">
+      <a key={`${button.label}-${index}`} href={button.value} target="_blank" rel="noopener noreferrer" className="engagement-button engagement-link-button inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors hover:brightness-95">
         {button.label}<ExternalLink className="h-3 w-3" />
       </a>
     ))}
@@ -96,10 +96,10 @@ function MessageButtons({
 }
 
 function MessageCardView({ card, onReply, disabled, imageProxyToken }: { card: ConversationMessageCard; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
-  return <article className="engagement-card w-full min-w-0 overflow-hidden rounded-xl border border-neutral-800 bg-[#101010]">
-    {card.imageUrl && <Image src={getImageProxyUrl(card.imageUrl, imageProxyToken)} alt={card.title} width={520} height={card.imageHeight ?? 128} unoptimized style={{ height: `${card.imageHeight ?? 128}px` }} className="w-full object-cover" />}
+  return <article className="engagement-card engagement-content-card w-full min-w-0 overflow-hidden rounded-xl border">
+    {card.imageUrl && <Image src={getImageProxyUrl(card.imageUrl, imageProxyToken)} alt={card.title} width={520} height={card.imageHeight ?? 128} unoptimized style={{ height: `${card.imageHeight ?? 128}px` }} className="engagement-card-image w-full object-cover" />}
     <div className="space-y-2.5 p-3">
-      <div><h3 className="text-sm font-semibold text-white">{card.title}</h3><p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">{card.subtitle}</p></div>
+      <div><h3 className="engagement-card-title font-semibold">{card.title}</h3><p className="engagement-card-subtitle mt-1 whitespace-pre-wrap leading-5">{card.subtitle}</p></div>
       <MessageButtons buttons={card.buttons} onReply={onReply} disabled={disabled} />
     </div>
   </article>;
@@ -114,23 +114,23 @@ function MessageCarousel({ component, onReply, disabled, imageProxyToken }: { co
     return () => window.clearInterval(interval);
   }, [count]);
   if (!count) return null;
-  return <div className="w-full max-w-[260px]" aria-roledescription="carousel">
+  return <div className="engagement-carousel w-full max-w-[260px]" aria-roledescription="carousel">
     <div className="overflow-hidden"><div className="flex transition-transform duration-500 ease-out motion-reduce:transition-none" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
-      {component.cards.map((card, index) => <div key={`${component.id}-${index}`} className="w-full shrink-0"><MessageCardView card={card} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} /></div>)}
+      {component.cards.map((card, index) =>       <div key={`${component.id}-${index}`} className="w-full shrink-0"><MessageCardView card={card} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} /></div>)}
     </div></div>
-    {count > 1 && <div className="mt-2 flex items-center justify-between px-1">
-      <button type="button" onClick={() => setCurrentIndex((index) => (index - 1 + count) % count)} aria-label="Card sebelumnya" title="Card sebelumnya" className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"><ChevronLeft className="h-4 w-4" /></button>
-      <span className="text-[10px] tabular-nums text-neutral-500">{currentIndex + 1} / {count}</span>
-      <button type="button" onClick={() => setCurrentIndex((index) => (index + 1) % count)} aria-label="Card berikutnya" title="Card berikutnya" className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"><ChevronRight className="h-4 w-4" /></button>
+    {count > 1 && <div className="engagement-carousel-controls mt-2 flex items-center justify-between px-1">
+      <button type="button" onClick={() => setCurrentIndex((index) => (index - 1 + count) % count)} aria-label="Card sebelumnya" title="Card sebelumnya" className="engagement-carousel-button p-1.5 transition-colors hover:brightness-95"><ChevronLeft className="h-4 w-4" /></button>
+      <span className="engagement-carousel-position tabular-nums">{currentIndex + 1} / {count}</span>
+      <button type="button" onClick={() => setCurrentIndex((index) => (index + 1) % count)} aria-label="Card berikutnya" title="Card berikutnya" className="engagement-carousel-button p-1.5 transition-colors hover:brightness-95"><ChevronRight className="h-4 w-4" /></button>
     </div>}
   </div>;
 }
 
 function AssistantComponentView({ component, onReply, disabled, imageProxyToken }: { component: ConversationMessageComponent; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
   if (component.type === "reply_buttons") return <MessageButtons buttons={component.buttons} onReply={onReply} disabled={disabled} />;
-  if (component.type === "link_buttons") return <article className="engagement-card w-full max-w-[320px] rounded-xl border border-neutral-800 bg-[#101010] p-3">
-    {component.title && <h3 className="text-sm font-semibold text-white">{component.title}</h3>}
-    {component.subtitle && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">{component.subtitle}</p>}
+  if (component.type === "link_buttons") return <article className="engagement-link-card w-full max-w-[320px]">
+    {component.title && <h3 className="engagement-link-title font-semibold">{component.title}</h3>}
+    {component.subtitle && <p className="engagement-link-subtitle mt-1 whitespace-pre-wrap leading-5">{component.subtitle}</p>}
     <div className="mt-3"><MessageButtons buttons={component.buttons.map((button) => ({ ...button, action: "link" }))} onReply={onReply} disabled={disabled} /></div>
   </article>;
   if (component.type === "card" && component.card) return <div className="w-full max-w-[260px]"><MessageCardView card={component.card} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} /></div>;
@@ -155,9 +155,10 @@ function BotInteractionView({ data, onReply, disabled, imageProxyToken }: { data
   const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
   const iconLabel = data.icon === "custom" ? "Custom" : data.icon || "Sparkles";
   const isWelcomeMessage = data.type === "welcome_message";
-  return <article className={`engagement-card engagement-component ${isWelcomeMessage ? "engagement-welcome-message" : ""} w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-neutral-800 bg-[#101010] p-3.5 sm:max-w-[360px]`}>
-    {isWelcomeMessage && data.title && <div className="mb-2 flex items-center gap-2"><span className="engagement-welcome-icon flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white text-black">{data.icon === "custom" && data.iconUrl ? <Image src={getImageProxyUrl(data.iconUrl, imageProxyToken)} alt="" width={28} height={28} unoptimized className="h-7 w-7 object-cover" /> : <Icon className="h-4 w-4" />}</span><h3 className="text-sm font-semibold text-white">{data.title}</h3></div>}
-    {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
+  return <article className={`engagement-component ${isWelcomeMessage ? "engagement-welcome-message" : "engagement-interaction-card"} w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3.5 sm:max-w-[360px]`}>
+    {isWelcomeMessage && data.title && <div className="mb-2 flex items-center gap-2"><span className="engagement-welcome-icon flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md">{data.icon === "custom" && data.iconUrl ? <Image src={getImageProxyUrl(data.iconUrl, imageProxyToken)} alt="" width={28} height={28} unoptimized className="h-7 w-7 object-cover" /> : <Icon className="h-4 w-4" />}</span><h3 className="engagement-welcome-title font-semibold">{data.title}</h3></div>}
+    {!isWelcomeMessage && data.title && <h3 className="engagement-interaction-title mb-2 font-semibold">{data.title}</h3>}
+    {data.subtitle && <p className={`${isWelcomeMessage ? "engagement-welcome-subtitle" : "engagement-interaction-subtitle"} whitespace-pre-wrap leading-5`}>{data.subtitle}</p>}
     {buttons.length > 0 && <div className="mt-3"><MessageButtons buttons={buttons} onReply={onReply} disabled={disabled} /></div>}
     {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
     <span className="sr-only">{iconLabel}</span>

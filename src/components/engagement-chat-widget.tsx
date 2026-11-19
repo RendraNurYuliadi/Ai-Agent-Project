@@ -262,15 +262,15 @@ export default function EngagementChatWidget({
         className={`engagement-window-${config.windowId} engagement-widget flex h-full min-h-0 w-full flex-col overflow-hidden text-white`}
         style={{ ...accentStyle, backgroundColor: "var(--engagement-background)", borderRadius: `${config.window.borderRadius}px` }}
       >
-      <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4" style={{ backgroundColor: "var(--engagement-accent)", borderColor: "var(--engagement-line)" }}>
-        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/20">
+      <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4">
+        <span className="engagement-header-icon flex h-9 w-9 items-center justify-center rounded-full">
           {config.window.headerIconUrl
             ? <Image src={getImageProxyUrl(config.window.headerIconUrl, config.token)} alt="" width={36} height={36} unoptimized className="h-9 w-9 rounded-full object-cover" />
             : <MessageCircle className="h-5 w-5" />}
         </span>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-semibold">{config.window.title}</h1>
-          <p className="engagement-header-subtitle mt-0.5 truncate text-xs text-white/75">{config.window.subtitle || "Kami siap membantu Anda."}</p>
+          <h1 className="engagement-header-title truncate font-semibold">{config.window.title}</h1>
+          <p className="engagement-header-subtitle mt-0.5 truncate">{config.window.subtitle || "Kami siap membantu Anda."}</p>
         </div>
         {menuAllowed && (
           <div className="relative shrink-0">
@@ -357,10 +357,13 @@ export default function EngagementChatWidget({
           type="submit"
           disabled={initializing || !conversationId || sending || conversationUnavailable || isWaitingForAgent || !input.trim()}
           aria-label="Kirim pesan"
-          className="engagement-send flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
-          style={{ backgroundColor: "var(--engagement-accent)" }}
+          className="engagement-send flex h-11 w-11 shrink-0 items-center justify-center transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-5 w-5" />}
+          {sending
+            ? <Loader2 className="engagement-send-glyph animate-spin" />
+            : config.window.sendIconUrl
+              ? <Image src={getImageProxyUrl(config.window.sendIconUrl, config.token)} alt="" width={20} height={20} unoptimized className="engagement-send-icon" />
+              : <ArrowUp className="engagement-send-glyph" />}
         </button>
       </form>
       </main>

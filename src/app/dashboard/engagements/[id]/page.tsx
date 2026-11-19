@@ -3,8 +3,9 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Copy, ExternalLink, Loader2, Plus, Save, Trash2, MessageCircle, MoreVertical } from "lucide-react";
+import { ArrowLeft, ArrowUp, Copy, ExternalLink, Loader2, Plus, Save, Trash2, MessageCircle, MoreVertical } from "lucide-react";
 import Image from "next/image";
+import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import type {
   EngagementEntryPoint,
   EngagementRecord,
@@ -40,6 +41,7 @@ function normalizeWindow(windowItem: EngagementWindow): EngagementWindow {
     ...windowItem,
     accentColor: windowItem.accentColor?.toLowerCase() === "#2563eb" ? "#171717" : windowItem.accentColor,
     headerIconUrl: windowItem.headerIconUrl || "",
+    sendIconUrl: windowItem.sendIconUrl || "",
     backgroundColor: !windowItem.backgroundColor || windowItem.backgroundColor.toLowerCase() === "#080808"
       ? DEFAULT_BACKGROUND
       : windowItem.backgroundColor,
@@ -55,23 +57,49 @@ function normalizeWindow(windowItem: EngagementWindow): EngagementWindow {
 
 type EngagementTab = "general" | "windows" | "embed";
 
-function readCssProperty(css: string, property: string, fallback = ""): string {
-  const match = css.match(new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*([^;]+)`, "i"));
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function readCssProperty(css: string, selector: string, property: string, fallback = ""): string {
+  const rule = new RegExp(`(?:^|})\\s*${escapeRegExp(selector)}\\s*\\{([^}]*)\\}`, "i").exec(css);
+  const declarations = rule?.[1] || "";
+  const match = declarations.match(new RegExp(`(?:^|;)\\s*${escapeRegExp(property)}\\s*:\\s*([^;]+)`, "i"));
   return match?.[1]?.trim() || fallback;
 }
 
-function setCssProperty(css: string, property: string, value: string): string {
+function setCssProperty(css: string, selector: string, property: string, value: string): string {
   if (!value.trim()) return css;
-  const declaration = `${property}: ${value}`;
-  const propertyPattern = new RegExp(`(${property}\\s*:\\s*)[^;]+`, "i");
-  if (propertyPattern.test(css)) return css.replace(propertyPattern, `$1${value}`);
+  const rulePattern = new RegExp(`(^|})\\s*(${escapeRegExp(selector)})\\s*\\{([^}]*)\\}`, "i");
+  const propertyPattern = new RegExp(`(^|;)\\s*${escapeRegExp(property)}\\s*:\\s*[^;]+;?`, "i");
+  const rule = rulePattern.exec(css);
+  if (!rule) return `${css.trimEnd()}\n${selector} {\n  ${property}: ${value};\n}`;
 
-  const firstBlock = css.indexOf("{");
-  if (firstBlock < 0) return css;
-  const end = css.indexOf("}", firstBlock);
-  if (end < 0) return `${css}\n${declaration};`;
-  const declarations = css.slice(firstBlock + 1, end).trim();
-  return `${css.slice(0, firstBlock + 1)}\n  ${declarations}${declarations.endsWith(";") ? "" : ";"}\n  ${declaration};\n${css.slice(end)}`;
+  const declarations = rule[3].trim();
+  const nextDeclarations = propertyPattern.test(declarations)
+    ? declarations.replace(propertyPattern, (_match, separator: string) => `${separator}\n  ${property}: ${value};`)
+    : `${declarations}${declarations ? "\n" : ""}  ${property}: ${value};`;
+  return css.replace(rulePattern, (_match, prefix: string) =>
+    `${prefix}\n${selector} {\n${nextDeclarations}\n}`
+  );
+}
+
+function getComponentPreviewCss(
+  styles: Record<string, string>,
+  componentId: string
+): string {
+  const dependencies: Record<string, string[]> = {
+    "link-buttons": ["reply-buttons"],
+    card: ["reply-buttons"],
+    carousel: ["card", "reply-buttons"],
+    interaction: ["reply-buttons"],
+    "welcome-message": ["reply-buttons"],
+  };
+  const componentIds = [componentId, ...(dependencies[componentId] || [])];
+  return [...new Set(componentIds)]
+    .map((id) => styles[id] || ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === id)?.defaultCss || "")
+    .filter(Boolean)
+    .join("\n");
 }
 
 export default function EngagementDetailPage() {
@@ -210,6 +238,7 @@ export default function EngagementDetailPage() {
       subtitle: "Kami siap membantu Anda.",
       accentColor: DEFAULT_ACCENT,
       headerIconUrl: "",
+      sendIconUrl: "",
       backgroundColor: DEFAULT_BACKGROUND,
       lineColor: DEFAULT_LINE,
       borderRadius: 16,
@@ -379,12 +408,26 @@ export default function EngagementDetailPage() {
                   </label>
                   <label className="flex items-center gap-3 text-[11px] text-neutral-400">
                     <span>Warna utama</span>
-                    <input type="color" value={item.accentColor} onChange={(event) => updateWindow(item.id, { accentColor: event.target.value })} className="h-8 w-12 cursor-pointer rounded border border-neutral-700 bg-transparent p-0.5" />
+                    <input type="color" value={item.accentColor} onChange={(event) => {
+                      const accentColor = event.target.value;
+                      updateWindow(item.id, {
+                        accentColor,
+                        componentStyles: {
+                          ...item.componentStyles,
+                          header: setCssProperty(item.componentStyles.header, ".engagement-header", "background", accentColor),
+                          send: setCssProperty(item.componentStyles.send, ".engagement-send", "background", accentColor),
+                        },
+                      });
+                    }} className="h-8 w-12 cursor-pointer rounded border border-neutral-700 bg-transparent p-0.5" />
                     <span className="font-mono">{item.accentColor}</span>
                   </label>
                   <label className="space-y-1.5">
                     <span className="text-[11px] text-neutral-400">URL icon header</span>
                     <input value={item.headerIconUrl} onChange={(event) => updateWindow(item.id, { headerIconUrl: event.target.value })} maxLength={2048} placeholder="https://example.com/icon.png" className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 text-xs text-white outline-none placeholder:text-neutral-700 focus:border-neutral-600" />
+                  </label>
+                  <label className="space-y-1.5">
+                    <span className="text-[11px] text-neutral-400">URL ikon tombol kirim</span>
+                    <input value={item.sendIconUrl} onChange={(event) => updateWindow(item.id, { sendIconUrl: event.target.value })} maxLength={2048} placeholder="https://example.com/send-icon.png" className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 text-xs text-white outline-none placeholder:text-neutral-700 focus:border-neutral-600" />
                   </label>
                   <label className="flex items-center gap-3 text-[11px] text-neutral-400">
                     <span>Background window</span>
@@ -414,53 +457,76 @@ export default function EngagementDetailPage() {
                     <div className="grid gap-3 xl:grid-cols-2">
                       {ENGAGEMENT_COMPONENT_STYLES.map((component) => (
                         <article key={component.id} className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950">
-                          <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(item.componentStyles[component.id] || component.defaultCss, `.engagement-preview-${item.id}-${component.id}`) }} />
+                          <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(getComponentPreviewCss(item.componentStyles, component.id), `.engagement-preview-${item.id}-${component.id}`) }} />
                           <div className="border-b border-neutral-800 px-3 py-2.5">
                             <p className="text-xs font-semibold text-white">{component.name}</p>
                             <p className="mt-0.5 text-[10px] text-neutral-500">{component.description}</p>
                           </div>
                           <div className={`engagement-preview-${item.id}-${component.id} min-h-[108px] bg-[#f8fafc] p-3`}>
                             {component.id === "header" && (
-                              <div className="engagement-header flex min-h-[64px] items-center gap-2 rounded-lg px-3 text-white" style={{ backgroundColor: item.accentColor }}>
-                                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-black/20"><MessageCircle className="h-4 w-4" /></span>
-                                <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{item.title}</p><p className="engagement-header-subtitle truncate text-[10px] text-white/70">{item.subtitle}</p></div>
+                              <div className="engagement-header flex min-h-[64px] items-center gap-2 rounded-lg border px-3">
+                                <span className="engagement-header-icon flex h-8 w-8 items-center justify-center overflow-hidden rounded-full">
+                                  {item.headerIconUrl ? <Image src={getImageProxyUrl(item.headerIconUrl)} alt="" width={32} height={32} unoptimized className="h-8 w-8 object-cover" /> : <MessageCircle className="h-4 w-4" />}
+                                </span>
+                                <div className="min-w-0 flex-1"><p className="engagement-header-title truncate font-semibold">{item.title}</p><p className="engagement-header-subtitle truncate">{item.subtitle}</p></div>
                                 {item.allowClose && <MoreVertical className="h-4 w-4" />}
                               </div>
                             )}
                             {component.id === "bot-bubble" && <div className="engagement-bot-bubble max-w-[220px] px-3 py-2"><p>Halo! Ada yang bisa kami bantu hari ini?</p></div>}
                             {component.id === "user-bubble" && <div className="ml-auto max-w-[220px]"><div className="engagement-user-bubble px-3 py-2">Saya ingin bertanya.</div></div>}
-                            {(component.id === "reply-buttons" || component.id === "link-buttons") && (
+                            {component.id === "reply-buttons" && (
                               <div className="flex flex-wrap gap-2">
-                                <button type="button" className="engagement-button">Produk</button>
-                                <button type="button" className="engagement-button">Bantuan</button>
+                                <button type="button" className="engagement-button engagement-reply-button">Produk</button>
+                                <button type="button" className="engagement-button engagement-reply-button">Bantuan</button>
                               </div>
+                            )}
+                            {component.id === "link-buttons" && (
+                              <article className="engagement-link-card max-w-[280px]">
+                                <h3 className="engagement-link-title font-semibold">Informasi layanan</h3>
+                                <p className="engagement-link-subtitle mt-1">Pelajari layanan dan temukan jawaban lebih lanjut.</p>
+                                <div className="mt-3"><button type="button" className="engagement-button engagement-link-button inline-flex items-center gap-1.5">Buka halaman <ExternalLink className="h-3 w-3" /></button></div>
+                              </article>
                             )}
                             {component.id === "card" && (
-                              <div className="engagement-card max-w-[240px] overflow-hidden">
-                                <div className="h-10 bg-neutral-800" />
-                                <div className="p-3"><p className="text-xs font-semibold">Judul kartu</p><p className="mt-1 text-[10px] opacity-70">Deskripsi singkat kartu.</p></div>
-                              </div>
+                              <article className="engagement-content-card max-w-[240px] overflow-hidden">
+                                <Image src="/engagement-preview-card.svg" alt="Preview gambar kartu" width={520} height={110} unoptimized className="engagement-card-image h-[110px]" />
+                                <div className="space-y-2.5 p-3">
+                                  <div><h3 className="engagement-card-title font-semibold">Paket layanan</h3><p className="engagement-card-subtitle mt-1">Deskripsi singkat kartu ditampilkan di sini.</p></div>
+                                  <div className="flex flex-wrap gap-2"><button type="button" className="engagement-button engagement-reply-button">Pilih paket</button></div>
+                                </div>
+                              </article>
                             )}
                             {component.id === "carousel" && (
-                              <div className="engagement-component overflow-hidden rounded-lg border border-neutral-700">
-                                <div className="h-12 bg-neutral-800" />
-                                <div className="flex items-center justify-between p-2"><span className="text-[10px]">‹</span><span className="text-[10px]">1 / 3</span><span className="text-[10px]">›</span></div>
+                              <div className="engagement-carousel">
+                                <article className="engagement-content-card overflow-hidden">
+                                  <Image src="/engagement-preview-card.svg" alt="Preview gambar carousel" width={520} height={96} unoptimized className="engagement-card-image h-[96px]" />
+                                  <div className="space-y-2 p-3">
+                                    <div><h3 className="engagement-card-title font-semibold">Pilihan populer</h3><p className="engagement-card-subtitle mt-1">Ringkasan item carousel.</p></div>
+                                    <button type="button" className="engagement-button engagement-reply-button">Lihat pilihan</button>
+                                  </div>
+                                </article>
+                                <div className="engagement-carousel-controls mt-2 flex items-center justify-between">
+                                  <button type="button" className="engagement-carousel-button px-2 py-1" aria-label="Sebelumnya">‹</button>
+                                  <span className="engagement-carousel-position">1 / 3</span>
+                                  <button type="button" className="engagement-carousel-button px-2 py-1" aria-label="Berikutnya">›</button>
+                                </div>
                               </div>
                             )}
                             {component.id === "interaction" && (
-                              <div className="engagement-component p-3">
-                                <p className="text-xs font-semibold">Pilih kebutuhan Anda</p>
-                                <div className="mt-2 flex gap-2"><button type="button" className="engagement-button">Pesan</button><button type="button" className="engagement-button">Informasi</button></div>
-                              </div>
+                              <article className="engagement-interaction-card max-w-[280px]">
+                                <h3 className="engagement-interaction-title font-semibold">Pilih kebutuhan Anda</h3>
+                                <p className="engagement-interaction-subtitle mt-1">Pilih salah satu opsi berikut.</p>
+                                <div className="mt-3 flex gap-2"><button type="button" className="engagement-button engagement-reply-button">Pesan</button><button type="button" className="engagement-button engagement-reply-button">Informasi</button></div>
+                              </article>
                             )}
                             {component.id === "welcome-message" && (
                               <article className="engagement-welcome-message engagement-card engagement-component max-w-[280px] overflow-hidden rounded-xl border p-3">
                                 <div className="mb-2 flex items-center gap-2">
                                   <span className="engagement-welcome-icon flex h-7 w-7 items-center justify-center rounded-md"><MessageCircle className="h-4 w-4" /></span>
-                                  <h3 className="text-sm font-semibold">Selamat datang!</h3>
+                                  <h3 className="engagement-welcome-title font-semibold">Selamat datang!</h3>
                                 </div>
-                                <p className="text-xs">Ada yang bisa kami bantu hari ini?</p>
-                                <div className="mt-3"><button type="button" className="engagement-button rounded-lg border px-3 py-2 text-xs">Mulai chat</button></div>
+                                <p className="engagement-welcome-subtitle">Ada yang bisa kami bantu hari ini?</p>
+                                <div className="mt-3"><button type="button" className="engagement-button engagement-reply-button">Mulai chat</button></div>
                               </article>
                             )}
                             {component.id === "scrollbar" && (
@@ -469,59 +535,99 @@ export default function EngagementDetailPage() {
                               </div>
                             )}
                             {component.id === "input" && <input readOnly value="" placeholder="Tulis pesan..." className="engagement-input w-full" />}
-                            {component.id === "send" && <button type="button" className="engagement-send" aria-label="Preview kirim">↑</button>}
+                            {component.id === "send" && (
+                              <button type="button" className="engagement-send flex items-center justify-center" aria-label="Preview kirim">
+                                {item.sendIconUrl
+                                  ? <Image src={getImageProxyUrl(item.sendIconUrl)} alt="" width={20} height={20} unoptimized className="engagement-send-icon" />
+                                  : <ArrowUp className="engagement-send-glyph" />}
+                              </button>
+                            )}
                           </div>
                           <div className="border-t border-neutral-800 p-2">
                             {(() => {
                               const editorKey = `${item.id}:${component.id}`;
                               const css = item.componentStyles[component.id] || component.defaultCss;
-                              const setProperty = (property: string, value: string) => updateWindow(item.id, {
-                                componentStyles: {
+                              const setProperty = (selector: string, property: string, value: string) => updateWindow(item.id, {
+                                ...(component.id === "header" && selector === ".engagement-header" && property === "background"
+                                  ? { accentColor: value }
+                                  : {}),
+                                componentStyles: (() => {
+                                  const styles = {
                                   ...item.componentStyles,
-                                  [component.id]: setCssProperty(css, property, value),
-                                },
+                                  [component.id]: setCssProperty(css, selector, property, value),
+                                  };
+                                  if (component.id === "header" && selector === ".engagement-header" && property === "background") {
+                                    styles.send = setCssProperty(item.componentStyles.send, ".engagement-send", "background", value);
+                                  }
+                                  return styles;
+                                })(),
                               });
+                              const resetComponentStyle = () => {
+                                const componentStyles = {
+                                  ...item.componentStyles,
+                                  [component.id]: component.defaultCss,
+                                };
+                                if (component.id === "header") {
+                                  updateWindow(item.id, {
+                                    accentColor: DEFAULT_ACCENT,
+                                    componentStyles: {
+                                      ...componentStyles,
+                                      send: setCssProperty(item.componentStyles.send, ".engagement-send", "background", DEFAULT_ACCENT),
+                                    },
+                                  });
+                                  return;
+                                }
+                                updateWindow(item.id, { componentStyles });
+                              };
                               return (
                                 <div className="space-y-2">
                                   <div className="flex items-center justify-between gap-2">
                                     <button type="button" onClick={() => setOpenStyleEditor((current) => ({ ...current, [editorKey]: !current[editorKey] }))} className="rounded-md border border-neutral-700 px-2.5 py-1.5 text-[10px] text-neutral-300 hover:bg-neutral-800">
                                       {openStyleEditor[editorKey] ? "Sembunyikan parameter" : "Atur parameter"}
                                     </button>
-                                    <button type="button" onClick={() => updateWindow(item.id, { componentStyles: { ...item.componentStyles, [component.id]: component.defaultCss } })} className="text-[9px] text-neutral-500 hover:text-white">Reset</button>
+                                    <button type="button" onClick={resetComponentStyle} className="text-[9px] text-neutral-500 hover:text-white">Reset</button>
                                   </div>
                                   {openStyleEditor[editorKey] && (
                                     <div className="grid grid-cols-2 gap-2 rounded-md border border-neutral-800 bg-neutral-900 p-2">
-                                      {component.id === "scrollbar" ? (
-                                        <>
-                                          <label className="space-y-1 text-[9px] text-neutral-500">Warna thumb
-                                            <input type="color" value={readCssProperty(css, "--engagement-scrollbar-thumb", "#a3a3a3").match(/^#[0-9a-fA-F]{6}$/)?.[0] || "#a3a3a3"} onChange={(event) => setProperty("--engagement-scrollbar-thumb", event.target.value)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5" />
+                                      {component.parameters.map((parameter) => {
+                                        const currentValue = readCssProperty(css, parameter.selector, parameter.property, parameter.defaultValue);
+                                        const controlKey = `${parameter.selector}:${parameter.property}`;
+                                        if (parameter.type === "color") {
+                                          const colorValue = currentValue.match(/^#[0-9a-fA-F]{6}$/)?.[0] || parameter.defaultValue;
+                                          return (
+                                            <label key={controlKey} className="space-y-1 text-[9px] text-neutral-500">
+                                              {parameter.label}
+                                              <input
+                                                type="color"
+                                                value={colorValue}
+                                                onChange={(event) => setProperty(parameter.selector, parameter.property, event.target.value)}
+                                                className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5"
+                                              />
+                                            </label>
+                                          );
+                                        }
+                                        const fallbackNumber = Number.parseFloat(parameter.defaultValue) || 0;
+                                        const numericValue = Number.parseFloat(currentValue);
+                                        return (
+                                          <label key={controlKey} className="space-y-1 text-[9px] text-neutral-500">
+                                            {parameter.label}
+                                            <input
+                                              type="number"
+                                              min={parameter.min}
+                                              max={parameter.max}
+                                              step={parameter.step}
+                                              value={Number.isFinite(numericValue) ? numericValue : fallbackNumber}
+                                              onChange={(event) => {
+                                                const next = Number(event.target.value);
+                                                if (!Number.isFinite(next)) return;
+                                                const bounded = Math.min(parameter.max ?? next, Math.max(parameter.min ?? next, next));
+                                                setProperty(parameter.selector, parameter.property, `${bounded}${parameter.unit || ""}`);
+                                              }}
+                                              className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 px-2 text-[10px] text-white"
+                                            />
                                           </label>
-                                          <label className="space-y-1 text-[9px] text-neutral-500">Warna track
-                                            <input type="color" value={readCssProperty(css, "--engagement-scrollbar-track", "#f4f4f5").match(/^#[0-9a-fA-F]{6}$/)?.[0] || "#f4f4f5"} onChange={(event) => setProperty("--engagement-scrollbar-track", event.target.value)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5" />
-                                          </label>
-                                        </>
-                                      ) : (
-                                        <>
-                                      <label className="space-y-1 text-[9px] text-neutral-500">Teks
-                                        <input type="color" value={readCssProperty(css, "color", "#18181b")} onChange={(event) => setProperty("color", event.target.value)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5" />
-                                      </label>
-                                      <label className="space-y-1 text-[9px] text-neutral-500">Background
-                                        <input type="color" value={readCssProperty(css, "background", "#ffffff").startsWith("#") ? readCssProperty(css, "background", "#ffffff") : "#ffffff"} onChange={(event) => setProperty("background", event.target.value)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5" />
-                                      </label>
-                                      <label className="space-y-1 text-[9px] text-neutral-500">Border
-                                        <input type="color" value={readCssProperty(css, "border", "#e5e5e5").match(/#[0-9a-fA-F]{6}/)?.[0] || "#e5e5e5"} onChange={(event) => setProperty("border", `1px solid ${event.target.value}`)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5" />
-                                      </label>
-                                      <label className="space-y-1 text-[9px] text-neutral-500">Rounded
-                                        <input type="number" min={0} max={32} value={parseInt(readCssProperty(css, "border-radius", "8").replace("px", ""), 10) || 0} onChange={(event) => setProperty("border-radius", `${event.target.value}px`)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 px-2 text-[10px] text-white" />
-                                      </label>
-                                      <label className="space-y-1 text-[9px] text-neutral-500">Font
-                                        <input type="number" min={8} max={32} value={parseInt(readCssProperty(css, "font-size", "12").replace("px", ""), 10) || 12} onChange={(event) => setProperty("font-size", `${event.target.value}px`)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 px-2 text-[10px] text-white" />
-                                      </label>
-                                      <label className="space-y-1 text-[9px] text-neutral-500">Lebar baris
-                                        <input type="number" step={0.1} min={1} max={3} value={parseFloat(readCssProperty(css, "line-height", "1.6")) || 1.6} onChange={(event) => setProperty("line-height", event.target.value)} className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 px-2 text-[10px] text-white" />
-                                      </label>
-                                        </>
-                                      )}
+                                        );
+                                      })}
                                     </div>
                                   )}
                                   <details>
@@ -544,7 +650,7 @@ export default function EngagementDetailPage() {
                     </div>
                   </div>
                 </div>
-                <div className="overflow-hidden rounded-xl border border-neutral-800 bg-[#141414] p-3">
+                <div className="overflow-hidden rounded-xl border border-neutral-600 bg-[#141414] p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-[10px] font-medium uppercase tracking-wider text-neutral-500">Preview chat window</span>
                     <span className="text-[10px] text-neutral-600">380 × 620</span>
@@ -553,43 +659,47 @@ export default function EngagementDetailPage() {
                     Object.values(item.componentStyles).join("\n"),
                     `.engagement-preview-window-${item.id}`
                   ) }} />
-                  <div className={`engagement-preview-window-${item.id} engagement-widget mx-auto w-[280px] overflow-hidden shadow-2xl`} style={{ height: "390px", borderRadius: `${item.borderRadius}px`, backgroundColor: item.backgroundColor, border: `1px solid ${item.lineColor}` }}>
-                    <div className="engagement-header flex h-[58px] items-center gap-2 px-3 text-white" style={{ backgroundColor: item.accentColor }}>
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-black/20">
-                        {item.headerIconUrl ? <Image src={item.headerIconUrl} alt="" width={32} height={32} unoptimized className="h-8 w-8 object-cover" /> : <MessageCircle className="h-4 w-4" />}
+                  <div className={`engagement-preview-window-${item.id} engagement-widget mx-auto w-[280px] overflow-hidden border-2 shadow-2xl outline outline-1 outline-white/40`} style={{ height: "390px", borderRadius: `${item.borderRadius}px`, backgroundColor: item.backgroundColor, borderColor: item.lineColor, outlineOffset: "2px" }}>
+                    <div className="engagement-header flex h-[58px] items-center gap-2 border-b px-3">
+                      <span className="engagement-header-icon flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full">
+                        {item.headerIconUrl ? <Image src={getImageProxyUrl(item.headerIconUrl)} alt="" width={32} height={32} unoptimized className="h-8 w-8 object-cover" /> : <MessageCircle className="h-4 w-4" />}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[11px] font-semibold">{item.title || "Judul chat"}</p>
-                        <p className="engagement-header-subtitle truncate text-[9px] text-white/70">{item.subtitle || "Subjudul chat"}</p>
+                        <p className="engagement-header-title truncate font-semibold">{item.title || "Judul chat"}</p>
+                        <p className="engagement-header-subtitle truncate">{item.subtitle || "Subjudul chat"}</p>
                       </div>
                       {item.allowClose && <MoreVertical className="h-4 w-4 shrink-0 text-white/80" />}
                     </div>
-                    <div className="engagement-message-list h-[282px] space-y-3 overflow-y-auto px-3 py-3" style={{ borderColor: item.lineColor }}>
-                      <article className="engagement-welcome-message engagement-card engagement-component max-w-[210px] overflow-hidden rounded-xl border p-2.5">
+                    <div className="engagement-message-list h-[282px] space-y-3 overflow-y-auto px-3 py-3">
+                      <article className="engagement-welcome-message engagement-component max-w-[210px] overflow-hidden rounded-xl border p-2.5">
                         <div className="mb-1.5 flex items-center gap-1.5">
                           <span className="engagement-welcome-icon flex h-6 w-6 items-center justify-center rounded-md"><MessageCircle className="h-3 w-3" /></span>
-                          <h3 className="text-[9px] font-semibold">Selamat datang!</h3>
+                          <h3 className="engagement-welcome-title font-semibold">Selamat datang!</h3>
                         </div>
-                        <p className="text-[9px] leading-4">Ada yang bisa kami bantu?</p>
+                        <p className="engagement-welcome-subtitle">Ada yang bisa kami bantu?</p>
                       </article>
-                      <div className="engagement-bot-bubble max-w-[210px] rounded-2xl rounded-tl-sm border px-3 py-2 text-[9px] leading-4 text-zinc-900" style={{ borderColor: item.lineColor, backgroundColor: "#f4f4f5" }}>
+                      <div className="engagement-bot-bubble max-w-[210px] rounded-2xl rounded-tl-sm border px-3 py-2">
                         Halo! Ada yang bisa kami bantu hari ini?
                       </div>
-                      <div className="engagement-user-bubble ml-auto max-w-[180px] rounded-2xl rounded-tr-sm bg-zinc-900 px-3 py-2 text-[9px] leading-4 text-white">
+                      <div className="engagement-user-bubble ml-auto max-w-[180px] rounded-2xl rounded-tr-sm px-3 py-2">
                         Saya ingin bertanya.
                       </div>
-                      <div className="engagement-card max-w-[210px] rounded-2xl rounded-tl-sm border px-3 py-2" style={{ borderColor: item.lineColor, backgroundColor: "#ffffff" }}>
-                        <p className="text-[9px] leading-4 text-zinc-900">Silakan pilih kebutuhan Anda.</p>
-                        <div className="mt-2 flex gap-1.5">
-                          <span className="engagement-button rounded-md border px-2 py-1 text-[8px] text-neutral-300" style={{ borderColor: item.lineColor }}>Produk</span>
-                          <span className="engagement-button rounded-md border px-2 py-1 text-[8px] text-neutral-300" style={{ borderColor: item.lineColor }}>Bantuan</span>
+                      <article className="engagement-content-card max-w-[210px] overflow-hidden rounded-xl border">
+                        <Image src="/engagement-preview-card.svg" alt="Gambar contoh kartu" width={420} height={72} unoptimized className="engagement-card-image h-[72px]" />
+                        <div className="space-y-2 p-2.5">
+                          <div><h3 className="engagement-card-title font-semibold">Pilihan layanan</h3><p className="engagement-card-subtitle mt-1">Lihat detail dan pilih layanan yang sesuai.</p></div>
+                          <button type="button" className="engagement-button engagement-reply-button rounded-md px-2 py-1">Lihat detail</button>
                         </div>
-                      </div>
+                      </article>
                     </div>
-                    <div className="flex h-[49px] items-center gap-2 border-t px-2" style={{ borderColor: item.lineColor, backgroundColor: "#0d0d0d" }}>
-                      <div className="h-8 flex-1 rounded-lg border px-2 py-2 text-[8px] text-neutral-600" style={{ borderColor: item.lineColor }}>Tulis pesan...</div>
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg text-white" style={{ backgroundColor: item.accentColor }}>↑</div>
-                    </div>
+                    <form className="flex h-[49px] items-center gap-2 border-t border-neutral-300 bg-white px-2">
+                      <input readOnly value="" placeholder="Tulis pesan..." className="engagement-input h-8 min-w-0 flex-1 rounded-lg border px-2 text-[8px]" />
+                      <button type="button" className="engagement-send flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" aria-label="Preview kirim">
+                        {item.sendIconUrl
+                          ? <Image src={getImageProxyUrl(item.sendIconUrl)} alt="" width={18} height={18} unoptimized className="engagement-send-icon" />
+                          : <ArrowUp className="engagement-send-glyph" />}
+                      </button>
+                    </form>
                   </div>
                 </div>
                 </div>

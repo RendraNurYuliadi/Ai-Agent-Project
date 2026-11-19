@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { normalizeEngagementOrigin } from "@/lib/engagement-data";
+import { migrateLegacyComponentStyles } from "@/lib/engagement-theme";
 import { signEngagementWidgetToken } from "@/lib/engagement-auth";
 import type { EngagementWidgetConfig } from "@/types/engagement";
 import EngagementChatWidget from "@/components/engagement-chat-widget";
@@ -59,14 +60,17 @@ export default async function EngagementWidgetPage({
       subtitle: windowConfig.subtitle,
       accentColor: windowConfig.accentColor,
       headerIconUrl: windowConfig.headerIconUrl || "",
+      sendIconUrl: windowConfig.sendIconUrl || "",
       backgroundColor: windowConfig.backgroundColor || "#ffffff",
       lineColor: windowConfig.lineColor || "#e5e5e5",
       borderRadius: typeof windowConfig.borderRadius === "number" ? windowConfig.borderRadius : 16,
       allowClose: windowConfig.allowClose !== false,
       customCss: typeof windowConfig.customCss === "string" ? windowConfig.customCss : "",
-      componentStyles: windowConfig.componentStyles && typeof windowConfig.componentStyles === "object"
-        ? windowConfig.componentStyles
-        : {},
+      componentStyles: migrateLegacyComponentStyles(
+        windowConfig.componentStyles && typeof windowConfig.componentStyles === "object"
+          ? windowConfig.componentStyles as Record<string, string>
+          : {}
+      ),
     },
   };
 
