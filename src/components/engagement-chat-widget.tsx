@@ -9,6 +9,7 @@ import {
 } from "@/components/conversation-message-body";
 import type { EngagementWidgetConfig } from "@/types/engagement";
 import { scopeEngagementCss } from "@/lib/engagement-theme";
+import { getImageProxyUrl } from "@/lib/image-proxy-url";
 
 interface SessionResponse {
   conversationId: string;
@@ -207,7 +208,7 @@ export default function EngagementChatWidget({
       <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4" style={{ backgroundColor: "var(--engagement-accent)", borderColor: "var(--engagement-line)" }}>
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/20">
           {config.window.headerIconUrl
-            ? <Image src={config.window.headerIconUrl} alt="" width={36} height={36} unoptimized className="h-9 w-9 rounded-full object-cover" />
+            ? <Image src={getImageProxyUrl(config.window.headerIconUrl, config.token)} alt="" width={36} height={36} unoptimized className="h-9 w-9 rounded-full object-cover" />
             : <MessageCircle className="h-5 w-5" />}
         </span>
         <div className="min-w-0 flex-1">
@@ -261,6 +262,7 @@ export default function EngagementChatWidget({
               isUser={message.role === "user"}
               onReply={(value) => void sendMessage(value)}
               disabled={sending || conversationUnavailable || isWaitingForAgent}
+              imageProxyToken={config.token}
             />
           </div>
         ))}

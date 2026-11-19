@@ -5,6 +5,7 @@ import { searchWeb } from "@/lib/web-search";
 import { smartSearchKB, type ScoredArticle } from "@/lib/smart-search";
 import type { ComponentTemplateInput } from "@/lib/component-templates";
 import { BOT_INTERACTION_LABELS, type BotDefinitionInput, type BotInteraction, type DataCollectionQuestion } from "@/lib/bot-flows";
+import vm from "node:vm";
 
 type BotRuntimeComponent = Omit<Pick<ComponentTemplateInput, "name" | "title" | "subtitle" | "type" | "buttons" | "card" | "cards">, "card"> & {
   id: string;
@@ -42,6 +43,7 @@ export interface BotRuntimeResult {
   dataCollectionState: DataCollectionState | null;
   escalation?: { skillId: string; humanUserId: string };
   botTransfer?: { skillId: string; botUserId: string; botId: string };
+  runtimeVariables?: Record<string, string>;
 }
 
 export interface DataCollectionState {
@@ -51,6 +53,7 @@ export interface DataCollectionState {
   stage?: "collecting" | "confirm" | "select_question";
   reviewing?: boolean;
   completed?: boolean;
+  runtimeVariables?: Record<string, string>;
 }
 
 export class DataCollectionAIError extends Error {
@@ -122,6 +125,237 @@ function applyPromptVariables(
     rendered = rendered.replace(new RegExp(`\\{${key}\\}`, "g"), value);
   }
   return rendered;
+}
+
+function getAtPath(source: unknown, path: string): unknown {
+  if (!path.trim()) return source;
+  const segments = path
+    .trim()
+    .replace(/\[(\d+)\]/g, ".$1")
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  let cursor = source;
+  for (const segment of segments) {
+    if (cursor === null || cursor === undefined || typeof cursor !== "object") return undefined;
+    cursor = (cursor as Record<string, unknown>)[segment];
+  }
+  return cursor;
+}
+
+function stringifyResponseValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
+function dataCollectionAnswerVariables(
+  sessionVariables: Record<string, string>
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(sessionVariables).filter(([key]) =>
+      ![
+        "question",
+        "message",
+        "chatHistory",
+        "conversationHistory",
+        "history",
+        "context",
+        "fullName",
+        "email",
+        "username",
+        "role",
+        "apiStatus",
+        "apiResponse",
+      ].includes(key)
+    )
+  );
+}
+
+function isPrivateHostname(hostname: string): boolean {
+  const normalized = hostname.toLocaleLowerCase().replace(/^\[|\]$/g, "");
+  if (normalized === "localhost" || normalized.endsWith(".localhost")) return true;
+  if (/^127(?:\.\d{1,3}){3}$/.test(normalized) || /^10(?:\.\d{1,3}){3}$/.test(normalized)) return true;
+  if (/^192\.168(?:\.\d{1,3}){2}$/.test(normalized)) return true;
+  if (/^172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}$/.test(normalized)) return true;
+  if (/^(?:0:0:0:0:0:0:0:1|::1)$/.test(normalized)) return true;
+  if (/^(?:fc|fd)[0-9a-f]{2}:/.test(normalized)) return true;
+  return false;
+}
+
+async function executeApiIntegration(
+  interaction: BotInteraction,
+  message: string,
+  user: { name?: string; fullName?: string; email?: string; username?: string; role?: string },
+  bot: Pick<BotDefinitionInput, "variables">,
+  sessionVariables: Record<string, string>
+): Promise<{
+  success: boolean;
+  content: string;
+  response: unknown;
+  status: number;
+  runtimeVariables: Record<string, string>;
+  nextInteractionId: string;
+}> {
+  const config = interaction.config.apiIntegration;
+  if (!config) {
+    return { success: false, content: "API Integration belum dikonfigurasi.", response: null, status: 0, runtimeVariables: {}, nextInteractionId: interaction.nextAction.type === "interaction" ? interaction.nextAction.interactionId : "" };
+  }
+
+  const render = (value: string) => applyPromptVariables(value, message, user, "", bot.variables || [], sessionVariables);
+  let url: URL;
+  try {
+    url = new URL(render(config.url));
+  } catch {
+    return { success: false, content: config.errorMessage || "URL API Integration tidak valid.", response: null, status: 0, runtimeVariables: {}, nextInteractionId: config.onErrorInteractionId };
+  }
+  if (!["https:"].includes(url.protocol) || url.username || url.password || isPrivateHostname(url.hostname)) {
+    return { success: false, content: "API Integration hanya menerima URL HTTPS publik.", response: null, status: 0, runtimeVariables: {}, nextInteractionId: config.onErrorInteractionId };
+  }
+
+  for (const param of config.queryParams) {
+    if (param.enabled && param.name.trim()) url.searchParams.set(param.name.trim(), render(param.value));
+  }
+
+  const headers = new Headers({ Accept: "application/json" });
+  for (const header of config.headers) {
+    if (header.enabled && header.name.trim()) headers.set(header.name.trim(), render(header.value));
+  }
+  if (config.authType === "bearer") {
+    headers.set("Authorization", `Bearer ${render(config.authToken)}`);
+  } else if (config.authType === "basic") {
+    const credentials = Buffer.from(`${render(config.authUsername)}:${render(config.authPassword)}`, "utf8").toString("base64");
+    headers.set("Authorization", `Basic ${credentials}`);
+  } else if (config.authType === "api_key" && config.authHeaderName.trim()) {
+    headers.set(config.authHeaderName.trim(), render(config.authToken));
+  }
+
+  let body: string | undefined;
+  if (config.bodyType !== "none" && !["GET", "DELETE"].includes(config.method)) {
+    if (config.bodyType === "json") {
+      headers.set("Content-Type", headers.get("Content-Type") || "application/json");
+      const renderedBody = render(config.body);
+      try {
+        body = JSON.stringify(JSON.parse(renderedBody));
+      } catch {
+        body = renderedBody;
+      }
+    } else if (config.bodyType === "form") {
+      headers.set("Content-Type", "application/x-www-form-urlencoded");
+      const form = new URLSearchParams();
+      for (const line of render(config.body).split("\n")) {
+        const separator = line.indexOf(":");
+        if (separator > 0) form.set(line.slice(0, separator).trim(), line.slice(separator + 1).trim());
+      }
+      body = form.toString();
+    } else {
+      headers.set("Content-Type", "text/plain");
+      body = render(config.body);
+    }
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: config.method,
+      headers,
+      body,
+      signal: AbortSignal.timeout(config.timeoutMs),
+      cache: "no-store",
+    });
+    const status = response.status;
+    const contentType = response.headers.get("content-type") || "";
+    let responseBody: unknown;
+    if (contentType.includes("application/json")) {
+      responseBody = await response.json();
+    } else {
+      responseBody = await response.text();
+    }
+
+    if (!response.ok) {
+      return {
+        success: false,
+        content: render(config.errorMessage || "API Integration gagal dijalankan."),
+        response: responseBody,
+        status,
+        runtimeVariables: {},
+        nextInteractionId: config.onErrorInteractionId,
+      };
+    }
+
+    const runtimeVariables: Record<string, string> = {
+      apiStatus: String(status),
+      apiResponse: typeof responseBody === "string" ? responseBody : JSON.stringify(responseBody),
+    };
+    for (const mapping of config.variableMappings) {
+      const value = getAtPath(responseBody, mapping.sourcePath);
+      runtimeVariables[mapping.variableName] = stringifyResponseValue(value === undefined ? mapping.defaultValue : value);
+    }
+
+    if (config.customCode.trim()) {
+      const sandbox: {
+        response: unknown;
+        status: number;
+        variables: Record<string, string>;
+        setBotVariable: (name: string, value: unknown) => void;
+        getBotVariable: (name: string) => string;
+        setTriggerNextInteraction: (name: string) => string;
+        triggerNextInteraction?: string;
+        console: { log: () => undefined };
+      } = {
+        response: responseBody,
+        status,
+        variables: { ...runtimeVariables },
+        setBotVariable: (name: string, value: unknown) => {
+          if (/^[A-Za-z_]\w*$/.test(name) && name.length <= 80) runtimeVariables[name] = stringifyResponseValue(value);
+        },
+        getBotVariable: (name: string) => {
+          if (runtimeVariables[name] !== undefined) return runtimeVariables[name];
+          const answerVariable = dataCollectionAnswerVariables(sessionVariables)[name];
+          if (answerVariable !== undefined) return answerVariable;
+          const custom = (bot.variables || []).find((item) => item.name === name);
+          return custom?.value ?? "";
+        },
+        setTriggerNextInteraction: (name: string) => {
+          const target = name.trim();
+          sandbox.triggerNextInteraction = target;
+          return target;
+        },
+        console: { log: () => undefined },
+      };
+      try {
+        await vm.runInNewContext(`(async () => { ${config.customCode} })()`, sandbox, { timeout: 500, displayErrors: false });
+      } catch (error) {
+        console.error("API Integration custom code error:", error);
+      }
+      if (typeof sandbox.triggerNextInteraction === "string" && sandbox.triggerNextInteraction) {
+        runtimeVariables.__triggerNextInteraction = sandbox.triggerNextInteraction;
+      }
+    }
+
+    return {
+      success: true,
+      content: render(config.successMessage),
+      response: responseBody,
+      status,
+      runtimeVariables,
+      nextInteractionId: config.onSuccessInteractionId,
+    };
+  } catch (error) {
+    console.error("API Integration request failed:", error);
+    return {
+      success: false,
+      content: render(config.errorMessage || "API Integration gagal dijalankan."),
+      response: null,
+      status: 0,
+      runtimeVariables: {},
+      nextInteractionId: config.onErrorInteractionId,
+    };
+  }
 }
 
 async function getPromptTemplate(
@@ -443,6 +677,7 @@ export async function processBotTurn(
   const conversationHistory = formatConversationHistory(conversation.historyMessages || []);
   const sessionVariables = {
     ...Object.fromEntries(Object.entries(dataCollectionState?.answers ?? {}).map(([key, value]) => [key, String(value ?? "")])),
+    ...(dataCollectionState?.runtimeVariables || {}),
     chatHistory: conversationHistory,
     conversationHistory,
     history: conversationHistory,
@@ -774,6 +1009,67 @@ export async function processBotTurn(
     });
     content = "Terima kasih, data Anda berhasil disimpan.";
     advanceToNextInteraction = true;
+  } else if (interaction.type === "api_integration") {
+    const apiResult = await executeApiIntegration(interaction, message, user, bot, sessionVariables);
+    content = apiResult.content;
+    contextSent = typeof apiResult.response === "string"
+      ? apiResult.response
+      : apiResult.response === null
+        ? ""
+        : JSON.stringify(apiResult.response);
+    const runtimeVariables = {
+      ...Object.fromEntries(Object.entries(dataCollectionState?.answers ?? {}).map(([key, value]) => [key, String(value ?? "")])),
+      ...apiResult.runtimeVariables,
+    };
+    dataCollectionState = dataCollectionState
+      ? { ...dataCollectionState, runtimeVariables }
+      : { interactionId: interaction.id, questionIndex: 0, answers: {}, runtimeVariables };
+    const triggerName = apiResult.runtimeVariables.__triggerNextInteraction;
+    if (triggerName) {
+      const target = bot.interactions.find((item) =>
+        item.id === triggerName ||
+        (item.config.name?.trim() || item.config.title?.trim() || item.config.question?.trim() || BOT_INTERACTION_LABELS[item.type]).toLocaleLowerCase() === triggerName.toLocaleLowerCase()
+      );
+      if (target) {
+        advanceToNextInteraction = false;
+        return processBotTurn(
+          db,
+          bot,
+          {
+            currentInteractionId: target.id,
+            botStatus: "active",
+            dataCollectionState,
+            conversationId: conversation.conversationId,
+            skillId: conversation.skillId,
+            historyMessages: conversation.historyMessages,
+          },
+          message,
+          user
+        );
+      }
+    }
+    const targetId = apiResult.nextInteractionId ||
+      (interaction.nextAction.type === "interaction" ? interaction.nextAction.interactionId : "");
+    if (targetId) {
+      const target = bot.interactions.find((item) => item.id === targetId);
+      if (target) {
+        advanceToNextInteraction = false;
+        return processBotTurn(
+          db,
+          bot,
+          {
+            currentInteractionId: target.id,
+            botStatus: "active",
+            dataCollectionState,
+            conversationId: conversation.conversationId,
+            skillId: conversation.skillId,
+            historyMessages: conversation.historyMessages,
+          },
+          message,
+          user
+        );
+      }
+    }
   }
 
   const nextDataCollectionId = interaction?.nextAction.type === "interaction" ? interaction.nextAction.interactionId : "";

@@ -12,6 +12,7 @@ export const BOT_INTERACTION_TYPES = [
   "data_collection",
   "data_collection_submitted",
   "skill_escalation",
+  "api_integration",
   "text",
   "text_question",
 ] as const;
@@ -28,6 +29,7 @@ export const BOT_INTERACTION_LABELS: Record<BotInteractionType, string> = {
   data_collection: "Data Collection",
   data_collection_submitted: "Data Collection Submitted",
   skill_escalation: "Skill Escalation",
+  api_integration: "API Integration",
   text: "Text Interaction",
   text_start: "Text Interaction",
   text_question: "Text Question Interaction",
@@ -98,6 +100,41 @@ export interface DataCollectionSubmittedField {
   variable: string;
 }
 
+export interface ApiIntegrationKeyValue {
+  id: string;
+  name: string;
+  value: string;
+  enabled: boolean;
+}
+
+export interface ApiIntegrationVariableMapping {
+  id: string;
+  sourcePath: string;
+  variableName: string;
+  defaultValue?: string;
+}
+
+export interface ApiIntegrationConfig {
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  url: string;
+  queryParams: ApiIntegrationKeyValue[];
+  headers: ApiIntegrationKeyValue[];
+  authType: "none" | "bearer" | "basic" | "api_key";
+  authToken: string;
+  authUsername: string;
+  authPassword: string;
+  authHeaderName: string;
+  bodyType: "none" | "json" | "form" | "text";
+  body: string;
+  timeoutMs: number;
+  variableMappings: ApiIntegrationVariableMapping[];
+  customCode: string;
+  successMessage: string;
+  errorMessage: string;
+  onSuccessInteractionId: string;
+  onErrorInteractionId: string;
+}
+
 export interface BotInteractionConfig {
   name?: string;
   title?: string;
@@ -130,6 +167,7 @@ export interface BotInteractionConfig {
   escalationSkillId?: string;
   escalationMessageEnabled?: boolean;
   escalationMessage?: string;
+  apiIntegration?: ApiIntegrationConfig;
 }
 
 export interface BotInteraction {
@@ -355,6 +393,69 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
       return name && variable ? [{ name, variable }] : [];
     })
     : undefined;
+  const apiIntegration = isRecord(value.apiIntegration)
+    ? (() => {
+      const parseKeyValues = (input: unknown): ApiIntegrationKeyValue[] =>
+        Array.isArray(input)
+          ? input.slice(0, 50).flatMap((item) => {
+            if (!isRecord(item)) return [];
+            const name = typeof item.name === "string" ? item.name.trim().slice(0, 200) : "";
+            if (!name) return [];
+            return [{
+              id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+              name,
+              value: typeof item.value === "string" ? item.value.slice(0, 4000) : "",
+              enabled: item.enabled !== false,
+            }];
+          })
+          : [];
+      const mappings = Array.isArray(value.apiIntegration.variableMappings)
+        ? value.apiIntegration.variableMappings.slice(0, 50).flatMap((item) => {
+          if (!isRecord(item)) return [];
+          const sourcePath = typeof item.sourcePath === "string" ? item.sourcePath.trim().slice(0, 300) : "";
+          const variableName = typeof item.variableName === "string" ? item.variableName.trim().replace(/[^A-Za-z0-9_]/g, "_").slice(0, 80) : "";
+          if (!sourcePath || !variableName) return [];
+          return [{
+            id: typeof item.id === "string" ? item.id : crypto.randomUUID(),
+            sourcePath,
+            variableName,
+            defaultValue: typeof item.defaultValue === "string" ? item.defaultValue.slice(0, 2000) : "",
+          }];
+        })
+        : [];
+      const method = ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(String(value.apiIntegration.method))
+        ? value.apiIntegration.method as ApiIntegrationConfig["method"]
+        : "GET";
+      const authType = ["none", "bearer", "basic", "api_key"].includes(String(value.apiIntegration.authType))
+        ? value.apiIntegration.authType as ApiIntegrationConfig["authType"]
+        : "none";
+      const bodyType = ["none", "json", "form", "text"].includes(String(value.apiIntegration.bodyType))
+        ? value.apiIntegration.bodyType as ApiIntegrationConfig["bodyType"]
+        : "none";
+      return {
+        method,
+        url: typeof value.apiIntegration.url === "string" ? value.apiIntegration.url.trim().slice(0, 4000) : "",
+        queryParams: parseKeyValues(value.apiIntegration.queryParams),
+        headers: parseKeyValues(value.apiIntegration.headers),
+        authType,
+        authToken: typeof value.apiIntegration.authToken === "string" ? value.apiIntegration.authToken.slice(0, 4000) : "",
+        authUsername: typeof value.apiIntegration.authUsername === "string" ? value.apiIntegration.authUsername.slice(0, 1000) : "",
+        authPassword: typeof value.apiIntegration.authPassword === "string" ? value.apiIntegration.authPassword.slice(0, 1000) : "",
+        authHeaderName: typeof value.apiIntegration.authHeaderName === "string" ? value.apiIntegration.authHeaderName.trim().slice(0, 200) : "X-API-Key",
+        bodyType,
+        body: typeof value.apiIntegration.body === "string" ? value.apiIntegration.body.slice(0, 20000) : "",
+        timeoutMs: typeof value.apiIntegration.timeoutMs === "number"
+          ? Math.max(1000, Math.min(60000, Math.round(value.apiIntegration.timeoutMs)))
+          : 15000,
+        variableMappings: mappings,
+        customCode: typeof value.apiIntegration.customCode === "string" ? value.apiIntegration.customCode.slice(0, 20000) : "",
+        successMessage: typeof value.apiIntegration.successMessage === "string" ? value.apiIntegration.successMessage.trim().slice(0, 1000) : "",
+        errorMessage: typeof value.apiIntegration.errorMessage === "string" ? value.apiIntegration.errorMessage.trim().slice(0, 1000) : "API Integration gagal dijalankan.",
+        onSuccessInteractionId: typeof value.apiIntegration.onSuccessInteractionId === "string" ? value.apiIntegration.onSuccessInteractionId : "",
+        onErrorInteractionId: typeof value.apiIntegration.onErrorInteractionId === "string" ? value.apiIntegration.onErrorInteractionId : "",
+      };
+    })()
+    : undefined;
 
   return {
     name: typeof value.name === "string" ? value.name.trim().slice(0, 120) : undefined,
@@ -400,6 +501,7 @@ function parseConfig(value: unknown): BotInteractionConfig | null {
     escalationSkillId: typeof value.escalationSkillId === "string" ? value.escalationSkillId.trim().slice(0, 100) : undefined,
     escalationMessageEnabled: typeof value.escalationMessageEnabled === "boolean" ? value.escalationMessageEnabled : undefined,
     escalationMessage: typeof value.escalationMessage === "string" ? value.escalationMessage.trim().slice(0, 1000) : undefined,
+    apiIntegration,
   };
 }
 
@@ -494,6 +596,20 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
         return { success: false, error: "Variable route dalam Guided Routing harus unik." };
       }
     }
+    if (interaction.type === "api_integration") {
+      const api = interaction.config.apiIntegration;
+      if (!api) return { success: false, error: "API Integration belum dikonfigurasi." };
+      if (!api.url.trim()) return { success: false, error: "URL API Integration wajib diisi." };
+      try {
+        const url = new URL(api.url.replace(/\{[^{}]+\}/g, "placeholder"));
+        if (url.protocol !== "https:" || url.username || url.password) {
+          return { success: false, error: "API Integration harus menggunakan URL HTTPS publik." };
+        }
+      } catch {
+        return { success: false, error: "URL API Integration tidak valid." };
+      }
+      if (api.customCode.length > 20000) return { success: false, error: "Custom code API Integration maksimal 20.000 karakter." };
+    }
     if (interaction.type === "data_collection_submitted") {
       const fields = interaction.config.dataCollectionSubmittedFields || [];
       if (fields.length === 0 || fields.length > 30) {
@@ -506,6 +622,15 @@ export function validateBotDefinition(value: unknown): BotValidationResult {
     }
     if (interaction.nextAction.type === "interaction" && !ids.has(interaction.nextAction.interactionId)) {
       return { success: false, error: "Next interaction tidak ditemukan." };
+    }
+    if (interaction.type === "api_integration") {
+      const api = interaction.config.apiIntegration;
+      if (api?.onSuccessInteractionId && !ids.has(api.onSuccessInteractionId)) {
+        return { success: false, error: "Next interaction saat API berhasil tidak ditemukan." };
+      }
+      if (api?.onErrorInteractionId && !ids.has(api.onErrorInteractionId)) {
+        return { success: false, error: "Next interaction saat API gagal tidak ditemukan." };
+      }
     }
     if (interaction.config.options?.some((option) => !ids.has(option.targetInteractionId))) {
       return { success: false, error: "Target guided routing tidak ditemukan." };

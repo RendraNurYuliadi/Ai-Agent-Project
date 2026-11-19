@@ -95,9 +95,9 @@ function MessageButtons({
   </div>;
 }
 
-function MessageCardView({ card, onReply, disabled }: { card: ConversationMessageCard; onReply?: (value: string) => void; disabled: boolean }) {
+function MessageCardView({ card, onReply, disabled, imageProxyToken }: { card: ConversationMessageCard; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
   return <article className="engagement-card w-full min-w-0 overflow-hidden rounded-xl border border-neutral-800 bg-[#101010]">
-    {card.imageUrl && <Image src={getImageProxyUrl(card.imageUrl)} alt={card.title} width={520} height={card.imageHeight ?? 128} unoptimized style={{ height: `${card.imageHeight ?? 128}px` }} className="w-full object-cover" />}
+    {card.imageUrl && <Image src={getImageProxyUrl(card.imageUrl, imageProxyToken)} alt={card.title} width={520} height={card.imageHeight ?? 128} unoptimized style={{ height: `${card.imageHeight ?? 128}px` }} className="w-full object-cover" />}
     <div className="space-y-2.5 p-3">
       <div><h3 className="text-sm font-semibold text-white">{card.title}</h3><p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">{card.subtitle}</p></div>
       <MessageButtons buttons={card.buttons} onReply={onReply} disabled={disabled} />
@@ -105,7 +105,7 @@ function MessageCardView({ card, onReply, disabled }: { card: ConversationMessag
   </article>;
 }
 
-function MessageCarousel({ component, onReply, disabled }: { component: ConversationMessageComponent; onReply?: (value: string) => void; disabled: boolean }) {
+function MessageCarousel({ component, onReply, disabled, imageProxyToken }: { component: ConversationMessageComponent; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const count = component.cards.length;
   useEffect(() => {
@@ -116,7 +116,7 @@ function MessageCarousel({ component, onReply, disabled }: { component: Conversa
   if (!count) return null;
   return <div className="w-full max-w-[260px]" aria-roledescription="carousel">
     <div className="overflow-hidden"><div className="flex transition-transform duration-500 ease-out motion-reduce:transition-none" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
-      {component.cards.map((card, index) => <div key={`${component.id}-${index}`} className="w-full shrink-0"><MessageCardView card={card} onReply={onReply} disabled={disabled} /></div>)}
+      {component.cards.map((card, index) => <div key={`${component.id}-${index}`} className="w-full shrink-0"><MessageCardView card={card} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} /></div>)}
     </div></div>
     {count > 1 && <div className="mt-2 flex items-center justify-between px-1">
       <button type="button" onClick={() => setCurrentIndex((index) => (index - 1 + count) % count)} aria-label="Card sebelumnya" title="Card sebelumnya" className="rounded-md border border-neutral-800 p-1.5 text-neutral-400 transition-colors hover:bg-neutral-900 hover:text-white"><ChevronLeft className="h-4 w-4" /></button>
@@ -126,19 +126,19 @@ function MessageCarousel({ component, onReply, disabled }: { component: Conversa
   </div>;
 }
 
-function AssistantComponentView({ component, onReply, disabled }: { component: ConversationMessageComponent; onReply?: (value: string) => void; disabled: boolean }) {
+function AssistantComponentView({ component, onReply, disabled, imageProxyToken }: { component: ConversationMessageComponent; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
   if (component.type === "reply_buttons") return <MessageButtons buttons={component.buttons} onReply={onReply} disabled={disabled} />;
   if (component.type === "link_buttons") return <article className="engagement-card w-full max-w-[320px] rounded-xl border border-neutral-800 bg-[#101010] p-3">
     {component.title && <h3 className="text-sm font-semibold text-white">{component.title}</h3>}
     {component.subtitle && <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-neutral-400">{component.subtitle}</p>}
     <div className="mt-3"><MessageButtons buttons={component.buttons.map((button) => ({ ...button, action: "link" }))} onReply={onReply} disabled={disabled} /></div>
   </article>;
-  if (component.type === "card" && component.card) return <div className="w-full max-w-[260px]"><MessageCardView card={component.card} onReply={onReply} disabled={disabled} /></div>;
-  if (component.type === "carousel") return <MessageCarousel component={component} onReply={onReply} disabled={disabled} />;
+  if (component.type === "card" && component.card) return <div className="w-full max-w-[260px]"><MessageCardView card={component.card} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} /></div>;
+  if (component.type === "carousel") return <MessageCarousel component={component} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} />;
   return null;
 }
 
-function RotatingComponents({ components, onReply, disabled }: { components: ConversationMessageComponent[]; onReply?: (value: string) => void; disabled: boolean }) {
+function RotatingComponents({ components, onReply, disabled, imageProxyToken }: { components: ConversationMessageComponent[]; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   useEffect(() => {
     if (components.length < 2) return;
@@ -147,15 +147,15 @@ function RotatingComponents({ components, onReply, disabled }: { components: Con
   }, [components.length]);
   if (!components.length) return null;
   const component = components[currentIndex % components.length];
-  return <div key={component.id} className="engagement-component chat-component-enter w-full min-w-0 pl-1"><AssistantComponentView component={component} onReply={onReply} disabled={disabled} /></div>;
+  return <div key={component.id} className="engagement-component chat-component-enter w-full min-w-0 pl-1"><AssistantComponentView component={component} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} /></div>;
 }
 
-function BotInteractionView({ data, onReply, disabled }: { data: NonNullable<ConversationMessageData["botInteraction"]>; onReply?: (value: string) => void; disabled: boolean }) {
+function BotInteractionView({ data, onReply, disabled, imageProxyToken }: { data: NonNullable<ConversationMessageData["botInteraction"]>; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
   const buttons = data.buttons || data.quickButtons || [];
   const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
   const iconLabel = data.icon === "custom" ? "Custom" : data.icon || "Sparkles";
   return <article className="engagement-card engagement-component w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-neutral-800 bg-[#101010] p-3.5 sm:max-w-[360px]">
-    {data.type === "welcome_message" && data.title && <div className="mb-2 flex items-center gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white text-black">{data.icon === "custom" && data.iconUrl ? <Image src={getImageProxyUrl(data.iconUrl)} alt="" width={28} height={28} unoptimized className="h-7 w-7 object-cover" /> : <Icon className="h-4 w-4" />}</span><h3 className="text-sm font-semibold text-white">{data.title}</h3></div>}
+    {data.type === "welcome_message" && data.title && <div className="mb-2 flex items-center gap-2"><span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white text-black">{data.icon === "custom" && data.iconUrl ? <Image src={getImageProxyUrl(data.iconUrl, imageProxyToken)} alt="" width={28} height={28} unoptimized className="h-7 w-7 object-cover" /> : <Icon className="h-4 w-4" />}</span><h3 className="text-sm font-semibold text-white">{data.title}</h3></div>}
     {data.subtitle && <p className="whitespace-pre-wrap text-xs leading-5 text-neutral-300">{data.subtitle}</p>}
     {buttons.length > 0 && <div className="mt-3"><MessageButtons buttons={buttons} onReply={onReply} disabled={disabled} /></div>}
     {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
@@ -169,12 +169,14 @@ export function ConversationMessageBody({
   onReply,
   disabled = false,
   contentOverride,
+  imageProxyToken,
 }: {
   message: ConversationMessageData;
   isUser: boolean;
   onReply?: (value: string) => void;
   disabled?: boolean;
   contentOverride?: React.ReactNode;
+  imageProxyToken?: string;
 }) {
   const topArticles = message.topArticles || [];
   const uiComponents = message.uiComponents || [];
@@ -188,8 +190,8 @@ export function ConversationMessageBody({
     {(message.content || contentOverride) && <div className={`w-fit min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? "engagement-user-bubble rounded-tr-sm bg-white font-medium text-black shadow-lg" : "engagement-bot-bubble rounded-tl-sm border border-neutral-800 bg-[#111111] text-neutral-300 shadow-md"}`}>
       {contentOverride || <FormattedMessage content={message.content} isUser={isUser} />}
     </div>}
-    {!isUser && message.botInteraction && <BotInteractionView data={message.botInteraction} onReply={onReply} disabled={disabled} />}
-    {!isUser && uiComponents.length > 0 && <RotatingComponents components={uiComponents} onReply={onReply} disabled={disabled} />}
+    {!isUser && message.botInteraction && <BotInteractionView data={message.botInteraction} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} />}
+    {!isUser && uiComponents.length > 0 && <RotatingComponents components={uiComponents} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} />}
     <ResponseMeta
       timestamp={message.timestamp}
       align={isUser ? "end" : "start"}

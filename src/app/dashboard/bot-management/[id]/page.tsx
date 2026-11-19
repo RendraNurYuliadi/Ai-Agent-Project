@@ -37,6 +37,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  PlugZap,
   Save,
   Settings2,
   Sparkles,
@@ -54,6 +55,8 @@ import {
   type BotInteractionType,
   type BotNextAction,
   type BotQuickButton,
+  type ApiIntegrationConfig,
+  type ApiIntegrationKeyValue,
   type DataCollectionComponent,
   type DataCollectionComponentCard,
   type DataCollectionQuestion,
@@ -128,7 +131,7 @@ const BOT_SYSTEM_VARIABLES = [
 ];
 
 const BOT_AI_TOOL_TYPES: BotInteractionType[] = ["guided_routing", "small_talk", "rag", "web_search", "data_collection_ai"];
-const BOT_NON_AI_TOOL_TYPES: BotInteractionType[] = ["skill_escalation", "data_collection_submitted", "data_collection"];
+const BOT_NON_AI_TOOL_TYPES: BotInteractionType[] = ["skill_escalation", "data_collection_submitted", "data_collection", "api_integration"];
 const BOT_INTERACTION_TYPES_GROUPED: BotInteractionType[] = ["welcome_message", "text", "text_question"];
 
 function getBotVariableOptions(customVariables: BotCustomVariable[] = [], interactions: BotInteraction[] = [], interactionType?: BotInteractionType) {
@@ -154,6 +157,7 @@ function nodeSummary(interaction: BotInteraction): string {
   if (interaction.type === "data_collection_ai") return `${interaction.config.dataCollectionQuestions?.length || 0} pertanyaan · LLM`;
   if (interaction.type === "data_collection") return `${interaction.config.dataCollectionQuestions?.length || 0} pertanyaan · Webhook`;
   if (interaction.type === "data_collection_submitted") return `${interaction.config.dataCollectionSubmittedFields?.length || 0} field · Capture`;
+  if (interaction.type === "api_integration") return `${interaction.config.apiIntegration?.method || "GET"} · ${interaction.config.apiIntegration?.url || "URL belum diisi"}`;
   if (interaction.type === "skill_escalation") return "Alihkan percakapan ke human";
   if (interaction.nextAction.type === "interaction") return "Next interaction";
   return interaction.nextAction.type === "end" ? "End interaction" : "Close conversation";
@@ -174,6 +178,8 @@ function InteractionNode({ data, selected }: NodeProps<FlowCanvasNode>) {
             ? Database
             : data.interactionType === "skill_escalation"
               ? UserRound
+            : data.interactionType === "api_integration"
+              ? PlugZap
       : data.interactionType === "guided_routing"
         ? GitBranch
         : MessageSquare;
@@ -343,6 +349,29 @@ function initialConfig(type: BotInteractionType, promptId?: string): BotInteract
       return { dataCollectionSubmittedFields: [] };
     case "skill_escalation":
       return { escalationSkillId: "", escalationMessageEnabled: true, escalationMessage: "Percakapan Anda sedang dialihkan." };
+    case "api_integration":
+      return {
+        apiIntegration: {
+          method: "GET",
+          url: "",
+          queryParams: [],
+          headers: [],
+          authType: "none",
+          authToken: "",
+          authUsername: "",
+          authPassword: "",
+          authHeaderName: "X-API-Key",
+          bodyType: "none",
+          body: "",
+          timeoutMs: 15000,
+          variableMappings: [],
+          customCode: "",
+          successMessage: "",
+          errorMessage: "API Integration gagal dijalankan.",
+          onSuccessInteractionId: "",
+          onErrorInteractionId: "",
+        },
+      };
     case "text_question":
       return { question: "Apa yang ingin Anda tanyakan?" };
     case "text_start":
@@ -1111,6 +1140,34 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                   </div>
                 )}
 
+                {selectedInteraction.type === "api_integration" && (
+                  <ApiIntegrationEditor
+                    config={selectedInteraction.config.apiIntegration || {
+                      method: "GET",
+                      url: "",
+                      queryParams: [],
+                      headers: [],
+                      authType: "none",
+                      authToken: "",
+                      authUsername: "",
+                      authPassword: "",
+                      authHeaderName: "X-API-Key",
+                      bodyType: "none",
+                      body: "",
+                      timeoutMs: 15000,
+                      variableMappings: [],
+                      customCode: "",
+                      successMessage: "",
+                      errorMessage: "API Integration gagal dijalankan.",
+                      onSuccessInteractionId: "",
+                      onErrorInteractionId: "",
+                    }}
+                    interactions={otherInteractions}
+                    variableOptions={availableVariableOptions}
+                    onChange={(apiIntegration) => updateConfig({ apiIntegration })}
+                  />
+                )}
+
                 {selectedInteraction.type === "rag" && (
                   <div className="space-y-3">
                     <label className="block space-y-1.5 text-[10px] text-neutral-500">Jumlah dokumen retrieval
@@ -1172,7 +1229,7 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
   );
 }
 
-function PromptSelector({ type, prompts, value, onChange, onSave, variableOptions }: { type: "guided_routing" | "small_talk" | "rag"; prompts: PromptOption[]; value: string; onChange: (value: string) => void; onSave: (promptId: string, content: string) => Promise<void>; variableOptions?: string[] }) {
+function PromptSelector({ type, prompts, value, onChange, onSave }: { type: "guided_routing" | "small_talk" | "rag"; prompts: PromptOption[]; value: string; onChange: (value: string) => void; onSave: (promptId: string, content: string) => Promise<void>; variableOptions?: string[] }) {
   const matchingPrompts = prompts.filter((prompt) => prompt.type === type);
   const selectedPrompt = matchingPrompts.find((prompt) => prompt.id === value);
   const [editing, setEditing] = useState(false);
@@ -1349,7 +1406,7 @@ function createLLMPayloadPreview(
   ), null, 2);
 }
 
-function TextField({ label, value, onChange, placeholder, variableOptions }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; variableOptions?: string[] }) {
+function TextField({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; variableOptions?: string[] }) {
   return <label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label>;
 }
 
@@ -1473,7 +1530,142 @@ function DataCollectionValidatorFields({ validator, variableOptions, onChange }:
   </div>;
 }
 
-function TextAreaField({ label, value, onChange, rows = 4, variableOptions }: { label: string; value: string; onChange: (value: string) => void; rows?: number; variableOptions?: string[] }) {
+function ApiKeyValueRows({
+  title,
+  rows,
+  onChange,
+  variableOptions,
+}: {
+  title: string;
+  rows: ApiIntegrationKeyValue[];
+  onChange: (rows: ApiIntegrationKeyValue[]) => void;
+  variableOptions: string[];
+}) {
+  const updateRow = (id: string, patch: Partial<ApiIntegrationKeyValue>) => {
+    onChange(rows.map((row) => row.id === id ? { ...row, ...patch } : row));
+  };
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-medium text-neutral-300">{title}</p>
+        <button type="button" onClick={() => onChange([...rows, { id: crypto.randomUUID(), name: "", value: "", enabled: true }])} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white"><Plus className="h-3 w-3" />Tambah</button>
+      </div>
+      {rows.length === 0 && <p className="rounded-md border border-dashed border-neutral-800 px-3 py-3 text-center text-[10px] text-neutral-600">Belum ada {title.toLocaleLowerCase()}.</p>}
+      {rows.map((row) => (
+        <div key={row.id} className="grid grid-cols-[28px_minmax(0,1fr)_minmax(0,1fr)_28px] items-center gap-1.5">
+          <input type="checkbox" checked={row.enabled} onChange={(event) => updateRow(row.id, { enabled: event.target.checked })} className="accent-white" aria-label="Aktifkan row" />
+          <input value={row.name} onChange={(event) => updateRow(row.id, { name: event.target.value })} placeholder="Nama" list={`api-vars-${title.replace(/\W/g, "-")}`} className="h-8 min-w-0 rounded-md border border-neutral-800 bg-black px-2 text-[10px] text-neutral-200 outline-none" />
+          <input value={row.value} onChange={(event) => updateRow(row.id, { value: event.target.value })} placeholder="Value; gunakan {nama_variable}" list="api-system-variables" className="h-8 min-w-0 rounded-md border border-neutral-800 bg-black px-2 text-[10px] text-neutral-200 outline-none" />
+          <button type="button" onClick={() => onChange(rows.filter((item) => item.id !== row.id))} aria-label="Hapus row" className="flex h-7 w-7 items-center justify-center rounded text-neutral-600 hover:bg-neutral-900 hover:text-red-300"><X className="h-3 w-3" /></button>
+        </div>
+      ))}
+      <datalist id="api-system-variables">{variableOptions.map((variable) => <option key={variable} value={variable} />)}</datalist>
+    </div>
+  );
+}
+
+function ApiIntegrationEditor({
+  config,
+  onChange,
+  variableOptions,
+  interactions,
+}: {
+  config: ApiIntegrationConfig;
+  onChange: (config: ApiIntegrationConfig) => void;
+  variableOptions: string[];
+  interactions: BotInteraction[];
+}) {
+  const [requestTab, setRequestTab] = useState<"params" | "headers" | "auth" | "body" | "response" | "code">("params");
+  const patch = (updates: Partial<ApiIntegrationConfig>) => onChange({ ...config, ...updates });
+  const tabItems: Array<[typeof requestTab, string]> = [
+    ["params", "Params"],
+    ["headers", "Headers"],
+    ["auth", "Authorization"],
+    ["body", "Body"],
+    ["response", "Response"],
+    ["code", "Custom JS"],
+  ];
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-[92px_minmax(0,1fr)] gap-2">
+        <select value={config.method} onChange={(event) => patch({ method: event.target.value as ApiIntegrationConfig["method"] })} className="h-10 rounded-md border border-neutral-800 bg-black px-2 text-xs font-semibold text-white outline-none">
+          {(["GET", "POST", "PUT", "PATCH", "DELETE"] as const).map((method) => <option key={method}>{method}</option>)}
+        </select>
+        <input value={config.url} onChange={(event) => patch({ url: event.target.value })} placeholder="https://api.example.com/v1/users" className="h-10 min-w-0 rounded-md border border-neutral-800 bg-black px-3 text-xs text-white outline-none placeholder:text-neutral-700 focus:border-neutral-600" />
+      </div>
+      <div className="flex min-w-0 gap-1 overflow-x-auto rounded-md border border-neutral-800 bg-neutral-950 p-1">
+        {tabItems.map(([tab, label]) => (
+          <button key={tab} type="button" onClick={() => setRequestTab(tab)} className={`h-8 shrink-0 rounded px-2.5 text-[10px] ${requestTab === tab ? "bg-white text-black" : "text-neutral-400 hover:bg-neutral-900 hover:text-white"}`}>{label}</button>
+        ))}
+      </div>
+
+      {requestTab === "params" && <ApiKeyValueRows title="Query parameters" rows={config.queryParams} onChange={(queryParams) => patch({ queryParams })} variableOptions={variableOptions} />}
+      {requestTab === "headers" && <ApiKeyValueRows title="Headers" rows={config.headers} onChange={(headers) => patch({ headers })} variableOptions={variableOptions} />}
+      {requestTab === "auth" && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="space-y-1.5 text-[10px] text-neutral-500">Authorization
+            <select value={config.authType} onChange={(event) => patch({ authType: event.target.value as ApiIntegrationConfig["authType"] })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-neutral-200">
+              <option value="none">No Auth</option><option value="bearer">Bearer Token</option><option value="basic">Basic Auth</option><option value="api_key">API Key</option>
+            </select>
+          </label>
+          {config.authType === "bearer" && <label className="space-y-1.5 text-[10px] text-neutral-500">Token<input value={config.authToken} onChange={(event) => patch({ authToken: event.target.value })} placeholder="{apiToken} atau token" className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-neutral-200" /></label>}
+          {config.authType === "basic" && <>
+            <label className="space-y-1.5 text-[10px] text-neutral-500">Username<input value={config.authUsername} onChange={(event) => patch({ authUsername: event.target.value })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-neutral-200" /></label>
+            <label className="space-y-1.5 text-[10px] text-neutral-500">Password<input type="password" value={config.authPassword} onChange={(event) => patch({ authPassword: event.target.value })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-neutral-200" /></label>
+          </>}
+          {config.authType === "api_key" && <>
+            <label className="space-y-1.5 text-[10px] text-neutral-500">Nama header<input value={config.authHeaderName} onChange={(event) => patch({ authHeaderName: event.target.value })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-neutral-200" /></label>
+            <label className="space-y-1.5 text-[10px] text-neutral-500">API key<input type="password" value={config.authToken} onChange={(event) => patch({ authToken: event.target.value })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-neutral-200" /></label>
+          </>}
+        </div>
+      )}
+      {requestTab === "body" && (
+        <div className="space-y-2">
+          <select value={config.bodyType} onChange={(event) => patch({ bodyType: event.target.value as ApiIntegrationConfig["bodyType"] })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-neutral-200">
+            <option value="none">None</option><option value="json">JSON</option><option value="form">Form URL Encoded</option><option value="text">Text</option>
+          </select>
+          {config.bodyType !== "none" && <textarea value={config.body} onChange={(event) => patch({ body: event.target.value })} rows={8} spellCheck={false} placeholder={config.bodyType === "json" ? '{\n  "name": "{nama_lengkap}",\n  "email": "{email}"\n}' : "key:value"} className="w-full resize-y rounded-md border border-neutral-800 bg-black px-3 py-2 font-mono text-[10px] leading-5 text-neutral-200 outline-none" />}
+        </div>
+      )}
+      {requestTab === "response" && (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between"><p className="text-[10px] font-medium text-neutral-300">Response → Variabel bot</p><button type="button" onClick={() => patch({ variableMappings: [...config.variableMappings, { id: crypto.randomUUID(), sourcePath: "", variableName: "", defaultValue: "" }] })} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white"><Plus className="h-3 w-3" />Tambah mapping</button></div>
+            {config.variableMappings.map((mapping) => (
+              <div key={mapping.id} className="grid gap-1.5 rounded-md border border-neutral-900 p-2 md:grid-cols-[1fr_1fr_1fr_28px]">
+                <input value={mapping.sourcePath} onChange={(event) => patch({ variableMappings: config.variableMappings.map((item) => item.id === mapping.id ? { ...item, sourcePath: event.target.value } : item) })} placeholder="data.user.id" className="h-8 rounded border border-neutral-800 bg-black px-2 text-[10px] text-white" />
+                <input value={mapping.variableName} onChange={(event) => patch({ variableMappings: config.variableMappings.map((item) => item.id === mapping.id ? { ...item, variableName: event.target.value.replace(/[^A-Za-z0-9_]/g, "_") } : item) })} placeholder="nama_variabel" className="h-8 rounded border border-neutral-800 bg-black px-2 text-[10px] text-white" />
+                <input value={mapping.defaultValue || ""} onChange={(event) => patch({ variableMappings: config.variableMappings.map((item) => item.id === mapping.id ? { ...item, defaultValue: event.target.value } : item) })} placeholder="Nilai default" className="h-8 rounded border border-neutral-800 bg-black px-2 text-[10px] text-white" />
+                <button type="button" onClick={() => patch({ variableMappings: config.variableMappings.filter((item) => item.id !== mapping.id) })} className="text-neutral-600 hover:text-red-300"><X className="mx-auto h-3 w-3" /></button>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            <label className="space-y-1.5 text-[10px] text-neutral-500">Pesan sukses<input value={config.successMessage} onChange={(event) => patch({ successMessage: event.target.value })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-white" /></label>
+            <label className="space-y-1.5 text-[10px] text-neutral-500">Pesan error<input value={config.errorMessage} onChange={(event) => patch({ errorMessage: event.target.value })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-white" /></label>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            <label className="space-y-1.5 text-[10px] text-neutral-500">Berhasil → interaction
+              <select value={config.onSuccessInteractionId} onChange={(event) => patch({ onSuccessInteractionId: event.target.value })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-white"><option value="">Next action biasa</option>{interactions.map((item) => <option key={item.id} value={item.id}>{item.config.name?.trim() || item.config.title?.trim() || item.config.question?.trim() || item.type}</option>)}</select>
+            </label>
+            <label className="space-y-1.5 text-[10px] text-neutral-500">Gagal → interaction
+              <select value={config.onErrorInteractionId} onChange={(event) => patch({ onErrorInteractionId: event.target.value })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-white"><option value="">Tetap di sini</option>{interactions.map((item) => <option key={item.id} value={item.id}>{item.config.name?.trim() || item.config.title?.trim() || item.config.question?.trim() || item.type}</option>)}</select>
+            </label>
+          </div>
+          <label className="block space-y-1.5 text-[10px] text-neutral-500">Timeout (ms)<input type="number" min={1000} max={60000} value={config.timeoutMs} onChange={(event) => patch({ timeoutMs: Math.max(1000, Math.min(60000, Number(event.target.value) || 15000)) })} className="h-9 w-full rounded-md border border-neutral-800 bg-black px-2.5 text-xs text-white" /></label>
+        </div>
+      )}
+      {requestTab === "code" && (
+        <div className="space-y-2">
+          <p className="text-[10px] leading-4 text-neutral-500">Custom JS berjalan setelah response HTTP. Gunakan <code>setBotVariable(name, value)</code>, <code>getBotVariable(name)</code>, dan <code>setTriggerNextInteraction(name)</code>. Helper menerima <code>response</code>, <code>status</code>, dan <code>variables</code>.</p>
+          <textarea value={config.customCode} onChange={(event) => patch({ customCode: event.target.value.slice(0, 20000) })} rows={10} spellCheck={false} placeholder={'// Contoh\nconst data = response?.data;\nsetBotVariable("customer_id", data?.id);\nsetTriggerNextInteraction("Lanjutkan");'} className="w-full resize-y rounded-md border border-neutral-800 bg-black px-3 py-2 font-mono text-[10px] leading-5 text-neutral-200 outline-none" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TextAreaField({ label, value, onChange, rows = 4 }: { label: string; value: string; onChange: (value: string) => void; rows?: number; variableOptions?: string[] }) {
   return <label className="block space-y-1.5 text-[10px] text-neutral-500">{label}<textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="w-full resize-y rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs leading-5 text-neutral-200 outline-none placeholder:text-neutral-700 focus:border-neutral-600" /></label>;
 }
 

@@ -5,6 +5,7 @@ import type { IncomingMessage } from "node:http";
 import ipaddr from "ipaddr.js";
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionFromRequest } from "@/lib/auth";
+import { verifyEngagementWidgetToken } from "@/lib/engagement-auth";
 
 export const runtime = "nodejs";
 
@@ -65,7 +66,13 @@ function requestImage(url: URL, address: { address: string; family: number }): P
 
 export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const widgetToken = req.nextUrl.searchParams.get("token") || "";
+  const widgetClaims = widgetToken
+    ? await verifyEngagementWidgetToken(widgetToken)
+    : null;
+  if (!session && !widgetClaims) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const source = req.nextUrl.searchParams.get("url") || "";
   if (!source || source.length > 2048) {
