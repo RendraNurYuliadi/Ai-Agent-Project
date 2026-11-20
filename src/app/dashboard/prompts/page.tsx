@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Zap,
   Plus,
@@ -55,8 +56,10 @@ const typeLabels: Record<string, { label: string; color: string; desc: string }>
 };
 
 export default function PromptsPage() {
+  const router = useRouter();
   const [prompts, setPrompts] = useState<Prompt[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("all");
   const [showModal, setShowModal] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<Prompt | null>(null);
@@ -97,11 +100,9 @@ export default function PromptsPage() {
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => {
-        if (d.user && d.user.role !== "admin") {
-          window.location.href =
-            d.user.role === "manager"
-              ? "/dashboard"
-              : "/dashboard/chatbot";
+        if (d.user) setIsAdmin(d.user.role === "admin");
+        if (d.user && !["admin", "manager"].includes(d.user.role)) {
+          router.replace("/dashboard/chatbot");
         }
       })
       .catch(() => { });
@@ -117,7 +118,7 @@ export default function PromptsPage() {
       });
 
     return () => { current = false; };
-  }, []);
+  }, [router]);
 
   const openNewModal = (type?: string) => {
     setEditingPrompt(null);
@@ -307,7 +308,7 @@ export default function PromptsPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || prompts.length === 0 || deletingAll} className="inline-flex items-center gap-2 rounded-xl border border-red-900/70 px-3.5 py-2.5 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-4 w-4" />Hapus semua ({prompts.length})</button>
+          {isAdmin && <button type="button" onClick={() => setBulkDeleteOpen(true)} disabled={loading || prompts.length === 0 || deletingAll} className="inline-flex items-center gap-2 rounded-xl border border-red-900/70 px-3.5 py-2.5 text-xs font-medium text-red-200 hover:bg-red-950/40 disabled:opacity-40"><Trash2 className="h-4 w-4" />Hapus semua ({prompts.length})</button>}
           <button onClick={() => openNewModal()} className="inline-flex items-center gap-2 px-4 py-2.5 bg-white hover:bg-neutral-200 text-black text-sm font-medium rounded-xl shadow-lg shadow-black/30 transition-all cursor-pointer"><Plus className="w-4 h-4" />Tambah Prompt</button>
         </div>
       </div>
@@ -413,12 +414,14 @@ export default function PromptsPage() {
                       <Edit3 className="w-4 h-4" />
                     </button>
 
-                    <button
-                      onClick={() => setPendingDelete(p)}
-                      className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setPendingDelete(p)}
+                        className="p-1.5 rounded-lg text-neutral-500 hover:text-white hover:bg-neutral-800 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

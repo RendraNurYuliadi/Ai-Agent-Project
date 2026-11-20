@@ -641,10 +641,13 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   },
   {
     id: "input",
-    name: "Input pesan",
-    description: "Field penulisan pesan visitor.",
+    name: "Input pesan & tombol kirim",
+    description: "Atur background area bersama, lalu style input dan tombol kirim secara terpisah.",
     className: "engagement-input",
-    defaultCss: `.engagement-input {
+    defaultCss: `.engagement-composer {
+  background: #0d0d0d;
+}
+.engagement-input {
   width: 100%;
   height: 44px;
   margin: 0;
@@ -660,6 +663,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   color: #737373;
 }`,
     parameters: [
+      color("Background area bersama", ".engagement-composer", "background", "#0d0d0d"),
       color("Warna teks input", ".engagement-input", "color", "#18181b"),
       color("Warna placeholder", ".engagement-input::placeholder", "color", "#737373"),
       color("Background input", ".engagement-input", "background", "#ffffff"),
@@ -706,10 +710,103 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   },
 ];
 
+export const GLOBAL_CHAT_STYLE_COMPONENT_IDS = [
+  "reply-buttons",
+  "link-buttons",
+  "card",
+  "carousel",
+  "interaction",
+  "welcome-message",
+  "bot-bubble",
+  "user-bubble",
+] as const;
+
 export function getDefaultComponentStyles(): Record<string, string> {
   return Object.fromEntries(
     ENGAGEMENT_COMPONENT_STYLES.map((component) => [component.id, component.defaultCss])
   );
+}
+
+export function getDefaultGlobalChatStyles(): Record<string, string> {
+  const defaults = getDefaultComponentStyles();
+  return Object.fromEntries(
+    GLOBAL_CHAT_STYLE_COMPONENT_IDS.map((id) => [id, defaults[id]])
+  );
+}
+
+export function normalizeGlobalChatStyles(value: unknown): Record<string, string> {
+  const styles = getDefaultGlobalChatStyles();
+  if (!value || typeof value !== "object" || Array.isArray(value)) return styles;
+
+  const candidate = value as Record<string, unknown>;
+  for (const id of GLOBAL_CHAT_STYLE_COMPONENT_IDS) {
+    if (typeof candidate[id] !== "string") continue;
+    styles[id] = candidate[id]
+      .slice(0, 10000)
+      .replace(/@import\b[^;]+;?/gi, "")
+      .replace(/expression\s*\([^)]*\)/gi, "")
+      .replace(/behavior\s*:/gi, "");
+  }
+  return styles;
+}
+
+function escapeCssRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function readEngagementStyleProperty(
+  css: string,
+  selector: string,
+  property: string,
+  fallback = ""
+): string {
+  const rulePattern = new RegExp(`(^|})\\s*${escapeCssRegExp(selector)}\\s*\\{([^}]*)\\}`, "gi");
+  const propertyPattern = new RegExp(`(?:^|;)\\s*${escapeCssRegExp(property)}\\s*:\\s*([^;]+)`, "gi");
+  let value = "";
+  let borderShorthand = "";
+
+  for (const rule of css.matchAll(rulePattern)) {
+    for (const match of rule[2].matchAll(propertyPattern)) {
+      value = match[1].trim();
+    }
+    for (const match of rule[2].matchAll(/(?:^|;)\s*border\s*:\s*([^;]+)/gi)) {
+      borderShorthand = match[1].trim();
+    }
+  }
+
+  if (!value && property === "border-width") {
+    value = borderShorthand.match(/(?:^|\s)(?:thin|medium|thick|0|(?:\d*\.?\d+)(?:px|em|rem|%|vw|vh|ch|ex|pt|pc|cm|mm|in)?)(?:\s|$)/i)?.[0].trim() || "";
+  } else if (!value && property === "border-color") {
+    value = borderShorthand.match(/#[\da-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|var\([^)]*\)|transparent|currentColor/i)?.[0] || "";
+  }
+
+  return value || fallback;
+}
+
+export function setEngagementStyleProperty(
+  css: string,
+  selector: string,
+  property: string,
+  value: string
+): string {
+  if (!value.trim()) return css;
+  const rulePattern = new RegExp(`(^|})\\s*(${escapeCssRegExp(selector)})\\s*\\{([^}]*)\\}`, "gi");
+  const propertyPattern = new RegExp(`(^|;)\\s*${escapeCssRegExp(property)}\\s*:\\s*[^;]+;?`, "gi");
+  let foundProperty = false;
+  const updatedCss = css.replace(rulePattern, (match, prefix: string, _matchedSelector: string, declarations: string) => {
+    const hasProperty = new RegExp(`(?:^|;)\\s*${escapeCssRegExp(property)}\\s*:`, "i").test(declarations);
+    if (!hasProperty) return match;
+
+    foundProperty = true;
+    const nextDeclarations = declarations.replace(
+      propertyPattern,
+      (_declaration, separator: string) => `${separator}\n  ${property}: ${value};`
+    );
+    return `${prefix}\n${selector} {\n${nextDeclarations.trim()}\n}`;
+  });
+
+  if (!foundProperty) return `${updatedCss.trimEnd()}\n${selector} {\n  ${property}: ${value};\n}`;
+  return updatedCss;
 }
 
 export function migrateLegacyComponentStyles(
@@ -794,6 +891,18 @@ export function migrateLegacyComponentStyles(
         css = `${css.trimEnd()}\n${parameter.selector} {\n${declaration}\n}`;
       }
     }
+    if (component.id === "input") {
+      const selector = ".engagement-composer";
+      const rulePattern = new RegExp(`(^|})\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`, "i");
+      const rule = rulePattern.exec(css);
+      if (!rule) {
+        css = `${css.trimEnd()}\n${selector} {\n  background: #0d0d0d;\n}`;
+      } else if (!/(?:^|;)\s*background\s*:/i.test(rule[2])) {
+        css = css.replace(rulePattern, (_match, prefix: string, declarations: string) =>
+          `${prefix}${selector} {${declarations.trimEnd()}\n  background: #0d0d0d;\n}`
+        );
+      }
+    }
     migratedStyles[component.id] = css;
   }
 
@@ -806,7 +915,7 @@ export function scopeEngagementCss(css: string, scope: string): string {
     .replace(/expression\s*\([^)]*\)/gi, "")
     .replace(/behavior\s*:/gi, "");
 
-  return cleaned
+  const scopedCss = cleaned
     .replace(/([^{}]+)\{([^{}]*)\}/g, (_match, selectorText: string, declarations: string) => {
       const selectors = selectorText
         .split(",")
@@ -819,4 +928,9 @@ export function scopeEngagementCss(css: string, scope: string): string {
       return `${selectors.join(",")} {${declarations}}`;
     })
     .replace(/\n\s*\n/g, "\n");
+  return `${scopedCss}
+${scope} .engagement-bot-bubble *,
+${scope} .engagement-user-bubble * {
+  font-size: inherit;
+}`;
 }

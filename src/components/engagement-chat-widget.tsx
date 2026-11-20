@@ -8,7 +8,11 @@ import {
   type ConversationMessageData,
 } from "@/components/conversation-message-body";
 import type { EngagementWidgetConfig } from "@/types/engagement";
-import { getDefaultComponentStyles, scopeEngagementCss } from "@/lib/engagement-theme";
+import {
+  getDefaultComponentStyles,
+  readEngagementStyleProperty,
+  scopeEngagementCss,
+} from "@/lib/engagement-theme";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
 
 interface SessionResponse {
@@ -271,6 +275,12 @@ export default function EngagementChatWidget({
     ...getDefaultComponentStyles(),
     ...(config.window.componentStyles || {}),
   };
+  const launcherBorderRadius = readEngagementStyleProperty(
+    componentStyles.launcher,
+    ".engagement-launcher",
+    "border-radius",
+    "36px"
+  );
   const scopedComponentCss = scopeEngagementCss(
     Object.values(componentStyles).join("\n"),
     `.engagement-window-${config.windowId}`
@@ -290,7 +300,7 @@ export default function EngagementChatWidget({
           aria-label={`Buka chat ${config.window.title}`}
           title={config.window.title}
           className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          style={{ backgroundColor: config.window.accentColor, "--engagement-line": config.window.lineColor } as CSSProperties}
+          style={{ backgroundColor: config.window.accentColor, borderRadius: launcherBorderRadius, "--engagement-line": config.window.lineColor } as CSSProperties}
         >
           {initializing ? <Loader2 className="h-6 w-6 animate-spin" /> : <MessageCircle className="h-7 w-7" />}
         </button>
@@ -407,7 +417,7 @@ export default function EngagementChatWidget({
       )}
       {error && messages.length > 0 && <p role="alert" className="px-4 pb-2 text-xs text-red-300">{error}</p>}
 
-      <form onSubmit={onSubmit} className="flex shrink-0 items-center gap-2 border-t border-white/10 bg-[#0d0d0d] p-3">
+      <form onSubmit={onSubmit} className="engagement-composer flex shrink-0 items-center gap-2 border-t border-white/10 p-3">
         <input
           value={input}
           onChange={(event) => setInput(event.target.value)}

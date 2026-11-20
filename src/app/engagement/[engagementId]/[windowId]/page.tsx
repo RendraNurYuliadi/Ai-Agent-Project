@@ -2,7 +2,10 @@ import { headers } from "next/headers";
 import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { normalizeEngagementOrigin } from "@/lib/engagement-data";
-import { migrateLegacyComponentStyles } from "@/lib/engagement-theme";
+import {
+  migrateLegacyComponentStyles,
+  normalizeGlobalChatStyles,
+} from "@/lib/engagement-theme";
 import { isChatScrollAnimationStyle } from "@/lib/chat-ui-preferences";
 import { signEngagementWidgetToken } from "@/lib/engagement-auth";
 import type { EngagementWidgetConfig } from "@/types/engagement";
@@ -42,6 +45,19 @@ export default async function EngagementWidgetPage({
     return <UnavailableWidget />;
   }
 
+  const globalStyleSetting = await db.collection("botSettings").findOne(
+    { key: "globalChatStyles" },
+    { projection: { componentStyles: 1 } }
+  );
+  const componentStyles = {
+    ...migrateLegacyComponentStyles(
+      windowConfig.componentStyles && typeof windowConfig.componentStyles === "object"
+        ? windowConfig.componentStyles as Record<string, string>
+        : {}
+    ),
+    ...normalizeGlobalChatStyles(globalStyleSetting?.componentStyles),
+  };
+
   const widgetConfig: EngagementWidgetConfig = {
     engagementId,
     windowId,
@@ -74,11 +90,7 @@ export default async function EngagementWidgetPage({
         ? windowConfig.bubbleAnimationStyle
         : "fade",
       customCss: typeof windowConfig.customCss === "string" ? windowConfig.customCss : "",
-      componentStyles: migrateLegacyComponentStyles(
-        windowConfig.componentStyles && typeof windowConfig.componentStyles === "object"
-          ? windowConfig.componentStyles as Record<string, string>
-          : {}
-      ),
+      componentStyles,
     },
   };
 

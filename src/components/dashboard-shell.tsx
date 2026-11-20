@@ -185,7 +185,7 @@ export default function DashboardShell({
       href: "/dashboard/prompts",
       icon: Zap,
       current: pathname.startsWith("/dashboard/prompts"),
-      roles: ["admin"],
+      roles: ["admin", "manager"],
     },
   ];
 

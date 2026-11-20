@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Loader2, Plus, Save, Sparkles, Trash2, MessageCircle, MoreVertical } from "lucide-react";
 import Image from "next/image";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
+import GlobalChatStyleEditor from "@/components/global-chat-style-editor";
 import {
   CHAT_WINDOW_ANIMATION_DESCRIPTIONS,
   CHAT_SCROLL_ANIMATION_STYLES,
@@ -19,8 +20,13 @@ import type {
 import {
   DEFAULT_ENGAGEMENT_CSS,
   ENGAGEMENT_COMPONENT_STYLES,
+  GLOBAL_CHAT_STYLE_COMPONENT_IDS,
   getDefaultComponentStyles,
+  getDefaultGlobalChatStyles,
   migrateLegacyComponentStyles,
+  normalizeGlobalChatStyles,
+  readEngagementStyleProperty as readCssProperty,
+  setEngagementStyleProperty as setCssProperty,
   scopeEngagementCss,
 } from "@/lib/engagement-theme";
 
@@ -36,6 +42,7 @@ interface SkillOption {
 const DEFAULT_ACCENT = "#171717";
 const DEFAULT_BACKGROUND = "#ffffff";
 const DEFAULT_LINE = "#e5e5e5";
+const GLOBAL_CHAT_STYLE_ID_SET = new Set<string>(GLOBAL_CHAT_STYLE_COMPONENT_IDS);
 
 function normalizeWindow(windowItem: EngagementWindow): EngagementWindow {
   const componentStyles = migrateLegacyComponentStyles({
@@ -69,55 +76,6 @@ function normalizeWindow(windowItem: EngagementWindow): EngagementWindow {
 
 type EngagementTab = "general" | "windows" | "embed";
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function readCssProperty(css: string, selector: string, property: string, fallback = ""): string {
-  const rulePattern = new RegExp(`(^|})\\s*${escapeRegExp(selector)}\\s*\\{([^}]*)\\}`, "gi");
-  const propertyPattern = new RegExp(`(?:^|;)\\s*${escapeRegExp(property)}\\s*:\\s*([^;]+)`, "gi");
-  let value = "";
-  let borderShorthand = "";
-
-  for (const rule of css.matchAll(rulePattern)) {
-    for (const match of rule[2].matchAll(propertyPattern)) {
-      value = match[1].trim();
-    }
-    for (const match of rule[2].matchAll(/(?:^|;)\s*border\s*:\s*([^;]+)/gi)) {
-      borderShorthand = match[1].trim();
-    }
-  }
-
-  if (!value && property === "border-width") {
-    value = borderShorthand.match(/(?:^|\s)(?:thin|medium|thick|0|(?:\d*\.?\d+)(?:px|em|rem|%|vw|vh|ch|ex|pt|pc|cm|mm|in)?)(?:\s|$)/i)?.[0].trim() || "";
-  } else if (!value && property === "border-color") {
-    value = borderShorthand.match(/#[\da-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|var\([^)]*\)|transparent|currentColor/i)?.[0] || "";
-  }
-
-  return value || fallback;
-}
-
-function setCssProperty(css: string, selector: string, property: string, value: string): string {
-  if (!value.trim()) return css;
-  const rulePattern = new RegExp(`(^|})\\s*(${escapeRegExp(selector)})\\s*\\{([^}]*)\\}`, "gi");
-  const propertyPattern = new RegExp(`(^|;)\\s*${escapeRegExp(property)}\\s*:\\s*[^;]+;?`, "gi");
-  let foundProperty = false;
-  const updatedCss = css.replace(rulePattern, (match, prefix: string, _matchedSelector: string, declarations: string) => {
-    const hasProperty = new RegExp(`(?:^|;)\\s*${escapeRegExp(property)}\\s*:`, "i").test(declarations);
-    if (!hasProperty) return match;
-
-    foundProperty = true;
-    const nextDeclarations = declarations.replace(
-      propertyPattern,
-      (_declaration, separator: string) => `${separator}\n  ${property}: ${value};`
-    );
-    return `${prefix}\n${selector} {\n${nextDeclarations.trim()}\n}`;
-  });
-
-  if (!foundProperty) return `${updatedCss.trimEnd()}\n${selector} {\n  ${property}: ${value};\n}`;
-  return updatedCss;
-}
-
 function getComponentPreviewCss(
   styles: Record<string, string>,
   componentId: string
@@ -128,6 +86,7 @@ function getComponentPreviewCss(
     carousel: ["card", "reply-buttons"],
     interaction: ["reply-buttons"],
     "welcome-message": ["reply-buttons"],
+    input: ["send"],
   };
   const componentIds = [componentId, ...(dependencies[componentId] || [])];
   return [...new Set(componentIds)]
@@ -150,7 +109,11 @@ function EngagementComponentPreview({
           type="button"
           aria-label="Preview icon chat"
           className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl"
-          style={{ backgroundColor: item.accentColor, "--engagement-line": item.lineColor } as CSSProperties}
+          style={{
+            backgroundColor: item.accentColor,
+            borderRadius: readCssProperty(item.componentStyles.launcher, ".engagement-launcher", "border-radius", "36px"),
+            "--engagement-line": item.lineColor,
+          } as CSSProperties}
         >
           <MessageCircle className="h-7 w-7" />
         </button>
@@ -277,12 +240,19 @@ function EngagementComponentPreview({
       );
     case "input":
       return (
-        <input
-          readOnly
-          value=""
-          placeholder="Tulis pesan..."
-          className="engagement-input h-11 w-full min-w-0 flex-1 rounded-xl border border-white/10 bg-[#151515] px-3 text-sm text-white placeholder:text-neutral-500"
-        />
+        <div className="engagement-composer flex w-full items-center gap-2 p-3">
+          <input
+            readOnly
+            value=""
+            placeholder="Tulis pesan..."
+            className="engagement-input h-11 min-w-0 flex-1 rounded-xl border border-white/10 bg-[#151515] px-3 text-sm text-white placeholder:text-neutral-500"
+          />
+          <button type="button" className="engagement-send flex h-11 w-11 shrink-0 items-center justify-center" aria-label="Preview kirim">
+            {item.sendIconUrl
+              ? <Image src={getImageProxyUrl(item.sendIconUrl)} alt="" width={20} height={20} unoptimized className="engagement-send-icon" />
+              : <ArrowUp className="engagement-send-glyph" />}
+          </button>
+        </div>
       );
     case "send":
       return (
@@ -307,6 +277,9 @@ export default function EngagementDetailPage() {
   const [isActive, setIsActive] = useState(false);
   const [entryPoints, setEntryPoints] = useState<EngagementEntryPoint[]>([]);
   const [windows, setWindows] = useState<EngagementWindow[]>([]);
+  const [globalComponentStyles, setGlobalComponentStyles] = useState<Record<string, string>>(getDefaultGlobalChatStyles);
+  const [globalStylesSaving, setGlobalStylesSaving] = useState(false);
+  const [globalStylesSaved, setGlobalStylesSaved] = useState(true);
   const [entryName, setEntryName] = useState("");
   const [entryOrigin, setEntryOrigin] = useState("");
   const [snippetEntryPointId, setSnippetEntryPointId] = useState("");
@@ -360,9 +333,14 @@ export default function EngagementDetailPage() {
           if (!response.ok) throw new Error(data.error || "Gagal memuat daftar skill.");
           return data;
         }),
+        fetch("/api/chat-styles").then(async (response) => {
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error || "Gagal memuat style global.");
+          return data;
+        }),
       ]),
     ])
-      .then(([meData, [engagementData, skillsData]]) => {
+      .then(([meData, [engagementData, skillsData, styleData]]) => {
         if (!active) return;
         if (!meData.user || !["admin", "manager"].includes(meData.user.role)) {
           router.replace("/dashboard");
@@ -375,6 +353,8 @@ export default function EngagementDetailPage() {
         setEntryPoints(item.entryPoints || []);
         setWindows((item.windows || []).map(normalizeWindow));
         setSkills(skillsData.skills || []);
+        setGlobalComponentStyles(normalizeGlobalChatStyles(styleData.componentStyles));
+        setGlobalStylesSaved(true);
         setSnippetEntryPointId(item.entryPoints?.[0]?.id || "");
         setSnippetWindowId(item.windows?.[0]?.id || "");
       })
@@ -469,6 +449,27 @@ export default function EngagementDetailPage() {
       setError(saveError instanceof Error ? saveError.message : "Gagal menyimpan Engagement.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveGlobalChatStyles = async () => {
+    setGlobalStylesSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/chat-styles", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ componentStyles: globalComponentStyles }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menyimpan style global.");
+      const styles = normalizeGlobalChatStyles(data.componentStyles);
+      setGlobalComponentStyles(styles);
+      setGlobalStylesSaved(true);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Gagal menyimpan style global.");
+    } finally {
+      setGlobalStylesSaving(false);
     }
   };
 
@@ -615,6 +616,36 @@ export default function EngagementDetailPage() {
             <button type="button" onClick={addWindow} className="inline-flex h-9 items-center gap-2 rounded-lg border border-neutral-700 px-3 text-xs font-medium text-white hover:bg-neutral-900"><Plus className="h-4 w-4" />Tambah window</button>
           </div>
 
+          <section className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-semibold text-white">Style global chatbot</h3>
+                <p className="mt-1 text-[10px] leading-4 text-neutral-500">
+                  Dipakai bersama oleh menu Chatbot dan semua Engagement. Header, icon, input, tombol kirim, dan background window tetap diatur per Engagement.
+                </p>
+                <p className={`mt-1 text-[10px] ${globalStylesSaved ? "text-emerald-400" : "text-amber-400"}`}>
+                  {globalStylesSaved ? "Style global tersimpan." : "Ada perubahan style global yang belum disimpan."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void saveGlobalChatStyles()}
+                disabled={globalStylesSaving || globalStylesSaved}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 text-[10px] font-semibold text-black hover:bg-neutral-200 disabled:opacity-50"
+              >
+                {globalStylesSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                Simpan style global
+              </button>
+            </div>
+            <GlobalChatStyleEditor
+              componentStyles={globalComponentStyles}
+              onChange={(styles) => {
+                setGlobalComponentStyles(styles);
+                setGlobalStylesSaved(false);
+              }}
+            />
+          </section>
+
           {activeBotSkills.length === 0 && <p className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-200">Belum ada skill yang terhubung ke bot aktif. Atur bot pada menu Skills terlebih dahulu.</p>}
           <div className="space-y-3">
             {windows.map((item, index) => (
@@ -757,11 +788,13 @@ export default function EngagementDetailPage() {
                     <div>
                       <h4 className="text-xs font-semibold text-white">Custom CSS per komponen</h4>
                       <p className="mt-1 text-[10px] leading-4 text-neutral-500">
-                        Setiap komponen memiliki preview independen, CSS sendiri, dan class yang aman. Struktur, teks, data, dan action bot tidak berubah.
+                        Input pesan dan tombol kirim diatur dalam satu kartu, tetapi properti serta CSS masing-masing tetap terpisah. Struktur, teks, data, dan action bot tidak berubah.
                       </p>
                     </div>
                     <div className="grid gap-3 xl:grid-cols-2">
-                      {ENGAGEMENT_COMPONENT_STYLES.map((component) => (
+                      {ENGAGEMENT_COMPONENT_STYLES.filter((component) =>
+                        component.id !== "send" && !GLOBAL_CHAT_STYLE_ID_SET.has(component.id)
+                      ).map((component) => (
                         <article key={component.id} className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950">
                           <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(getComponentPreviewCss(item.componentStyles, component.id), `.engagement-preview-${item.id}-${component.id}`) }} />
                           <div className="border-b border-neutral-800 px-3 py-2.5">
@@ -774,15 +807,32 @@ export default function EngagementDetailPage() {
                           <div className="border-t border-neutral-800 p-2">
                             {(() => {
                               const editorKey = `${item.id}:${component.id}`;
-                              const css = item.componentStyles[component.id] || component.defaultCss;
-                              const setProperty = (selector: string, property: string, value: string) => updateWindow(item.id, {
+                              const sendDefinition = ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === "send");
+                              const parameterSections = component.id === "input"
+                                ? [
+                                    { title: "Background container bersama", styleId: "input", parameters: component.parameters.filter((parameter) => parameter.selector === ".engagement-composer") },
+                                    { title: "Input pesan", styleId: "input", parameters: component.parameters.filter((parameter) => parameter.selector !== ".engagement-composer") },
+                                    { title: "Tombol kirim", styleId: "send", parameters: sendDefinition?.parameters || [] },
+                                  ]
+                                : [{ title: "", styleId: component.id, parameters: component.parameters }];
+                              const cssSections = component.id === "input"
+                                ? [
+                                    { styleId: "input", label: "CSS input dan area bersama" },
+                                    { styleId: "send", label: "CSS tombol kirim" },
+                                  ]
+                                : [{ styleId: component.id, label: `CSS ${component.name}` }];
+                              const styleCss = (styleId: string) =>
+                                item.componentStyles[styleId] ||
+                                ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === styleId)?.defaultCss ||
+                                "";
+                              const setProperty = (styleId: string, selector: string, property: string, value: string) => updateWindow(item.id, {
                                 ...(component.id === "header" && selector === ".engagement-header" && property === "background"
                                   ? { accentColor: value }
                                   : {}),
                                 componentStyles: (() => {
                                   const styles = {
-                                  ...item.componentStyles,
-                                  [component.id]: setCssProperty(css, selector, property, value),
+                                    ...item.componentStyles,
+                                    [styleId]: setCssProperty(styleCss(styleId), selector, property, value),
                                   };
                                   if (component.id === "header" && selector === ".engagement-header" && property === "background") {
                                     styles.send = setCssProperty(item.componentStyles.send, ".engagement-send", "background", value);
@@ -791,6 +841,16 @@ export default function EngagementDetailPage() {
                                 })(),
                               });
                               const resetComponentStyle = () => {
+                                if (component.id === "input") {
+                                  updateWindow(item.id, {
+                                    componentStyles: {
+                                      ...item.componentStyles,
+                                      input: component.defaultCss,
+                                      send: sendDefinition?.defaultCss || "",
+                                    },
+                                  });
+                                  return;
+                                }
                                 const componentStyles = {
                                   ...item.componentStyles,
                                   [component.id]: component.defaultCss,
@@ -817,57 +877,71 @@ export default function EngagementDetailPage() {
                                   </div>
                                   {openStyleEditor[editorKey] && (
                                     <div className="grid grid-cols-2 gap-2 rounded-md border border-neutral-800 bg-neutral-900 p-2">
-                                      {component.parameters.map((parameter) => {
-                                        const currentValue = readCssProperty(css, parameter.selector, parameter.property, parameter.defaultValue);
-                                        const controlKey = `${parameter.selector}:${parameter.property}`;
-                                        if (parameter.type === "color") {
-                                          const colorValue = currentValue.match(/^#[0-9a-fA-F]{6}$/)?.[0] || parameter.defaultValue;
-                                          return (
-                                            <label key={controlKey} className="space-y-1 text-[9px] text-neutral-500">
-                                              {parameter.label}
-                                              <input
-                                                type="color"
-                                                value={colorValue}
-                                                onChange={(event) => setProperty(parameter.selector, parameter.property, event.target.value)}
-                                                className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5"
-                                              />
-                                            </label>
-                                          );
-                                        }
-                                        const fallbackNumber = Number.parseFloat(parameter.defaultValue) || 0;
-                                        const numericValue = Number.parseFloat(currentValue);
-                                        return (
-                                          <label key={controlKey} className="space-y-1 text-[9px] text-neutral-500">
-                                            {parameter.label}
-                                            <input
-                                              type="number"
-                                              min={parameter.min}
-                                              max={parameter.max}
-                                              step={parameter.step}
-                                              value={Number.isFinite(numericValue) ? numericValue : fallbackNumber}
-                                              onChange={(event) => {
-                                                const next = Number(event.target.value);
-                                                if (!Number.isFinite(next)) return;
-                                                const bounded = Math.min(parameter.max ?? next, Math.max(parameter.min ?? next, next));
-                                                setProperty(parameter.selector, parameter.property, `${bounded}${parameter.unit || ""}`);
-                                              }}
-                                              className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 px-2 text-[10px] text-white"
-                                            />
-                                          </label>
-                                        );
-                                      })}
+                                      {parameterSections.map((section) => (
+                                        <section key={section.title || section.styleId} className="col-span-2 space-y-1.5">
+                                          {section.title && <p className="border-t border-neutral-800 pt-1.5 text-[9px] font-medium text-neutral-300">{section.title}</p>}
+                                          <div className="grid grid-cols-2 gap-2">
+                                            {section.parameters.map((parameter) => {
+                                              const currentValue = readCssProperty(styleCss(section.styleId), parameter.selector, parameter.property, parameter.defaultValue);
+                                              const controlKey = `${section.styleId}:${parameter.selector}:${parameter.property}`;
+                                              if (parameter.type === "color") {
+                                                const colorValue = currentValue.match(/^#[0-9a-fA-F]{6}$/)?.[0] || parameter.defaultValue;
+                                                return (
+                                                  <label key={controlKey} className="space-y-1 text-[9px] text-neutral-500">
+                                                    {parameter.label}
+                                                    <input
+                                                      type="color"
+                                                      value={colorValue}
+                                                      onChange={(event) => setProperty(section.styleId, parameter.selector, parameter.property, event.target.value)}
+                                                      className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5"
+                                                    />
+                                                  </label>
+                                                );
+                                              }
+                                              const fallbackNumber = Number.parseFloat(parameter.defaultValue) || 0;
+                                              const numericValue = Number.parseFloat(currentValue);
+                                              return (
+                                                <label key={controlKey} className="space-y-1 text-[9px] text-neutral-500">
+                                                  {parameter.label}
+                                                  <input
+                                                    type="number"
+                                                    min={parameter.min}
+                                                    max={parameter.max}
+                                                    step={parameter.step}
+                                                    value={Number.isFinite(numericValue) ? numericValue : fallbackNumber}
+                                                    onChange={(event) => {
+                                                      const next = Number(event.target.value);
+                                                      if (!Number.isFinite(next)) return;
+                                                      const bounded = Math.min(parameter.max ?? next, Math.max(parameter.min ?? next, next));
+                                                      setProperty(section.styleId, parameter.selector, parameter.property, `${bounded}${parameter.unit || ""}`);
+                                                    }}
+                                                    className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 px-2 text-[10px] text-white"
+                                                  />
+                                                </label>
+                                              );
+                                            })}
+                                          </div>
+                                        </section>
+                                      ))}
                                     </div>
                                   )}
                                   <details>
                                     <summary className="cursor-pointer text-[9px] text-neutral-500 hover:text-neutral-300">Tampilkan CSS</summary>
-                                    <textarea
-                                      value={css}
-                                      onChange={(event) => updateWindow(item.id, { componentStyles: { ...item.componentStyles, [component.id]: event.target.value.slice(0, 10000) } })}
-                                      spellCheck={false}
-                                      rows={7}
-                                      aria-label={`CSS ${component.name}`}
-                                      className="mt-2 w-full resize-y rounded-md border border-neutral-800 bg-black px-2.5 py-2 font-mono text-[9px] leading-4 text-neutral-300 outline-none focus:border-neutral-600"
-                                    />
+                                    <div className="mt-2 space-y-2">
+                                      {cssSections.map((section) => (
+                                        <label key={section.styleId} className="block space-y-1 text-[9px] text-neutral-500">
+                                          {section.label}
+                                          <textarea
+                                            value={styleCss(section.styleId)}
+                                            onChange={(event) => updateWindow(item.id, { componentStyles: { ...item.componentStyles, [section.styleId]: event.target.value.slice(0, 10000) } })}
+                                            spellCheck={false}
+                                            rows={7}
+                                            aria-label={section.label}
+                                            className="w-full resize-y rounded-md border border-neutral-800 bg-black px-2.5 py-2 font-mono text-[9px] leading-4 text-neutral-300 outline-none focus:border-neutral-600"
+                                          />
+                                        </label>
+                                      ))}
+                                    </div>
                                   </details>
                                 </div>
                               );
@@ -884,7 +958,7 @@ export default function EngagementDetailPage() {
                     <span className="text-[10px] text-neutral-600">380 × 620</span>
                   </div>
                   <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(
-                    Object.values(item.componentStyles).join("\n"),
+                    Object.values({ ...item.componentStyles, ...globalComponentStyles }).join("\n"),
                     `.engagement-preview-window-${item.id}`
                   ) }} />
                   <div className={`engagement-preview-window-${item.id} relative mx-auto h-[457px] w-[280px] overflow-hidden`}>
@@ -905,10 +979,7 @@ export default function EngagementDetailPage() {
                         <EngagementComponentPreview item={item} componentId="carousel" />
                         <EngagementComponentPreview item={item} componentId="interaction" />
                       </div>
-                      <form className="flex shrink-0 items-center gap-2 border-t border-white/10 bg-[#0d0d0d] p-3">
-                        <EngagementComponentPreview item={item} componentId="input" />
-                        <EngagementComponentPreview item={item} componentId="send" />
-                      </form>
+                      <EngagementComponentPreview item={item} componentId="input" />
                     </div>
                   </div>
                 </div>
