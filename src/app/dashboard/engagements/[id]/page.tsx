@@ -6,6 +6,10 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUp, Copy, ExternalLink, Loader2, Plus, Save, Trash2, MessageCircle, MoreVertical } from "lucide-react";
 import Image from "next/image";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
+import {
+  CHAT_SCROLL_ANIMATION_STYLES,
+  isChatScrollAnimationStyle,
+} from "@/lib/chat-ui-preferences";
 import type {
   EngagementEntryPoint,
   EngagementRecord,
@@ -50,6 +54,13 @@ function normalizeWindow(windowItem: EngagementWindow): EngagementWindow {
       : windowItem.lineColor,
     borderRadius: typeof windowItem.borderRadius === "number" ? windowItem.borderRadius : 16,
     allowClose: windowItem.allowClose !== false,
+    windowAnimationStyle: isChatScrollAnimationStyle(windowItem.windowAnimationStyle)
+      ? windowItem.windowAnimationStyle
+      : "pop",
+    bubbleAnimationEnabled: windowItem.bubbleAnimationEnabled === true,
+    bubbleAnimationStyle: isChatScrollAnimationStyle(windowItem.bubbleAnimationStyle)
+      ? windowItem.bubbleAnimationStyle
+      : "fade",
     customCss: typeof windowItem.customCss === "string" ? windowItem.customCss : DEFAULT_ENGAGEMENT_CSS,
     componentStyles,
   };
@@ -243,6 +254,9 @@ export default function EngagementDetailPage() {
       lineColor: DEFAULT_LINE,
       borderRadius: 16,
       allowClose: true,
+      windowAnimationStyle: "pop",
+      bubbleAnimationEnabled: false,
+      bubbleAnimationStyle: "fade",
       customCss: DEFAULT_ENGAGEMENT_CSS,
       componentStyles: getDefaultComponentStyles(),
     };
@@ -279,9 +293,48 @@ export default function EngagementDetailPage() {
   const snippetFrameId = selectedWindow
     ? `engagement-chat-${id}-${selectedWindow.id}`.replace(/[^a-zA-Z0-9_-]/g, "")
     : "";
-  const snippet = selectedEntry && selectedWindow && typeof window !== "undefined"
+  let snippet = selectedEntry && selectedWindow && typeof window !== "undefined"
     ? `<iframe\n  id="${snippetFrameId}"\n  src="${window.location.origin}/engagement/${encodeURIComponent(id)}/${encodeURIComponent(selectedWindow.id)}?entryPointId=${encodeURIComponent(selectedEntry.id)}"\n  title="Chat widget"\n  width="72"\n  height="72"\n  style="position:fixed;right:24px;bottom:24px;width:72px;height:72px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);z-index:9999;border:0;background:transparent;transition:width .2s ease,height .2s ease"\n  referrerpolicy="strict-origin-when-cross-origin"\n  allow="clipboard-write"\n></iframe>\n<script>\n(() => {\n  const frame = document.getElementById("${snippetFrameId}");\n  if (!frame) return;\n  const widgetOrigin = new URL(frame.src).origin;\n  window.addEventListener("message", (event) => {\n    if (event.origin !== widgetOrigin || event.source !== frame.contentWindow) return;\n    if (event.data?.type !== "engagement-widget:resize") return;\n    const isOpen = event.data.open === true;\n    frame.style.width = isOpen ? "min(380px, calc(100vw - 32px))" : "72px";\n    frame.style.height = isOpen ? "min(620px, calc(100vh - 32px))" : "72px";\n  });\n})();\n</script>`
     : "";
+  if (snippet) {
+    snippet = snippet.replace(/<script>[\s\S]*?<\/script>$/, "");
+    snippet += `\n<script>
+(() => {
+  const frame = document.getElementById("${snippetFrameId}");
+  if (!frame || !document.body) return;
+  if (frame.parentElement !== document.body) document.body.appendChild(frame);
+  const widgetOrigin = new URL(frame.src).origin;
+  const setFrameSize = (isOpen, animate = false) => {
+    frame.style.setProperty("position", "fixed", "important");
+    frame.style.setProperty("top", "auto", "important");
+    frame.style.setProperty("left", "auto", "important");
+    frame.style.setProperty("right", "24px", "important");
+    frame.style.setProperty("bottom", "24px", "important");
+    frame.style.setProperty("margin", "0", "important");
+    frame.style.setProperty("z-index", "2147483000", "important");
+    frame.style.setProperty("max-width", "calc(100vw - 32px)", "important");
+    frame.style.setProperty("max-height", "calc(100vh - 32px)", "important");
+    frame.style.setProperty("border", "0", "important");
+    frame.style.setProperty("background", "transparent", "important");
+    frame.style.setProperty(
+      "transition",
+      animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "width 3s cubic-bezier(0.16, 1, 0.3, 1), height 3s cubic-bezier(0.16, 1, 0.3, 1)"
+        : "none",
+      "important"
+    );
+    frame.style.setProperty("width", isOpen ? "min(380px, calc(100vw - 32px))" : "72px", "important");
+    frame.style.setProperty("height", isOpen ? "min(620px, calc(100vh - 32px))" : "72px", "important");
+  };
+  setFrameSize(false);
+  window.addEventListener("message", (event) => {
+    if (event.origin !== widgetOrigin || event.source !== frame.contentWindow) return;
+    if (event.data?.type !== "engagement-widget:resize") return;
+    setFrameSize(event.data.open === true, event.data.animate === true);
+  });
+})();
+</script>`;
+  }
 
   const copySnippet = async () => {
     if (!snippet) return;
@@ -447,6 +500,75 @@ export default function EngagementDetailPage() {
                     <input type="checkbox" checked={item.allowClose} onChange={(event) => updateWindow(item.id, { allowClose: event.target.checked })} className="h-4 w-4 accent-white" />
                     Tampilkan tombol close pada menu titik tiga
                   </label>
+                  <div className="md:col-span-2 grid gap-3 xl:grid-cols-2">
+                  <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-3">
+                    <h4 className="text-xs font-semibold text-white">Animasi tampil / sembunyi</h4>
+                    <p className="mt-1 text-[10px] leading-4 text-neutral-500">Window dan ikon chat bertransisi selama 3 detik.</p>
+                    <fieldset className="mt-3 space-y-2">
+                      <legend className="mb-2 text-[11px] font-medium text-neutral-300">Pilih transisi</legend>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {CHAT_SCROLL_ANIMATION_STYLES.map((style) => (
+                          <label key={`window-${style.value}`} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 transition-colors ${item.windowAnimationStyle === style.value ? "border-neutral-500 bg-neutral-900/70" : "border-neutral-800 bg-black hover:border-neutral-700"}`}>
+                            <input
+                              type="radio"
+                              name={`window-animation-${item.id}`}
+                              value={style.value}
+                              checked={item.windowAnimationStyle === style.value}
+                              onChange={() => updateWindow(item.id, { windowAnimationStyle: style.value })}
+                              className="mt-0.5 accent-white"
+                            />
+                            <span>
+                              <span className="block text-[11px] font-medium text-neutral-200">{style.label}</span>
+                              <span className="mt-0.5 block text-[10px] leading-4 text-neutral-500">{style.description}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  </section>
+                  <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="text-xs font-semibold text-white">Transisi bubble chat</h4>
+                        <p className="mt-1 text-[10px] leading-4 text-neutral-500">Animasi saat bubble pesan masuk ke chat window.</p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-label={`Transisi bubble chat ${item.name}`}
+                        aria-checked={item.bubbleAnimationEnabled}
+                        onClick={() => updateWindow(item.id, { bubbleAnimationEnabled: !item.bubbleAnimationEnabled })}
+                        className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${item.bubbleAnimationEnabled ? "border-white bg-white" : "border-neutral-700 bg-neutral-900"}`}
+                      >
+                        <span className={`h-4 w-4 rounded-full transition-transform ${item.bubbleAnimationEnabled ? "translate-x-5 bg-black" : "translate-x-1 bg-neutral-400"}`} />
+                      </button>
+                    </div>
+                    <p className="mt-3 border-t border-neutral-900 pt-2 text-[10px] text-neutral-500">{item.bubbleAnimationEnabled ? "Aktif" : "Nonaktif"}</p>
+                    {item.bubbleAnimationEnabled && (
+                      <fieldset className="mt-3 space-y-2 border-t border-neutral-900 pt-3">
+                        <legend className="mb-2 text-[11px] font-medium text-neutral-300">Pilih transisi</legend>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {CHAT_SCROLL_ANIMATION_STYLES.map((style) => (
+                            <label key={`bubble-${style.value}`} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 transition-colors ${item.bubbleAnimationStyle === style.value ? "border-neutral-500 bg-neutral-900/70" : "border-neutral-800 bg-black hover:border-neutral-700"}`}>
+                              <input
+                                type="radio"
+                                name={`bubble-animation-${item.id}`}
+                                value={style.value}
+                                checked={item.bubbleAnimationStyle === style.value}
+                                onChange={() => updateWindow(item.id, { bubbleAnimationStyle: style.value })}
+                                className="mt-0.5 accent-white"
+                              />
+                              <span>
+                                <span className="block text-[11px] font-medium text-neutral-200">{style.label}</span>
+                                <span className="mt-0.5 block text-[10px] leading-4 text-neutral-500">{style.description}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
+                    )}
+                  </section>
+                  </div>
                   <div className="md:col-span-2 space-y-3">
                     <div>
                       <h4 className="text-xs font-semibold text-white">Custom CSS per komponen</h4>
@@ -462,7 +584,12 @@ export default function EngagementDetailPage() {
                             <p className="text-xs font-semibold text-white">{component.name}</p>
                             <p className="mt-0.5 text-[10px] text-neutral-500">{component.description}</p>
                           </div>
-                          <div className={`engagement-preview-${item.id}-${component.id} min-h-[108px] bg-[#f8fafc] p-3`}>
+                          <div className={`engagement-preview-${item.id}-${component.id} min-h-[108px] bg-[#f8fafc] p-3 ${component.id === "launcher" ? "relative" : ""}`}>
+                            {component.id === "launcher" && (
+                              <button type="button" aria-label="Preview icon chat" className="engagement-launcher absolute bottom-3 right-3 flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl" style={{ backgroundColor: item.accentColor, border: `1px solid ${item.lineColor}` }}>
+                                <MessageCircle className="h-7 w-7" />
+                              </button>
+                            )}
                             {component.id === "header" && (
                               <div className="engagement-header flex min-h-[64px] items-center gap-2 rounded-lg border px-3">
                                 <span className="engagement-header-icon flex h-8 w-8 items-center justify-center overflow-hidden rounded-full">
@@ -746,7 +873,7 @@ export default function EngagementDetailPage() {
         </div>
         <p className="flex items-start gap-2 text-[11px] leading-5 text-neutral-500">
           <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          Kode ini menampilkan ikon chat di kanan bawah; ukuran iframe membesar saat dibuka dan kembali menjadi ikon setelah percakapan ditutup. Pastikan Engagement aktif dan website telah terdaftar di entry point.
+          Kode ini menempatkan ikon chat di pojok kanan bawah. Minimalkan menyembunyikan window tanpa mengakhiri sesi; tutup percakapan mengakhiri sesi, lalu klik ikon untuk memulai sesi baru.
         </p>
       </section>
     </main>

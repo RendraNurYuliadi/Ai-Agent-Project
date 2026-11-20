@@ -3,6 +3,10 @@ import type {
   EngagementEntryPoint,
   EngagementWindow,
 } from "@/types/engagement";
+import {
+  isChatScrollAnimationStyle,
+  type ChatScrollAnimationStyle,
+} from "@/lib/chat-ui-preferences";
 import { getDefaultComponentStyles } from "@/lib/engagement-theme";
 
 export function normalizeEngagementOrigin(value: unknown): string | null {
@@ -64,6 +68,19 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
       ? Math.min(32, Math.max(0, Math.round(candidate.borderRadius)))
       : 16;
     const allowClose = candidate.allowClose !== false;
+    const windowAnimationStyle: ChatScrollAnimationStyle | null =
+      candidate.windowAnimationStyle === undefined
+        ? "pop"
+        : isChatScrollAnimationStyle(candidate.windowAnimationStyle)
+          ? candidate.windowAnimationStyle
+          : null;
+    const bubbleAnimationEnabled = candidate.bubbleAnimationEnabled === true;
+    const bubbleAnimationStyle: ChatScrollAnimationStyle | null =
+      candidate.bubbleAnimationStyle === undefined
+        ? "fade"
+        : isChatScrollAnimationStyle(candidate.bubbleAnimationStyle)
+          ? candidate.bubbleAnimationStyle
+          : null;
     const rawComponentStyles =
       candidate.componentStyles && typeof candidate.componentStyles === "object" && !Array.isArray(candidate.componentStyles)
         ? candidate.componentStyles as Record<string, unknown>
@@ -101,6 +118,9 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
       !ObjectId.isValid(skillId) ||
       !title || title.length > 80 ||
       subtitle.length > 160 ||
+      windowAnimationStyle === null ||
+      (candidate.bubbleAnimationEnabled !== undefined && typeof candidate.bubbleAnimationEnabled !== "boolean") ||
+      bubbleAnimationStyle === null ||
       !/^#[0-9a-fA-F]{6}$/.test(accentColor) ||
       !/^#[0-9a-fA-F]{6}$/.test(backgroundColor) ||
       !/^#[0-9a-fA-F]{6}$/.test(lineColor)
@@ -121,6 +141,9 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
       lineColor,
       borderRadius,
       allowClose,
+      windowAnimationStyle,
+      bubbleAnimationEnabled,
+      bubbleAnimationStyle,
       customCss,
       componentStyles,
     });

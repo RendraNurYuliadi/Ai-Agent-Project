@@ -17,6 +17,10 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/webp",
+  "image/svg+xml",
+  "image/x-icon",
+  "image/vnd.microsoft.icon",
+  "image/bmp",
 ]);
 
 function isPublicAddress(address: string): boolean {
@@ -46,7 +50,7 @@ function requestImage(url: URL, address: { address: string; family: number }): P
     const requestOptions: RequestOptions = {
       agent: false,
       headers: {
-        Accept: "image/avif,image/webp,image/png,image/jpeg,image/gif",
+        Accept: "image/avif,image/webp,image/png,image/jpeg,image/gif,image/svg+xml",
         "User-Agent": "GenAI-Chatbot-Image-Preview/1.0",
       },
       lookup: (_hostname, options, callback) => {
@@ -134,6 +138,9 @@ export async function GET(req: NextRequest) {
           "Cache-Control": "private, max-age=300",
           "Content-Type": contentType,
           "X-Content-Type-Options": "nosniff",
+          ...(contentType === "image/svg+xml"
+            ? { "Content-Security-Policy": "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; sandbox" }
+            : {}),
         },
       });
     }

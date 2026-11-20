@@ -130,6 +130,97 @@ body {
   animation: chat-component-enter 340ms cubic-bezier(0.2, 0.8, 0.2, 1) 90ms both;
 }
 
+@keyframes engagement-window-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes engagement-window-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes engagement-window-slide-in {
+  from { opacity: 0; transform: translate3d(100%, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes engagement-window-slide-out {
+  from { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 0; transform: translate3d(100%, 0, 0); }
+}
+
+@keyframes engagement-window-pop-in {
+  0% { opacity: 0; transform: scale(0.72); }
+  75% { opacity: 1; transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes engagement-window-pop-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.72); }
+}
+
+@keyframes engagement-window-rise-in {
+  from { opacity: 0; transform: translate3d(0, 40px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes engagement-window-rise-out {
+  from { opacity: 1; transform: translate3d(0, 0, 0); }
+  to { opacity: 0; transform: translate3d(0, 40px, 0); }
+}
+
+@keyframes engagement-window-blur-in {
+  from { opacity: 0; filter: blur(14px); transform: scale(1.02); }
+  to { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+
+@keyframes engagement-window-blur-out {
+  from { opacity: 1; filter: blur(0); transform: scale(1); }
+  to { opacity: 0; filter: blur(14px); transform: scale(1.02); }
+}
+
+.engagement-widget-window-enter[data-window-animation="fade"] {
+  animation: engagement-window-fade-in 3s ease both;
+}
+
+.engagement-widget-window-exit[data-window-animation="fade"] {
+  animation: engagement-window-fade-out 3s ease both;
+}
+
+.engagement-widget-window-enter[data-window-animation="slide"] {
+  animation: engagement-window-slide-in 3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.engagement-widget-window-exit[data-window-animation="slide"] {
+  animation: engagement-window-slide-out 3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.engagement-widget-window-enter[data-window-animation="pop"] {
+  animation: engagement-window-pop-in 3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.engagement-widget-window-exit[data-window-animation="pop"] {
+  animation: engagement-window-pop-out 3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.engagement-widget-window-enter[data-window-animation="rise"] {
+  animation: engagement-window-rise-in 3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.engagement-widget-window-exit[data-window-animation="rise"] {
+  animation: engagement-window-rise-out 3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.engagement-widget-window-enter[data-window-animation="blur"] {
+  animation: engagement-window-blur-in 3s ease both;
+}
+
+.engagement-widget-window-exit[data-window-animation="blur"] {
+  animation: engagement-window-blur-out 3s ease both;
+}
+
 @keyframes splash-message-enter {
   from {
     opacity: 0;
@@ -198,6 +289,8 @@ body {
   .chat-scroll-reveal-active[data-chat-animation="pop"],
   .chat-scroll-reveal-active[data-chat-animation="rise"],
   .chat-scroll-reveal-active[data-chat-animation="blur"],
+  .engagement-widget-window-enter,
+  .engagement-widget-window-exit,
   .splash-logo,
   .splash-message,
   .splash-dot,

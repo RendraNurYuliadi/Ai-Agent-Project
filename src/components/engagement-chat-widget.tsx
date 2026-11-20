@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, type CSSProperties, useEffect, useRef, useState } from "react";
-import { ArrowUp, Loader2, MessageCircle, MoreVertical, X, WifiOff } from "lucide-react";
+import { ArrowUp, Loader2, MessageCircle, Minus, MoreVertical, X, WifiOff } from "lucide-react";
 import Image from "next/image";
 import {
   ConversationMessageBody,
@@ -36,8 +36,10 @@ export default function EngagementChatWidget({
   const [escalationStatus, setEscalationStatus] = useState("bot");
   const [menuOpen, setMenuOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [windowAnimationDirection, setWindowAnimationDirection] = useState<"enter" | "exit" | null>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const openingRef = useRef(false);
+  const resizeAnimationRef = useRef(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -64,9 +66,10 @@ export default function EngagementChatWidget({
   useEffect(() => {
     if (window.parent === window) return;
     window.parent.postMessage(
-      { type: "engagement-widget:resize", open: isOpen },
+      { type: "engagement-widget:resize", open: isOpen, animate: resizeAnimationRef.current },
       config.parentOrigin
     );
+    resizeAnimationRef.current = false;
   }, [config.parentOrigin, isOpen]);
 
   useEffect(() => {
@@ -162,6 +165,25 @@ export default function EngagementChatWidget({
     void sendMessage(input);
   };
 
+  const notifyParentResize = (open: boolean, animate: boolean) => {
+    if (window.parent === window) return;
+    window.parent.postMessage(
+      { type: "engagement-widget:resize", open, animate },
+      config.parentOrigin
+    );
+  };
+
+  const minimizeChat = () => {
+    setMenuOpen(false);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setWindowAnimationDirection(null);
+      setIsOpen(false);
+      return;
+    }
+    notifyParentResize(false, true);
+    setWindowAnimationDirection("exit");
+  };
+
   const openChat = async () => {
     setIsOpen(true);
     setMenuOpen(false);
@@ -216,7 +238,7 @@ export default function EngagementChatWidget({
       setVisitorToken("");
       setInput("");
       setError("");
-      setIsOpen(false);
+      minimizeChat();
     } catch (closeError) {
       setError(closeError instanceof Error ? closeError.message : "Percakapan gagal ditutup.");
     } finally {
@@ -232,34 +254,49 @@ export default function EngagementChatWidget({
   const conversationUnavailable = botStatus === "closed";
   const isWaitingForAgent = escalationStatus === "pending";
   const menuAllowed = config.window.allowClose !== false;
+  const bubbleAnimationEnabled = config.window.bubbleAnimationEnabled;
   const componentStyles = {
     ...getDefaultComponentStyles(),
     ...(config.window.componentStyles || {}),
   };
+  const scopedComponentCss = scopeEngagementCss(
+    Object.values(componentStyles).join("\n"),
+    `.engagement-window-${config.windowId}`
+  );
 
   if (!isOpen) {
     return (
-      <button
-        type="button"
-        onClick={() => void openChat()}
-        aria-label={`Buka chat ${config.window.title}`}
-        title={config.window.title}
-        className="engagement-launcher flex h-16 w-16 items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-        style={{ backgroundColor: config.window.accentColor, border: `1px solid ${config.window.lineColor}` }}
-      >
-        {initializing ? <Loader2 className="h-6 w-6 animate-spin" /> : <MessageCircle className="h-7 w-7" />}
-      </button>
+      <div className={`engagement-window-${config.windowId} engagement-widget h-full w-full`}>
+        <style dangerouslySetInnerHTML={{ __html: scopedComponentCss }} />
+        <button
+          type="button"
+          onClick={() => {
+            resizeAnimationRef.current = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            setWindowAnimationDirection(resizeAnimationRef.current ? "enter" : null);
+            void openChat();
+          }}
+          aria-label={`Buka chat ${config.window.title}`}
+          title={config.window.title}
+          className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          style={{ backgroundColor: config.window.accentColor, border: `1px solid ${config.window.lineColor}` }}
+        >
+          {initializing ? <Loader2 className="h-6 w-6 animate-spin" /> : <MessageCircle className="h-7 w-7" />}
+        </button>
+      </div>
     );
   }
 
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(
-        Object.values(componentStyles).join("\n"),
-        `.engagement-window-${config.windowId}`
-      ) }} />
+      <style dangerouslySetInnerHTML={{ __html: scopedComponentCss }} />
       <main
-        className={`engagement-window-${config.windowId} engagement-widget flex h-full min-h-0 w-full flex-col overflow-hidden text-white`}
+        className={`engagement-window-${config.windowId} engagement-widget flex h-full min-h-0 w-full flex-col overflow-hidden text-white ${windowAnimationDirection ? `engagement-widget-window-${windowAnimationDirection}` : ""}`}
+        data-window-animation={config.window.windowAnimationStyle}
+        onAnimationEnd={(event) => {
+          if (event.target !== event.currentTarget || !windowAnimationDirection) return;
+          if (windowAnimationDirection === "exit") setIsOpen(false);
+          setWindowAnimationDirection(null);
+        }}
         style={{ ...accentStyle, backgroundColor: "var(--engagement-background)", borderRadius: `${config.window.borderRadius}px` }}
       >
       <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4">
@@ -272,19 +309,29 @@ export default function EngagementChatWidget({
           <h1 className="engagement-header-title truncate font-semibold">{config.window.title}</h1>
           <p className="engagement-header-subtitle mt-0.5 truncate">{config.window.subtitle || "Kami siap membantu Anda."}</p>
         </div>
-        {menuAllowed && (
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => setMenuOpen((open) => !open)}
-              aria-label="Opsi percakapan"
-              aria-expanded={menuOpen}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-white/80 hover:bg-black/15 hover:text-white"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-9 z-20 w-44 rounded-lg border border-neutral-700 bg-neutral-950 p-1 shadow-xl">
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            aria-label="Opsi percakapan"
+            aria-expanded={menuOpen}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white/80 hover:bg-black/15 hover:text-white"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-9 z-20 w-44 rounded-lg border border-neutral-700 bg-neutral-950 p-1 shadow-xl">
+              <button
+                type="button"
+                onClick={() => {
+                  minimizeChat();
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-neutral-200 hover:bg-neutral-800"
+              >
+                <Minus className="h-3.5 w-3.5" />
+                Minimalkan
+              </button>
+              {menuAllowed && (
                 <button
                   type="button"
                   onClick={() => void closeConversation()}
@@ -294,10 +341,10 @@ export default function EngagementChatWidget({
                   {closing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <X className="h-3.5 w-3.5" />}
                   Tutup percakapan
                 </button>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
+        </div>
       </header>
 
       <div ref={messageListRef} className="engagement-message-list min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
@@ -314,7 +361,12 @@ export default function EngagementChatWidget({
           </div>
         )}
         {messages.map((message) => (
-          <div key={message.id} className={`flex min-w-0 flex-col gap-1 ${message.role === "user" ? "items-end" : "items-start"}`}>
+          <div
+            key={message.id}
+            data-chat-role={message.role}
+            data-chat-animation={config.window.bubbleAnimationStyle}
+            className={`flex min-w-0 flex-col gap-1 ${message.role === "user" ? "items-end" : "items-start"} ${bubbleAnimationEnabled ? "chat-scroll-reveal-active" : ""}`}
+          >
             <ConversationMessageBody
               message={message}
               isUser={message.role === "user"}

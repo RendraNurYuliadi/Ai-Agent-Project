@@ -9,6 +9,10 @@ export const CHAT_SCROLL_ANIMATION_STYLES = [
 ] as const;
 export type ChatScrollAnimationStyle = (typeof CHAT_SCROLL_ANIMATION_STYLES)[number]["value"];
 
+export function isChatScrollAnimationStyle(value: unknown): value is ChatScrollAnimationStyle {
+  return CHAT_SCROLL_ANIMATION_STYLES.some((style) => style.value === value);
+}
+
 const subscribers = new Set<() => void>();
 let readErrorLogged = false;
 
@@ -56,7 +60,7 @@ export function getChatScrollAnimationStyleSnapshot(): ChatScrollAnimationStyle 
   if (typeof window === "undefined") return "fade";
   try {
     const storedStyle = window.localStorage.getItem(CHAT_SCROLL_ANIMATION_STYLE_STORAGE_KEY);
-    return CHAT_SCROLL_ANIMATION_STYLES.find((style) => style.value === storedStyle)?.value || "fade";
+    return isChatScrollAnimationStyle(storedStyle) ? storedStyle : "fade";
   } catch (error) {
     if (!readErrorLogged) {
       console.error("Could not read chat animation setting:", error);

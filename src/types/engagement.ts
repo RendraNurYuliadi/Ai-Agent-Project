@@ -1,3 +1,5 @@
+import type { ChatScrollAnimationStyle } from "@/lib/chat-ui-preferences";
+
 export interface EngagementEntryPoint {
   id: string;
   name: string;
@@ -17,6 +19,9 @@ export interface EngagementWindow {
   lineColor: string;
   borderRadius: number;
   allowClose: boolean;
+  windowAnimationStyle: ChatScrollAnimationStyle;
+  bubbleAnimationEnabled: boolean;
+  bubbleAnimationStyle: ChatScrollAnimationStyle;
   customCss: string;
   componentStyles: Record<string, string>;
 }

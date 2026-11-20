@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { normalizeEngagementOrigin } from "@/lib/engagement-data";
 import { migrateLegacyComponentStyles } from "@/lib/engagement-theme";
+import { isChatScrollAnimationStyle } from "@/lib/chat-ui-preferences";
 import { signEngagementWidgetToken } from "@/lib/engagement-auth";
 import type { EngagementWidgetConfig } from "@/types/engagement";
 import EngagementChatWidget from "@/components/engagement-chat-widget";
@@ -65,6 +66,13 @@ export default async function EngagementWidgetPage({
       lineColor: windowConfig.lineColor || "#e5e5e5",
       borderRadius: typeof windowConfig.borderRadius === "number" ? windowConfig.borderRadius : 16,
       allowClose: windowConfig.allowClose !== false,
+      windowAnimationStyle: isChatScrollAnimationStyle(windowConfig.windowAnimationStyle)
+        ? windowConfig.windowAnimationStyle
+        : "pop",
+      bubbleAnimationEnabled: windowConfig.bubbleAnimationEnabled === true,
+      bubbleAnimationStyle: isChatScrollAnimationStyle(windowConfig.bubbleAnimationStyle)
+        ? windowConfig.bubbleAnimationStyle
+        : "fade",
       customCss: typeof windowConfig.customCss === "string" ? windowConfig.customCss : "",
       componentStyles: migrateLegacyComponentStyles(
         windowConfig.componentStyles && typeof windowConfig.componentStyles === "object"

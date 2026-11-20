@@ -163,6 +163,20 @@ const number = (
 
 export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] = [
   {
+    id: "launcher",
+    name: "Icon chat window",
+    description: "Tombol chat yang tampil di pojok kanan bawah website.",
+    className: "engagement-launcher",
+    defaultCss: `.engagement-launcher {
+  --engagement-launcher-shadow-color: #000000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--engagement-launcher-shadow-color) 36%, transparent);
+}`,
+    parameters: [
+      color("Warna box shadow", ".engagement-launcher", "--engagement-launcher-shadow-color", "#000000"),
+    ],
+  },
+  {
     id: "header",
     name: "Header",
     description: "Judul, subjudul, icon, dan menu titik tiga.",
@@ -207,6 +221,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   font-size: 13px;
   line-height: 1.6;
   box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+}
 .engagement-bot-bubble * {
   color: inherit;
 }`,
@@ -235,6 +250,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   line-height: 1.6;
   font-weight: 500;
   box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+}
 .engagement-user-bubble * {
   color: inherit;
 }`,
@@ -436,10 +452,14 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
 .engagement-welcome-message .engagement-welcome-icon {
   background: #18181b;
   color: #ffffff;
+}
+.engagement-welcome-message .engagement-button.engagement-reply-button {
+  color: #18181b;
 }`,
     parameters: [
       color("Warna judul", ".engagement-welcome-title", "color", "#18181b"),
       color("Warna subjudul", ".engagement-welcome-subtitle", "color", "#52525b"),
+      color("Warna teks tombol", ".engagement-welcome-message .engagement-button.engagement-reply-button", "color", "#18181b"),
       color("Background kartu", ".engagement-welcome-message", "background", "#ffffff"),
       color("Warna border", ".engagement-welcome-message", "border-color", "#e5e5e5"),
       color("Background ikon", ".engagement-welcome-message .engagement-welcome-icon", "background", "#18181b"),
