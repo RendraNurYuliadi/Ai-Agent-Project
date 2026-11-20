@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowUp, Copy, ExternalLink, Loader2, Plus, Save, Trash2, MessageCircle, MoreVertical } from "lucide-react";
+import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Loader2, Plus, Save, Sparkles, Trash2, MessageCircle, MoreVertical } from "lucide-react";
 import Image from "next/image";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import {
@@ -111,6 +111,167 @@ function getComponentPreviewCss(
     .map((id) => styles[id] || ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === id)?.defaultCss || "")
     .filter(Boolean)
     .join("\n");
+}
+
+function EngagementComponentPreview({
+  item,
+  componentId,
+}: {
+  item: EngagementWindow;
+  componentId: string;
+}) {
+  switch (componentId) {
+    case "launcher":
+      return (
+        <button
+          type="button"
+          aria-label="Preview icon chat"
+          className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl"
+          style={{ backgroundColor: item.accentColor, border: `1px solid ${item.lineColor}` }}
+        >
+          <MessageCircle className="h-7 w-7" />
+        </button>
+      );
+    case "header":
+      return (
+        <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4">
+          <span className="engagement-header-icon flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full">
+            {item.headerIconUrl
+              ? <Image src={getImageProxyUrl(item.headerIconUrl)} alt="" width={36} height={36} unoptimized className="h-9 w-9 rounded-full object-cover" />
+              : <MessageCircle className="h-5 w-5" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h1 className="engagement-header-title truncate font-semibold">{item.title || "Judul chat"}</h1>
+            <p className="engagement-header-subtitle mt-0.5 truncate">{item.subtitle || "Subjudul chat"}</p>
+          </div>
+          <button type="button" aria-label="Opsi percakapan" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white/80">
+            <MoreVertical className="h-4 w-4" />
+          </button>
+        </header>
+      );
+    case "bot-bubble":
+      return (
+        <div className="engagement-bot-bubble w-fit min-w-0 max-w-full break-words rounded-2xl rounded-tl-sm border border-neutral-800 bg-[#111111] px-4 py-3 text-sm leading-relaxed text-neutral-300 shadow-md">
+          Halo! Ada yang bisa kami bantu hari ini?
+        </div>
+      );
+    case "user-bubble":
+      return (
+        <div className="flex min-w-0 flex-col items-end gap-1">
+          <div className="engagement-user-bubble w-fit min-w-0 max-w-full break-words rounded-2xl rounded-tr-sm bg-white px-4 py-3 text-sm leading-relaxed font-medium text-black shadow-lg">
+            Saya ingin bertanya.
+          </div>
+        </div>
+      );
+    case "reply-buttons":
+      return (
+        <div className="engagement-button-list flex flex-wrap gap-2">
+          {["Produk", "Bantuan"].map((label) => (
+            <button key={label} type="button" className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs transition-colors hover:brightness-95">
+              {label}
+            </button>
+          ))}
+        </div>
+      );
+    case "link-buttons":
+      return (
+        <article className="engagement-link-card w-full max-w-[320px]">
+          <h3 className="engagement-link-title font-semibold">Informasi layanan</h3>
+          <p className="engagement-link-subtitle mt-1 whitespace-pre-wrap leading-5">Pelajari layanan dan temukan jawaban lebih lanjut.</p>
+          <div className="mt-3">
+            <div className="engagement-button-list flex flex-wrap gap-2">
+              <a href="#" onClick={(event) => event.preventDefault()} className="engagement-button engagement-link-button inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs">
+                Buka halaman <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
+          </div>
+        </article>
+      );
+    case "card":
+      return (
+        <div className="w-full max-w-[260px]">
+          <article className="engagement-card engagement-content-card w-full min-w-0 overflow-hidden rounded-xl border">
+            <Image src="/engagement-preview-card.svg" alt="Gambar contoh kartu" width={520} height={128} unoptimized style={{ height: "128px" }} className="engagement-card-image w-full object-cover" />
+            <div className="space-y-2.5 p-3">
+              <div>
+                <h3 className="engagement-card-title font-semibold">Paket layanan</h3>
+                <p className="engagement-card-subtitle mt-1 whitespace-pre-wrap leading-5">Deskripsi singkat kartu ditampilkan di sini.</p>
+              </div>
+              <div className="engagement-button-list flex flex-wrap gap-2">
+                <button type="button" className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs transition-colors hover:brightness-95">Pilih paket</button>
+              </div>
+            </div>
+          </article>
+        </div>
+      );
+    case "carousel":
+      return (
+        <div className="engagement-carousel w-full max-w-[260px]">
+          <div className="overflow-hidden">
+            <div className="flex transition-transform duration-500 ease-out motion-reduce:transition-none">
+              <div className="w-full shrink-0">
+                <EngagementComponentPreview item={item} componentId="card" />
+              </div>
+            </div>
+          </div>
+          <div className="engagement-carousel-controls mt-2 flex items-center justify-between px-1">
+            <button type="button" aria-label="Card sebelumnya" className="engagement-carousel-button p-1.5 transition-colors hover:brightness-95"><ChevronLeft className="h-4 w-4" /></button>
+            <span className="engagement-carousel-position tabular-nums">1 / 3</span>
+            <button type="button" aria-label="Card berikutnya" className="engagement-carousel-button p-1.5 transition-colors hover:brightness-95"><ChevronRight className="h-4 w-4" /></button>
+          </div>
+        </div>
+      );
+    case "interaction":
+      return (
+        <article className="engagement-component engagement-interaction-card w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3.5 sm:max-w-[360px]">
+          <h3 className="engagement-interaction-title mb-2 font-semibold">Pilih kebutuhan Anda</h3>
+          <p className="engagement-interaction-subtitle whitespace-pre-wrap leading-5">Pilih salah satu opsi berikut.</p>
+          <div className="mt-3">
+            <EngagementComponentPreview item={item} componentId="reply-buttons" />
+          </div>
+        </article>
+      );
+    case "welcome-message":
+      return (
+        <article className="engagement-component engagement-welcome-message w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3.5 sm:max-w-[360px]">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="engagement-welcome-icon flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <h3 className="engagement-welcome-title font-semibold">Selamat datang!</h3>
+          </div>
+          <p className="engagement-welcome-subtitle whitespace-pre-wrap leading-5">Ada yang bisa kami bantu hari ini?</p>
+          <div className="mt-3">
+            <EngagementComponentPreview item={item} componentId="reply-buttons" />
+          </div>
+        </article>
+      );
+    case "scrollbar":
+      return (
+        <div className="engagement-message-list h-[82px] overflow-y-scroll rounded-md border border-neutral-300 bg-white p-2 text-[10px] text-neutral-700">
+          {["Halo, selamat datang.", "Bagaimana saya bisa membantu?", "Pilih topik yang ingin ditanyakan.", "Anda juga dapat berbicara dengan tim kami.", "Kami siap membantu kapan saja."].map((text) => <p key={text} className="mb-2">{text}</p>)}
+        </div>
+      );
+    case "input":
+      return (
+        <input
+          readOnly
+          value=""
+          placeholder="Tulis pesan..."
+          className="engagement-input h-11 w-full min-w-0 flex-1 rounded-xl border border-white/10 bg-[#151515] px-3 text-sm text-white placeholder:text-neutral-500"
+        />
+      );
+    case "send":
+      return (
+        <button type="button" className="engagement-send flex h-11 w-11 shrink-0 items-center justify-center" aria-label="Preview kirim">
+          {item.sendIconUrl
+            ? <Image src={getImageProxyUrl(item.sendIconUrl)} alt="" width={20} height={20} unoptimized className="engagement-send-icon" />
+            : <ArrowUp className="engagement-send-glyph" />}
+        </button>
+      );
+    default:
+      return null;
+  }
 }
 
 export default function EngagementDetailPage() {
@@ -480,7 +641,7 @@ export default function EngagementDetailPage() {
                   </label>
                   <label className="space-y-1.5">
                     <span className="text-[11px] text-neutral-400">URL ikon tombol kirim</span>
-                    <input value={item.sendIconUrl} onChange={(event) => updateWindow(item.id, { sendIconUrl: event.target.value })} maxLength={2048} placeholder="https://example.com/send-icon.png" className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 text-xs text-white outline-none placeholder:text-neutral-700 focus:border-neutral-600" />
+                    <input value={item.sendIconUrl} onChange={(event) => updateWindow(item.id, { sendIconUrl: event.target.value })} maxLength={2048} placeholder="https://example.com/send-icon.svg" className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 text-xs text-white outline-none placeholder:text-neutral-700 focus:border-neutral-600" />
                   </label>
                   <label className="flex items-center gap-3 text-[11px] text-neutral-400">
                     <span>Background window</span>
@@ -585,90 +746,7 @@ export default function EngagementDetailPage() {
                             <p className="mt-0.5 text-[10px] text-neutral-500">{component.description}</p>
                           </div>
                           <div className={`engagement-preview-${item.id}-${component.id} min-h-[108px] bg-[#f8fafc] p-3 ${component.id === "launcher" ? "relative" : ""}`}>
-                            {component.id === "launcher" && (
-                              <button type="button" aria-label="Preview icon chat" className="engagement-launcher absolute bottom-3 right-3 flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl" style={{ backgroundColor: item.accentColor, border: `1px solid ${item.lineColor}` }}>
-                                <MessageCircle className="h-7 w-7" />
-                              </button>
-                            )}
-                            {component.id === "header" && (
-                              <div className="engagement-header flex min-h-[64px] items-center gap-2 rounded-lg border px-3">
-                                <span className="engagement-header-icon flex h-8 w-8 items-center justify-center overflow-hidden rounded-full">
-                                  {item.headerIconUrl ? <Image src={getImageProxyUrl(item.headerIconUrl)} alt="" width={32} height={32} unoptimized className="h-8 w-8 object-cover" /> : <MessageCircle className="h-4 w-4" />}
-                                </span>
-                                <div className="min-w-0 flex-1"><p className="engagement-header-title truncate font-semibold">{item.title}</p><p className="engagement-header-subtitle truncate">{item.subtitle}</p></div>
-                                {item.allowClose && <MoreVertical className="h-4 w-4" />}
-                              </div>
-                            )}
-                            {component.id === "bot-bubble" && <div className="engagement-bot-bubble max-w-[220px] px-3 py-2"><p>Halo! Ada yang bisa kami bantu hari ini?</p></div>}
-                            {component.id === "user-bubble" && <div className="ml-auto max-w-[220px]"><div className="engagement-user-bubble px-3 py-2">Saya ingin bertanya.</div></div>}
-                            {component.id === "reply-buttons" && (
-                              <div className="flex flex-wrap gap-2">
-                                <button type="button" className="engagement-button engagement-reply-button">Produk</button>
-                                <button type="button" className="engagement-button engagement-reply-button">Bantuan</button>
-                              </div>
-                            )}
-                            {component.id === "link-buttons" && (
-                              <article className="engagement-link-card max-w-[280px]">
-                                <h3 className="engagement-link-title font-semibold">Informasi layanan</h3>
-                                <p className="engagement-link-subtitle mt-1">Pelajari layanan dan temukan jawaban lebih lanjut.</p>
-                                <div className="mt-3"><button type="button" className="engagement-button engagement-link-button inline-flex items-center gap-1.5">Buka halaman <ExternalLink className="h-3 w-3" /></button></div>
-                              </article>
-                            )}
-                            {component.id === "card" && (
-                              <article className="engagement-content-card max-w-[240px] overflow-hidden">
-                                <Image src="/engagement-preview-card.svg" alt="Preview gambar kartu" width={520} height={110} unoptimized className="engagement-card-image h-[110px]" />
-                                <div className="space-y-2.5 p-3">
-                                  <div><h3 className="engagement-card-title font-semibold">Paket layanan</h3><p className="engagement-card-subtitle mt-1">Deskripsi singkat kartu ditampilkan di sini.</p></div>
-                                  <div className="flex flex-wrap gap-2"><button type="button" className="engagement-button engagement-reply-button">Pilih paket</button></div>
-                                </div>
-                              </article>
-                            )}
-                            {component.id === "carousel" && (
-                              <div className="engagement-carousel">
-                                <article className="engagement-content-card overflow-hidden">
-                                  <Image src="/engagement-preview-card.svg" alt="Preview gambar carousel" width={520} height={96} unoptimized className="engagement-card-image h-[96px]" />
-                                  <div className="space-y-2 p-3">
-                                    <div><h3 className="engagement-card-title font-semibold">Pilihan populer</h3><p className="engagement-card-subtitle mt-1">Ringkasan item carousel.</p></div>
-                                    <button type="button" className="engagement-button engagement-reply-button">Lihat pilihan</button>
-                                  </div>
-                                </article>
-                                <div className="engagement-carousel-controls mt-2 flex items-center justify-between">
-                                  <button type="button" className="engagement-carousel-button px-2 py-1" aria-label="Sebelumnya">‹</button>
-                                  <span className="engagement-carousel-position">1 / 3</span>
-                                  <button type="button" className="engagement-carousel-button px-2 py-1" aria-label="Berikutnya">›</button>
-                                </div>
-                              </div>
-                            )}
-                            {component.id === "interaction" && (
-                              <article className="engagement-interaction-card max-w-[280px]">
-                                <h3 className="engagement-interaction-title font-semibold">Pilih kebutuhan Anda</h3>
-                                <p className="engagement-interaction-subtitle mt-1">Pilih salah satu opsi berikut.</p>
-                                <div className="mt-3 flex gap-2"><button type="button" className="engagement-button engagement-reply-button">Pesan</button><button type="button" className="engagement-button engagement-reply-button">Informasi</button></div>
-                              </article>
-                            )}
-                            {component.id === "welcome-message" && (
-                              <article className="engagement-welcome-message engagement-card engagement-component max-w-[280px] overflow-hidden rounded-xl border p-3">
-                                <div className="mb-2 flex items-center gap-2">
-                                  <span className="engagement-welcome-icon flex h-7 w-7 items-center justify-center rounded-md"><MessageCircle className="h-4 w-4" /></span>
-                                  <h3 className="engagement-welcome-title font-semibold">Selamat datang!</h3>
-                                </div>
-                                <p className="engagement-welcome-subtitle">Ada yang bisa kami bantu hari ini?</p>
-                                <div className="mt-3"><button type="button" className="engagement-button engagement-reply-button">Mulai chat</button></div>
-                              </article>
-                            )}
-                            {component.id === "scrollbar" && (
-                              <div className="engagement-message-list h-[82px] overflow-y-scroll rounded-md border border-neutral-300 bg-white p-2 text-[10px] text-neutral-700">
-                                {["Halo, selamat datang.", "Bagaimana saya bisa membantu?", "Pilih topik yang ingin ditanyakan.", "Anda juga dapat berbicara dengan tim kami.", "Kami siap membantu kapan saja."].map((text) => <p key={text} className="mb-2">{text}</p>)}
-                              </div>
-                            )}
-                            {component.id === "input" && <input readOnly value="" placeholder="Tulis pesan..." className="engagement-input w-full" />}
-                            {component.id === "send" && (
-                              <button type="button" className="engagement-send flex items-center justify-center" aria-label="Preview kirim">
-                                {item.sendIconUrl
-                                  ? <Image src={getImageProxyUrl(item.sendIconUrl)} alt="" width={20} height={20} unoptimized className="engagement-send-icon" />
-                                  : <ArrowUp className="engagement-send-glyph" />}
-                              </button>
-                            )}
+                            <EngagementComponentPreview item={item} componentId={component.id} />
                           </div>
                           <div className="border-t border-neutral-800 p-2">
                             {(() => {
@@ -786,47 +864,29 @@ export default function EngagementDetailPage() {
                     Object.values(item.componentStyles).join("\n"),
                     `.engagement-preview-window-${item.id}`
                   ) }} />
-                  <div className={`engagement-preview-window-${item.id} engagement-widget mx-auto w-[280px] overflow-hidden border-2 shadow-2xl outline outline-1 outline-white/40`} style={{ height: "390px", borderRadius: `${item.borderRadius}px`, backgroundColor: item.backgroundColor, borderColor: item.lineColor, outlineOffset: "2px" }}>
-                    <div className="engagement-header flex h-[58px] items-center gap-2 border-b px-3">
-                      <span className="engagement-header-icon flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full">
-                        {item.headerIconUrl ? <Image src={getImageProxyUrl(item.headerIconUrl)} alt="" width={32} height={32} unoptimized className="h-8 w-8 object-cover" /> : <MessageCircle className="h-4 w-4" />}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="engagement-header-title truncate font-semibold">{item.title || "Judul chat"}</p>
-                        <p className="engagement-header-subtitle truncate">{item.subtitle || "Subjudul chat"}</p>
-                      </div>
-                      {item.allowClose && <MoreVertical className="h-4 w-4 shrink-0 text-white/80" />}
-                    </div>
-                    <div className="engagement-message-list h-[282px] space-y-3 overflow-y-auto px-3 py-3">
-                      <article className="engagement-welcome-message engagement-component max-w-[210px] overflow-hidden rounded-xl border p-2.5">
-                        <div className="mb-1.5 flex items-center gap-1.5">
-                          <span className="engagement-welcome-icon flex h-6 w-6 items-center justify-center rounded-md"><MessageCircle className="h-3 w-3" /></span>
-                          <h3 className="engagement-welcome-title font-semibold">Selamat datang!</h3>
+                  <div className={`engagement-preview-window-${item.id} relative mx-auto h-[457px] w-[280px] overflow-hidden`}>
+                    <div className="engagement-widget absolute left-0 top-0 flex h-[620px] w-[380px] flex-col overflow-hidden border-2 shadow-2xl outline outline-1 outline-white/40" style={{ height: "620px", width: "380px", transform: "scale(0.736842)", transformOrigin: "top left", borderRadius: `${item.borderRadius}px`, backgroundColor: item.backgroundColor, borderColor: item.lineColor, outlineOffset: "2px" }}>
+                      <EngagementComponentPreview item={item} componentId="header" />
+                      <div className="engagement-message-list min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
+                        <EngagementComponentPreview item={item} componentId="welcome-message" />
+                        <div className="flex min-w-0 flex-col items-start gap-1">
+                          <div className="engagement-author flex items-center gap-1.5 pl-1 text-[10px] text-neutral-500">
+                            <span className="font-semibold text-white">GenAI</span>
+                          </div>
+                          <EngagementComponentPreview item={item} componentId="bot-bubble" />
                         </div>
-                        <p className="engagement-welcome-subtitle">Ada yang bisa kami bantu?</p>
-                      </article>
-                      <div className="engagement-bot-bubble max-w-[210px] rounded-2xl rounded-tl-sm border px-3 py-2">
-                        Halo! Ada yang bisa kami bantu hari ini?
+                        <EngagementComponentPreview item={item} componentId="user-bubble" />
+                        <EngagementComponentPreview item={item} componentId="reply-buttons" />
+                        <EngagementComponentPreview item={item} componentId="link-buttons" />
+                        <EngagementComponentPreview item={item} componentId="card" />
+                        <EngagementComponentPreview item={item} componentId="carousel" />
+                        <EngagementComponentPreview item={item} componentId="interaction" />
                       </div>
-                      <div className="engagement-user-bubble ml-auto max-w-[180px] rounded-2xl rounded-tr-sm px-3 py-2">
-                        Saya ingin bertanya.
-                      </div>
-                      <article className="engagement-content-card max-w-[210px] overflow-hidden rounded-xl border">
-                        <Image src="/engagement-preview-card.svg" alt="Gambar contoh kartu" width={420} height={72} unoptimized className="engagement-card-image h-[72px]" />
-                        <div className="space-y-2 p-2.5">
-                          <div><h3 className="engagement-card-title font-semibold">Pilihan layanan</h3><p className="engagement-card-subtitle mt-1">Lihat detail dan pilih layanan yang sesuai.</p></div>
-                          <button type="button" className="engagement-button engagement-reply-button rounded-md px-2 py-1">Lihat detail</button>
-                        </div>
-                      </article>
+                      <form className="flex shrink-0 items-center gap-2 border-t border-white/10 bg-[#0d0d0d] p-3">
+                        <EngagementComponentPreview item={item} componentId="input" />
+                        <EngagementComponentPreview item={item} componentId="send" />
+                      </form>
                     </div>
-                    <form className="flex h-[49px] items-center gap-2 border-t border-neutral-300 bg-white px-2">
-                      <input readOnly value="" placeholder="Tulis pesan..." className="engagement-input h-8 min-w-0 flex-1 rounded-lg border px-2 text-[8px]" />
-                      <button type="button" className="engagement-send flex h-8 w-8 shrink-0 items-center justify-center rounded-lg" aria-label="Preview kirim">
-                        {item.sendIconUrl
-                          ? <Image src={getImageProxyUrl(item.sendIconUrl)} alt="" width={18} height={18} unoptimized className="engagement-send-icon" />
-                          : <ArrowUp className="engagement-send-glyph" />}
-                      </button>
-                    </form>
                   </div>
                 </div>
                 </div>

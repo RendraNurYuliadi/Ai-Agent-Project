@@ -45,21 +45,33 @@ export default function EngagementChatWidget({
     const root = document.documentElement;
     const body = document.body;
     const previousRootBackground = root.style.backgroundColor;
+    const previousRootHeight = root.style.height;
+    const previousRootMinHeight = root.style.minHeight;
+    const previousRootOverflow = root.style.overflow;
     const previousBodyBackground = body.style.backgroundColor;
     const previousBodyHeight = body.style.height;
     const previousBodyMinHeight = body.style.minHeight;
     const previousBodyMargin = body.style.margin;
+    const previousBodyOverflow = body.style.overflow;
     root.style.backgroundColor = "transparent";
+    root.style.height = "100%";
+    root.style.minHeight = "0";
+    root.style.overflow = "hidden";
     body.style.backgroundColor = "transparent";
     body.style.height = "100%";
     body.style.minHeight = "0";
     body.style.margin = "0";
+    body.style.overflow = "hidden";
     return () => {
       root.style.backgroundColor = previousRootBackground;
+      root.style.height = previousRootHeight;
+      root.style.minHeight = previousRootMinHeight;
+      root.style.overflow = previousRootOverflow;
       body.style.backgroundColor = previousBodyBackground;
       body.style.height = previousBodyHeight;
       body.style.minHeight = previousBodyMinHeight;
       body.style.margin = previousBodyMargin;
+      body.style.overflow = previousBodyOverflow;
     };
   }, []);
 
