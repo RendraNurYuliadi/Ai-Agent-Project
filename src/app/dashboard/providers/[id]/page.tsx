@@ -328,7 +328,7 @@ export default function ProviderDetailPage() {
             </div>
           </section>
 
-          <section className="min-h-[320px] flex-1 rounded-xl border border-neutral-800 bg-[#101010] p-4 md:p-5">
+          <section className="flex max-h-[75vh] min-h-[360px] flex-1 flex-col rounded-xl border border-neutral-800 bg-[#101010] p-4 md:p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="text-sm font-semibold text-white">Model digunakan</h2>
@@ -357,7 +357,7 @@ export default function ProviderDetailPage() {
                   {publishers.map((publisher) => <option key={publisher} value={publisher}>{publisher}</option>)}
                 </select>
               </div>
-              <div className="grid min-h-[260px] gap-3 lg:grid-cols-[minmax(0,1fr)_44px_minmax(0,1fr)]">
+              <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)_minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_44px_minmax(0,1fr)] lg:grid-rows-1">
                 <ModelColumn
                   title={`Model digunakan (${selectedModels.length})`}
                   search={selectedSearch}
@@ -420,7 +420,7 @@ function ModelColumn({
   icon: ReactNode;
 }) {
   return (
-    <div className="flex min-h-[260px] min-w-0 flex-col rounded-lg border border-neutral-800 bg-black/50 p-3">
+    <div className="flex h-full min-h-0 min-w-0 flex-col rounded-lg border border-neutral-800 bg-black/50 p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-[11px] font-medium text-neutral-300">{title}</h3>
       </div>
