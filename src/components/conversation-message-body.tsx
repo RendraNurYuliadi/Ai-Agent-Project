@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import Image from "next/image";
 import { Bot, ChevronLeft, ChevronRight, CircleHelp, ExternalLink, MessageSquare, Sparkles } from "lucide-react";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
@@ -97,7 +97,7 @@ function MessageButtons({
 
 function MessageCardView({ card, onReply, disabled, imageProxyToken }: { card: ConversationMessageCard; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
   return <article className="engagement-card engagement-content-card w-full min-w-0 overflow-hidden rounded-xl border">
-    {card.imageUrl && <Image src={getImageProxyUrl(card.imageUrl, imageProxyToken)} alt={card.title} width={520} height={card.imageHeight ?? 128} unoptimized style={{ height: `${card.imageHeight ?? 128}px` }} className="engagement-card-image w-full object-cover" />}
+    {card.imageUrl && <Image src={getImageProxyUrl(card.imageUrl, imageProxyToken)} alt={card.title} width={520} height={card.imageHeight ?? 128} unoptimized style={{ "--engagement-card-image-height": `${card.imageHeight ?? 128}px` } as CSSProperties} className="engagement-card-image w-full object-cover" />}
     <div className="space-y-2.5 p-3">
       <div><h3 className="engagement-card-title font-semibold">{card.title}</h3><p className="engagement-card-subtitle mt-1 whitespace-pre-wrap leading-5">{card.subtitle}</p></div>
       <MessageButtons buttons={card.buttons} onReply={onReply} disabled={disabled} />

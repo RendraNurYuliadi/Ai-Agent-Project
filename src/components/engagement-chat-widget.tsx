@@ -278,7 +278,7 @@ export default function EngagementChatWidget({
 
   if (!isOpen) {
     return (
-      <div className={`engagement-window-${config.windowId} engagement-widget h-full w-full`}>
+      <div className={`engagement-window-${config.windowId} engagement-widget h-full w-full`} style={accentStyle}>
         <style dangerouslySetInnerHTML={{ __html: scopedComponentCss }} />
         <button
           type="button"
@@ -290,7 +290,7 @@ export default function EngagementChatWidget({
           aria-label={`Buka chat ${config.window.title}`}
           title={config.window.title}
           className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          style={{ backgroundColor: config.window.accentColor, border: `1px solid ${config.window.lineColor}` }}
+          style={{ backgroundColor: config.window.accentColor }}
         >
           {initializing ? <Loader2 className="h-6 w-6 animate-spin" /> : <MessageCircle className="h-7 w-7" />}
         </button>

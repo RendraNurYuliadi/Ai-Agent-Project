@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Loader2, Plus, Save, Sparkles, Trash2, MessageCircle, MoreVertical } from "lucide-react";
@@ -127,7 +127,7 @@ function EngagementComponentPreview({
           type="button"
           aria-label="Preview icon chat"
           className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl"
-          style={{ backgroundColor: item.accentColor, border: `1px solid ${item.lineColor}` }}
+          style={{ backgroundColor: item.accentColor, "--engagement-line": item.lineColor } as CSSProperties}
         >
           <MessageCircle className="h-7 w-7" />
         </button>
@@ -191,7 +191,7 @@ function EngagementComponentPreview({
       return (
         <div className="w-full max-w-[260px]">
           <article className="engagement-card engagement-content-card w-full min-w-0 overflow-hidden rounded-xl border">
-            <Image src="/engagement-preview-card.svg" alt="Gambar contoh kartu" width={520} height={128} unoptimized style={{ height: "128px" }} className="engagement-card-image w-full object-cover" />
+            <Image src="/engagement-preview-card.svg" alt="Gambar contoh kartu" width={520} height={128} unoptimized className="engagement-card-image w-full object-cover" />
             <div className="space-y-2.5 p-3">
               <div>
                 <h3 className="engagement-card-title font-semibold">Paket layanan</h3>
@@ -865,7 +865,7 @@ export default function EngagementDetailPage() {
                     `.engagement-preview-window-${item.id}`
                   ) }} />
                   <div className={`engagement-preview-window-${item.id} relative mx-auto h-[457px] w-[280px] overflow-hidden`}>
-                    <div className="engagement-widget absolute left-0 top-0 flex h-[620px] w-[380px] flex-col overflow-hidden border-2 shadow-2xl outline outline-1 outline-white/40" style={{ height: "620px", width: "380px", transform: "scale(0.736842)", transformOrigin: "top left", borderRadius: `${item.borderRadius}px`, backgroundColor: item.backgroundColor, borderColor: item.lineColor, outlineOffset: "2px" }}>
+                    <div className="engagement-widget absolute left-0 top-0 flex h-[620px] w-[380px] flex-col overflow-hidden border-2 shadow-2xl outline outline-1 outline-white/40" style={{ height: "620px", width: "380px", transform: "scale(0.736842)", transformOrigin: "top left", borderRadius: `${item.borderRadius}px`, backgroundColor: item.backgroundColor, borderColor: item.lineColor, outlineOffset: "2px", "--engagement-line": item.lineColor } as CSSProperties}>
                       <EngagementComponentPreview item={item} componentId="header" />
                       <div className="engagement-message-list min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
                         <EngagementComponentPreview item={item} componentId="welcome-message" />
