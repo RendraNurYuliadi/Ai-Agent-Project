@@ -9,6 +9,14 @@ export const CHAT_SCROLL_ANIMATION_STYLES = [
 ] as const;
 export type ChatScrollAnimationStyle = (typeof CHAT_SCROLL_ANIMATION_STYLES)[number]["value"];
 
+export const CHAT_WINDOW_ANIMATION_DESCRIPTIONS: Record<ChatScrollAnimationStyle, string> = {
+  fade: "Chat window memudar saat ditampilkan atau disembunyikan.",
+  slide: "Chat window bergeser saat dibuka atau disembunyikan.",
+  pop: "Chat window membesar saat dibuka dan mengecil saat disembunyikan.",
+  rise: "Chat window bergerak naik saat dibuka dan turun saat disembunyikan.",
+  blur: "Chat window muncul dari blur dan kembali blur saat disembunyikan.",
+};
+
 export function isChatScrollAnimationStyle(value: unknown): value is ChatScrollAnimationStyle {
   return CHAT_SCROLL_ANIMATION_STYLES.some((style) => style.value === value);
 }

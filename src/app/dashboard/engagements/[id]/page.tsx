@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Load
 import Image from "next/image";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import {
+  CHAT_WINDOW_ANIMATION_DESCRIPTIONS,
   CHAT_SCROLL_ANIMATION_STYLES,
   isChatScrollAnimationStyle,
 } from "@/lib/chat-ui-preferences";
@@ -73,26 +74,48 @@ function escapeRegExp(value: string): string {
 }
 
 function readCssProperty(css: string, selector: string, property: string, fallback = ""): string {
-  const rule = new RegExp(`(?:^|})\\s*${escapeRegExp(selector)}\\s*\\{([^}]*)\\}`, "i").exec(css);
-  const declarations = rule?.[1] || "";
-  const match = declarations.match(new RegExp(`(?:^|;)\\s*${escapeRegExp(property)}\\s*:\\s*([^;]+)`, "i"));
-  return match?.[1]?.trim() || fallback;
+  const rulePattern = new RegExp(`(^|})\\s*${escapeRegExp(selector)}\\s*\\{([^}]*)\\}`, "gi");
+  const propertyPattern = new RegExp(`(?:^|;)\\s*${escapeRegExp(property)}\\s*:\\s*([^;]+)`, "gi");
+  let value = "";
+  let borderShorthand = "";
+
+  for (const rule of css.matchAll(rulePattern)) {
+    for (const match of rule[2].matchAll(propertyPattern)) {
+      value = match[1].trim();
+    }
+    for (const match of rule[2].matchAll(/(?:^|;)\s*border\s*:\s*([^;]+)/gi)) {
+      borderShorthand = match[1].trim();
+    }
+  }
+
+  if (!value && property === "border-width") {
+    value = borderShorthand.match(/(?:^|\s)(?:thin|medium|thick|0|(?:\d*\.?\d+)(?:px|em|rem|%|vw|vh|ch|ex|pt|pc|cm|mm|in)?)(?:\s|$)/i)?.[0].trim() || "";
+  } else if (!value && property === "border-color") {
+    value = borderShorthand.match(/#[\da-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|var\([^)]*\)|transparent|currentColor/i)?.[0] || "";
+  }
+
+  return value || fallback;
 }
 
 function setCssProperty(css: string, selector: string, property: string, value: string): string {
   if (!value.trim()) return css;
-  const rulePattern = new RegExp(`(^|})\\s*(${escapeRegExp(selector)})\\s*\\{([^}]*)\\}`, "i");
-  const propertyPattern = new RegExp(`(^|;)\\s*${escapeRegExp(property)}\\s*:\\s*[^;]+;?`, "i");
-  const rule = rulePattern.exec(css);
-  if (!rule) return `${css.trimEnd()}\n${selector} {\n  ${property}: ${value};\n}`;
+  const rulePattern = new RegExp(`(^|})\\s*(${escapeRegExp(selector)})\\s*\\{([^}]*)\\}`, "gi");
+  const propertyPattern = new RegExp(`(^|;)\\s*${escapeRegExp(property)}\\s*:\\s*[^;]+;?`, "gi");
+  let foundProperty = false;
+  const updatedCss = css.replace(rulePattern, (match, prefix: string, _matchedSelector: string, declarations: string) => {
+    const hasProperty = new RegExp(`(?:^|;)\\s*${escapeRegExp(property)}\\s*:`, "i").test(declarations);
+    if (!hasProperty) return match;
 
-  const declarations = rule[3].trim();
-  const nextDeclarations = propertyPattern.test(declarations)
-    ? declarations.replace(propertyPattern, (_match, separator: string) => `${separator}\n  ${property}: ${value};`)
-    : `${declarations}${declarations ? "\n" : ""}  ${property}: ${value};`;
-  return css.replace(rulePattern, (_match, prefix: string) =>
-    `${prefix}\n${selector} {\n${nextDeclarations}\n}`
-  );
+    foundProperty = true;
+    const nextDeclarations = declarations.replace(
+      propertyPattern,
+      (_declaration, separator: string) => `${separator}\n  ${property}: ${value};`
+    );
+    return `${prefix}\n${selector} {\n${nextDeclarations.trim()}\n}`;
+  });
+
+  if (!foundProperty) return `${updatedCss.trimEnd()}\n${selector} {\n  ${property}: ${value};\n}`;
+  return updatedCss;
 }
 
 function getComponentPreviewCss(
@@ -663,10 +686,10 @@ export default function EngagementDetailPage() {
                   </label>
                   <div className="md:col-span-2 grid gap-3 xl:grid-cols-2">
                   <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-3">
-                    <h4 className="text-xs font-semibold text-white">Animasi tampil / sembunyi</h4>
-                    <p className="mt-1 text-[10px] leading-4 text-neutral-500">Window dan ikon chat bertransisi selama 3 detik.</p>
+                    <h4 className="text-xs font-semibold text-white">Animasi tampil dan sembunyi chat window</h4>
+                    <p className="mt-1 text-[10px] leading-4 text-neutral-500">Mengatur animasi panel chat saat dibuka atau disembunyikan, terpisah dari transisi bubble chat.</p>
                     <fieldset className="mt-3 space-y-2">
-                      <legend className="mb-2 text-[11px] font-medium text-neutral-300">Pilih transisi</legend>
+                      <legend className="mb-2 text-[11px] font-medium text-neutral-300">Pilih animasi chat window</legend>
                       <div className="grid gap-2 sm:grid-cols-2">
                         {CHAT_SCROLL_ANIMATION_STYLES.map((style) => (
                           <label key={`window-${style.value}`} className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 transition-colors ${item.windowAnimationStyle === style.value ? "border-neutral-500 bg-neutral-900/70" : "border-neutral-800 bg-black hover:border-neutral-700"}`}>
@@ -680,7 +703,7 @@ export default function EngagementDetailPage() {
                             />
                             <span>
                               <span className="block text-[11px] font-medium text-neutral-200">{style.label}</span>
-                              <span className="mt-0.5 block text-[10px] leading-4 text-neutral-500">{style.description}</span>
+                              <span className="mt-0.5 block text-[10px] leading-4 text-neutral-500">{CHAT_WINDOW_ANIMATION_DESCRIPTIONS[style.value]}</span>
                             </span>
                           </label>
                         ))}

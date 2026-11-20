@@ -175,6 +175,7 @@ const layout = (
     widthLabel?: string;
     heightProperty?: string;
     heightLabel?: string;
+    marginLabel?: string;
     borderWidthProperty?: string;
   }
 ): EngagementStyleParameterDefinition[] => {
@@ -183,7 +184,7 @@ const layout = (
   return [
     number(options.widthLabel || "Lebar", selector, options.widthProperty || "width", options.width, 0, 720, 1, widthUnit),
     number(options.heightLabel || "Tinggi", selector, options.heightProperty || "height", options.height, 0, 720, 1, heightUnit),
-    number("Margin", selector, "margin", options.margin, 0, 80),
+    number(options.marginLabel || "Margin", selector, "margin", options.margin, 0, 80),
     number("Padding", selector, "padding", options.padding, 0, 80),
     number("Ketebalan border", selector, options.borderWidthProperty || "border-width", options.borderWidth, 0, 12),
     number("Radius border", selector, "border-radius", options.borderRadius, 0, 64),
@@ -381,7 +382,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
 .engagement-button.engagement-link-button {
   min-width: 0;
   min-height: 34px;
-  margin: 0;
+  margin: 8px;
   color: #18181b;
   background: #ffffff;
   border: 1px solid #d4d4d4;
@@ -405,7 +406,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
       ...layout(".engagement-button.engagement-link-button", {
         width: "0px", widthProperty: "min-width", widthLabel: "Lebar minimum",
         height: "34px", heightProperty: "min-height", heightLabel: "Tinggi minimum",
-        margin: "0px", padding: "8px", borderWidth: "1px", borderRadius: "8px",
+        margin: "8px", marginLabel: "Margin tombol", padding: "8px", borderWidth: "1px", borderRadius: "8px",
       }),
       number("Ukuran judul", ".engagement-link-title", "font-size", "14px", 8, 32),
       number("Ukuran subjudul", ".engagement-link-subtitle", "font-size", "12px", 8, 32),
@@ -567,12 +568,12 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   font-size: 12px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .06);
 }
-.engagement-welcome-title {
+.engagement-welcome-message .engagement-welcome-title {
   color: #18181b;
   font-size: 14px;
   font-weight: 600;
 }
-.engagement-welcome-subtitle {
+.engagement-welcome-message .engagement-welcome-subtitle {
   color: #52525b;
   font-size: 12px;
   line-height: 1.6;
@@ -585,8 +586,8 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   color: #18181b;
 }`,
     parameters: [
-      color("Warna judul", ".engagement-welcome-title", "color", "#18181b"),
-      color("Warna subjudul", ".engagement-welcome-subtitle", "color", "#52525b"),
+      color("Warna judul", ".engagement-welcome-message .engagement-welcome-title", "color", "#18181b"),
+      color("Warna subjudul", ".engagement-welcome-message .engagement-welcome-subtitle", "color", "#52525b"),
       color("Warna teks tombol", ".engagement-welcome-message .engagement-button.engagement-reply-button", "color", "#18181b"),
       color("Background kartu", ".engagement-welcome-message", "background", "#ffffff"),
       color("Warna border", ".engagement-welcome-message", "border-color", "#e5e5e5"),
@@ -596,8 +597,8 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
         height: "120px", heightProperty: "min-height", heightLabel: "Tinggi minimum",
         margin: "0px", padding: "14px", borderWidth: "1px", borderRadius: "14px",
       }),
-      number("Ukuran judul", ".engagement-welcome-title", "font-size", "14px", 8, 32),
-      number("Ukuran subjudul", ".engagement-welcome-subtitle", "font-size", "12px", 8, 32),
+      number("Ukuran judul", ".engagement-welcome-message .engagement-welcome-title", "font-size", "14px", 8, 32),
+      number("Ukuran subjudul", ".engagement-welcome-message .engagement-welcome-subtitle", "font-size", "12px", 8, 32),
     ],
   },
   {
@@ -735,12 +736,52 @@ export function migrateLegacyComponentStyles(
 
   for (const component of ENGAGEMENT_COMPONENT_STYLES) {
     let css = migratedStyles[component.id] || component.defaultCss;
+    if (component.id === "welcome-message") {
+      css = css
+        .replace(/(^|})\s*\.engagement-welcome-title(?=\s*\{)/gi, (_match, prefix: string) =>
+          `${prefix}\n.engagement-welcome-message .engagement-welcome-title`
+        )
+        .replace(/(^|})\s*\.engagement-welcome-subtitle(?=\s*\{)/gi, (_match, prefix: string) =>
+          `${prefix}\n.engagement-welcome-message .engagement-welcome-subtitle`
+        );
+    }
+    if (component.id === "link-buttons") {
+      css = css.replace(
+        /(\.engagement-button\.engagement-link-button\s*\{[^}]*?\bmargin\s*:\s*)0(?:px)?(\s*;)/i,
+        (_match, prefix: string, suffix: string) => `${prefix}8px${suffix}`
+      );
+    }
+    if (component.id === "launcher") {
+      const selector = ".engagement-launcher";
+      const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const rulePattern = new RegExp(`(^|})\\s*${escapedSelector}\\s*\\{([^}]*)\\}`, "i");
+      const rule = rulePattern.exec(css);
+      const declarations = rule?.[2] || "";
+      const hasBorderShorthand = /(?:^|;)\s*border\s*:/i.test(declarations);
+      if (!hasBorderShorthand) {
+        for (const [property, value] of [
+          ["border-style", "solid"],
+          ["border-color", "var(--engagement-line, #e5e5e5)"],
+        ]) {
+          const propertyPattern = new RegExp(`(?:^|;)\\s*${property}\\s*:`, "i");
+          if (propertyPattern.test(declarations)) continue;
+          if (declarations !== "") {
+            css = css.replace(rulePattern, (_match, prefix: string, currentDeclarations: string) =>
+              `${prefix}${selector} {${currentDeclarations.trimEnd()}\n  ${property}: ${value};\n}`
+            );
+          } else {
+            css = `${css.trimEnd()}\n${selector} {\n  ${property}: ${value};\n}`;
+          }
+        }
+      }
+    }
     for (const parameter of component.parameters) {
       if (parameter.group !== "layout") continue;
       const escapedSelector = parameter.selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const rulePattern = new RegExp(`(^|})\\s*${escapedSelector}\\s*\\{([^}]*)\\}`, "i");
       const rule = rulePattern.exec(css);
       const declarations = rule?.[2];
+      if (parameter.property === "border-width" && /(?:^|;)\s*border\s*:/i.test(declarations || "")) continue;
       const propertyPattern = new RegExp(`(?:^|;)\\s*${parameter.property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:`, "i");
       if (declarations !== undefined && propertyPattern.test(declarations)) continue;
 

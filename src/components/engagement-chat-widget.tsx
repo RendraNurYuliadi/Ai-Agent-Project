@@ -290,7 +290,7 @@ export default function EngagementChatWidget({
           aria-label={`Buka chat ${config.window.title}`}
           title={config.window.title}
           className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          style={{ backgroundColor: config.window.accentColor }}
+          style={{ backgroundColor: config.window.accentColor, "--engagement-line": config.window.lineColor } as CSSProperties}
         >
           {initializing ? <Loader2 className="h-6 w-6 animate-spin" /> : <MessageCircle className="h-7 w-7" />}
         </button>
