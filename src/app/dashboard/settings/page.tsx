@@ -134,7 +134,7 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-sm font-semibold text-white">Style global chatbot</h2>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-neutral-500">
-              Style ini hanya milik akun Anda dan digunakan pada Chatbot serta Engagement yang Anda buat. Header, icon, input, dan background window diatur per Engagement.
+              Style ini dibagikan oleh semua pengguna dan digunakan pada Chatbot serta seluruh Engagement. Komponen chat dipakai bersama, sedangkan header dan input Chatbot/Engagement memiliki pengaturan terpisah.
             </p>
             <p className={`mt-1 text-[10px] ${globalStylesSaved ? "text-emerald-400" : "text-amber-400"}`}>
               {globalStylesSaved ? "Style global tersimpan." : "Ada perubahan style global yang belum disimpan."}
@@ -172,7 +172,7 @@ export default function SettingsPage() {
             <div>
               <h2 className="text-sm font-medium text-neutral-100">Animasi bubble saat scroll</h2>
               <p className="mt-1 max-w-xl text-xs leading-5 text-neutral-500">
-                Pilih efek yang digunakan bubble saat masuk ke area terlihat di menu Chatbot. Pengaturan tersimpan di akun dan mengikuti akun saat login di perangkat lain.
+                Pilih efek bubble saat masuk ke area terlihat di menu Chatbot. Pengaturan ini dibagikan dan berlaku untuk semua pengguna.
               </p>
             </div>
           </div>

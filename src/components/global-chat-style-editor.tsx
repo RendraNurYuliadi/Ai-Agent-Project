@@ -83,57 +83,83 @@ function GlobalChatStylePreview({ componentStyles }: { componentStyles: Record<s
       </div>
       <div className="global-chat-style-preview engagement-widget overflow-hidden rounded-xl border border-neutral-800 bg-white text-neutral-900 shadow-xl">
         <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-chat-style-preview") }} />
-        <header className="flex items-center gap-2 border-b border-neutral-200 bg-neutral-900 px-3 py-2.5 text-white">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white/10"><Bot className="h-4 w-4" /></span>
-          <div className="min-w-0">
-            <p className="truncate text-[10px] font-semibold">Chatbot</p>
-            <p className="text-[9px] text-neutral-400">Online · tampilan contoh</p>
+        <header className="chatbot-header flex items-center gap-2 border-b px-3 py-2.5">
+          <span className="chatbot-header-icon flex h-7 w-7 items-center justify-center rounded-full"><Bot className="h-4 w-4" /></span>
+          <div className="min-w-0 flex-1">
+            <p className="chatbot-header-title truncate font-semibold">GenAI Chatbot</p>
+            <p className="chatbot-header-subtitle truncate">Percakapan · nama user</p>
+          </div>
+          <span className="text-[9px]">User</span>
+        </header>
+        <header className="engagement-header flex items-center gap-2 border-b px-3 py-2.5">
+          <span className="engagement-header-icon flex h-7 w-7 items-center justify-center rounded-full"><Bot className="h-4 w-4" /></span>
+          <div className="min-w-0 flex-1">
+            <p className="engagement-header-title truncate font-semibold">Judul chat window</p>
+            <p className="engagement-header-subtitle truncate">Subjudul chat</p>
           </div>
         </header>
-        <div className="max-h-[560px] space-y-3 overflow-y-auto bg-neutral-50 p-3">
-          <div className="engagement-bot-bubble w-fit max-w-full break-words rounded-2xl rounded-tl-sm border px-3 py-2 text-xs">
-            Halo! Ada yang bisa kami bantu hari ini?
+        <div className="engagement-message-list flex max-h-[560px] flex-col gap-4 overflow-y-auto p-3">
+          <div className="space-y-1">
+            <p className="text-[9px] font-medium text-neutral-500">Komponen · Bubble bot</p>
+            <div className="engagement-bot-bubble w-fit max-w-full break-words rounded-2xl rounded-tl-sm border px-3 py-2 text-xs">
+              Halo! Ada yang bisa kami bantu hari ini?
+            </div>
           </div>
-          <article className="engagement-component engagement-welcome-message w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="engagement-welcome-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-md"><Bot className="h-4 w-4" /></span>
-              <h3 className="engagement-welcome-title font-semibold">Selamat datang!</h3>
-            </div>
-            <p className="engagement-welcome-subtitle whitespace-pre-wrap leading-5">Silakan pilih topik yang ingin Anda tanyakan.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs">Produk</button>
-              <button type="button" className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs">Bantuan</button>
-            </div>
-          </article>
-          <article className="engagement-component engagement-interaction-card w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3">
-            <h3 className="engagement-interaction-title mb-2 font-semibold">Pilih salah satu opsi</h3>
-            <p className="engagement-interaction-subtitle whitespace-pre-wrap leading-5">Komponen interaction juga mengikuti style global.</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs">Lanjutkan</button>
-            </div>
-          </article>
+          <div className="space-y-1">
+            <p className="text-[9px] font-medium text-neutral-500">Komponen · Welcome message</p>
+            <article className="engagement-component engagement-welcome-message w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="engagement-welcome-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-md"><Bot className="h-4 w-4" /></span>
+                <h3 className="engagement-welcome-title font-semibold">Selamat datang!</h3>
+              </div>
+              <p className="engagement-welcome-subtitle whitespace-pre-wrap leading-5">Silakan pilih topik yang ingin Anda tanyakan.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs">Produk</button>
+                <button type="button" className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs">Bantuan</button>
+              </div>
+            </article>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[9px] font-medium text-neutral-500">Komponen · Interaction</p>
+            <article className="engagement-component engagement-interaction-card w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3">
+              <h3 className="engagement-interaction-title mb-2 font-semibold">Pilih salah satu opsi</h3>
+              <p className="engagement-interaction-subtitle whitespace-pre-wrap leading-5">Komponen interaction juga mengikuti style global.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs">Lanjutkan</button>
+              </div>
+            </article>
+          </div>
           {previewComponents.map((component) => (
-            <AssistantComponentView
-              key={component.id}
-              component={component}
-              onReply={() => {}}
-              disabled={false}
-              previewMode
-            />
+            <div key={component.id} className="space-y-1">
+              <p className="text-[9px] font-medium text-neutral-500">Komponen · {component.name}</p>
+              <AssistantComponentView
+                component={component}
+                onReply={() => {}}
+                disabled={false}
+                previewMode
+              />
+            </div>
           ))}
-          <div className="flex justify-end">
-            <div className="engagement-user-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tr-sm border px-3 py-2 text-xs">
-              Saya ingin bertanya tentang layanan.
+          <div className="space-y-1">
+            <p className="text-right text-[9px] font-medium text-neutral-500">Komponen · Bubble user</p>
+            <div className="flex justify-end">
+              <div className="engagement-user-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tr-sm border px-3 py-2 text-xs">
+                Saya ingin bertanya tentang layanan.
+              </div>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 border-t border-neutral-200 bg-white p-2">
-          <div className="flex-1 rounded-full border border-neutral-300 px-3 py-2 text-[10px] text-neutral-400">Ketik pesan...</div>
-          <button type="button" aria-label="Contoh tombol kirim" className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-white"><Send className="h-3.5 w-3.5" /></button>
+        <div className="chatbot-composer flex items-center gap-2 border-t p-2">
+          <div className="chatbot-input flex-1 rounded-full border px-3 py-2 text-[10px]">Menu Chatbot · Ketik pesan...</div>
+          <button type="button" aria-label="Contoh tombol kirim Chatbot" className="engagement-send flex h-8 w-8 items-center justify-center rounded-xl"><Send className="engagement-send-glyph h-3.5 w-3.5" /></button>
+        </div>
+        <div className="engagement-composer flex items-center gap-2 border-t p-2">
+          <div className="engagement-input flex-1 rounded-xl border px-3 py-2 text-[10px]">Engagement · Tulis pesan...</div>
+          <button type="button" aria-label="Contoh tombol kirim Engagement" className="engagement-send flex h-8 w-8 items-center justify-center rounded-xl"><Send className="engagement-send-glyph h-3.5 w-3.5" /></button>
         </div>
       </div>
       <p className="text-[9px] leading-4 text-neutral-500">
-        Preview ini memperlihatkan bubble, welcome message, interaction, tombol, card, dan carousel. Header dan input hanya ilustrasi.
+        Header dan input Chatbot serta Engagement memiliki pengaturan terpisah. Komponen pesan lainnya memakai style yang sama.
       </p>
     </aside>
   );

@@ -4,7 +4,7 @@ import { getDatabase } from "@/lib/mongodb";
 import { normalizeEngagementOrigin } from "@/lib/engagement-data";
 import {
   migrateLegacyComponentStyles,
-  normalizeGlobalChatStyles,
+  mergeGlobalChatStylesWithEngagement,
 } from "@/lib/engagement-theme";
 import { isChatScrollAnimationStyle } from "@/lib/chat-ui-preferences";
 import { signEngagementWidgetToken } from "@/lib/engagement-auth";
@@ -45,12 +45,23 @@ export default async function EngagementWidgetPage({
     return <UnavailableWidget />;
   }
 
-  const globalStyleSetting = await db.collection("botSettings").findOne(
-    { key: "globalChatStyles", userId: engagement.createdBy },
-    { projection: { componentStyles: 1 } }
-  ) || await db.collection("botSettings").findOne(
-    { key: "globalChatStyles", userId: { $exists: false } },
-    { projection: { componentStyles: 1 } }
+  const [sharedStyleSetting, latestUserStyleSetting, mostRecentEngagement] = await Promise.all([
+    db.collection("botSettings").findOne(
+      { key: "globalChatStyles", userId: { $exists: false } },
+      { projection: { componentStyles: 1 } }
+    ),
+    db.collection("botSettings").findOne(
+      { key: "globalChatStyles", userId: { $exists: true } },
+      { sort: { updatedAt: -1 }, projection: { componentStyles: 1 } }
+    ),
+    db.collection("engagements").findOne(
+      {},
+      { sort: { updatedAt: -1 }, projection: { windows: 1 } }
+    ),
+  ]);
+  const globalComponentStyles = mergeGlobalChatStylesWithEngagement(
+    (sharedStyleSetting || latestUserStyleSetting)?.componentStyles,
+    Array.isArray(mostRecentEngagement?.windows) ? mostRecentEngagement.windows[0] : undefined
   );
   const componentStyles = {
     ...migrateLegacyComponentStyles(
@@ -58,7 +69,7 @@ export default async function EngagementWidgetPage({
         ? windowConfig.componentStyles as Record<string, string>
         : {}
     ),
-    ...normalizeGlobalChatStyles(globalStyleSetting?.componentStyles),
+    ...globalComponentStyles,
   };
 
   const widgetConfig: EngagementWidgetConfig = {

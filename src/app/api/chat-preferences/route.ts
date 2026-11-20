@@ -31,11 +31,17 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = await getDatabase();
-    const setting = await db.collection("botSettings").findOne(
-      { key: CHAT_PREFERENCES_KEY, userId: session.id },
-      { projection: { preferences: 1 } }
-    );
-    return NextResponse.json({ preferences: normalizePreferences(setting?.preferences) });
+    const [sharedSetting, latestUserSetting] = await Promise.all([
+      db.collection("botSettings").findOne(
+        { key: CHAT_PREFERENCES_KEY, userId: { $exists: false } },
+        { projection: { preferences: 1 } }
+      ),
+      db.collection("botSettings").findOne(
+        { key: CHAT_PREFERENCES_KEY, userId: { $exists: true } },
+        { sort: { updatedAt: -1 }, projection: { preferences: 1 } }
+      ),
+    ]);
+    return NextResponse.json({ preferences: normalizePreferences((sharedSetting || latestUserSetting)?.preferences) });
   } catch (error) {
     console.error("GET chat UI preferences error:", error);
     return NextResponse.json({ error: "Gagal memuat pengaturan animasi." }, { status: 500 });
@@ -66,28 +72,33 @@ export async function PUT(req: NextRequest) {
     }
 
     const db = await getDatabase();
+    const [sharedSetting, latestUserSetting] = await Promise.all([
+      db.collection("botSettings").findOne(
+        { key: CHAT_PREFERENCES_KEY, userId: { $exists: false } },
+        { projection: { preferences: 1 } }
+      ),
+      db.collection("botSettings").findOne(
+        { key: CHAT_PREFERENCES_KEY, userId: { $exists: true } },
+        { sort: { updatedAt: -1 }, projection: { preferences: 1 } }
+      ),
+    ]);
+    const preferences = {
+      ...normalizePreferences((sharedSetting || latestUserSetting)?.preferences),
+      ...updates,
+    };
     await db.collection("botSettings").updateOne(
-      { key: CHAT_PREFERENCES_KEY, userId: session.id },
+      { key: CHAT_PREFERENCES_KEY, userId: { $exists: false } },
       {
         $set: {
-          ...(updates.animationEnabled !== undefined
-            ? { "preferences.animationEnabled": updates.animationEnabled }
-            : {}),
-          ...(updates.animationStyle !== undefined
-            ? { "preferences.animationStyle": updates.animationStyle }
-            : {}),
+          preferences,
           key: CHAT_PREFERENCES_KEY,
-          userId: session.id,
           updatedAt: new Date(),
+          updatedBy: { id: session.id, name: session.name },
         },
       },
       { upsert: true }
     );
-    const setting = await db.collection("botSettings").findOne(
-      { key: CHAT_PREFERENCES_KEY, userId: session.id },
-      { projection: { preferences: 1 } }
-    );
-    return NextResponse.json({ preferences: normalizePreferences(setting?.preferences) });
+    return NextResponse.json({ preferences });
   } catch (error) {
     console.error("PUT chat UI preferences error:", error);
     return NextResponse.json({ error: "Gagal menyimpan pengaturan animasi." }, { status: 500 });

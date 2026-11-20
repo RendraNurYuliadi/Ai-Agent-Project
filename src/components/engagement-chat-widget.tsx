@@ -264,8 +264,6 @@ export default function EngagementChatWidget({
 
   const accentStyle = {
     "--engagement-accent": config.window.accentColor,
-    "--engagement-background": config.window.backgroundColor,
-    "--engagement-line": config.window.lineColor,
   } as CSSProperties;
   const conversationUnavailable = botStatus === "closed";
   const isWaitingForAgent = escalationStatus === "pending";
@@ -300,7 +298,7 @@ export default function EngagementChatWidget({
           aria-label={`Buka chat ${config.window.title}`}
           title={config.window.title}
           className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-          style={{ backgroundColor: config.window.accentColor, borderRadius: launcherBorderRadius, "--engagement-line": config.window.lineColor } as CSSProperties}
+          style={{ borderRadius: launcherBorderRadius } as CSSProperties}
         >
           {initializing ? <Loader2 className="h-6 w-6 animate-spin" /> : <MessageCircle className="h-7 w-7" />}
         </button>
@@ -319,7 +317,7 @@ export default function EngagementChatWidget({
           if (windowAnimationDirection === "exit") setIsOpen(false);
           setWindowAnimationDirection(null);
         }}
-        style={{ ...accentStyle, backgroundColor: "var(--engagement-background)", borderRadius: `${config.window.borderRadius}px` }}
+        style={accentStyle}
       >
       <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4">
         <span className="engagement-header-icon flex h-9 w-9 items-center justify-center rounded-full">

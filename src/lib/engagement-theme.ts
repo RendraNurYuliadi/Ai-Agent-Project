@@ -199,6 +199,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
     className: "engagement-launcher",
     defaultCss: `.engagement-launcher {
   --engagement-launcher-shadow-color: #000000;
+  background: #171717;
   width: 72px;
   height: 72px;
   margin: 0;
@@ -209,6 +210,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   box-shadow: 0 8px 24px color-mix(in srgb, var(--engagement-launcher-shadow-color) 36%, transparent);
 }`,
     parameters: [
+      color("Warna background", ".engagement-launcher", "background", "#171717"),
       color("Warna box shadow", ".engagement-launcher", "--engagement-launcher-shadow-color", "#000000"),
       color("Warna border", ".engagement-launcher", "border-color", "#e5e5e5"),
       ...layout(".engagement-launcher", {
@@ -217,8 +219,51 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
     ],
   },
   {
+    id: "chatbot-header",
+    name: "Header Chatbot",
+    description: "Header menu Chatbot dengan nama user, percakapan, dan identitas bot.",
+    className: "chatbot-header",
+    defaultCss: `.chatbot-header {
+  width: 100%;
+  min-height: 64px;
+  margin: 0;
+  padding: 12px;
+  color: #ffffff;
+  background: #080808;
+  border-color: #262626;
+  border-bottom-width: 1px;
+  border-radius: 0;
+}
+.chatbot-header-title {
+  color: #ffffff;
+  font-size: 14px;
+}
+.chatbot-header-subtitle {
+  color: #a3a3a3;
+  font-size: 12px;
+}
+.chatbot-header-icon {
+  background: #ffffff;
+  color: #000000;
+}`,
+    parameters: [
+      color("Warna judul bot", ".chatbot-header-title", "color", "#ffffff"),
+      color("Warna subjudul", ".chatbot-header-subtitle", "color", "#a3a3a3"),
+      color("Background header", ".chatbot-header", "background", "#080808"),
+      color("Warna border", ".chatbot-header", "border-color", "#262626"),
+      color("Background icon bot", ".chatbot-header-icon", "background", "#ffffff"),
+      color("Warna icon bot", ".chatbot-header-icon", "color", "#000000"),
+      ...layout(".chatbot-header", {
+        width: "100%", height: "64px", margin: "0px", padding: "12px", borderWidth: "1px", borderRadius: "0px",
+        widthLabel: "Lebar", heightProperty: "min-height", heightLabel: "Tinggi minimum", borderWidthProperty: "border-bottom-width",
+      }),
+      number("Ukuran judul", ".chatbot-header-title", "font-size", "14px", 8, 32),
+      number("Ukuran subjudul", ".chatbot-header-subtitle", "font-size", "12px", 8, 24),
+    ],
+  },
+  {
     id: "header",
-    name: "Header",
+    name: "Header Engagement",
     description: "Judul, subjudul, icon, dan menu titik tiga.",
     className: "engagement-header",
     defaultCss: `.engagement-header {
@@ -254,6 +299,23 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
       }),
       number("Ukuran judul", ".engagement-header-title", "font-size", "14px", 9, 32),
       number("Ukuran subjudul", ".engagement-header-subtitle", "font-size", "12px", 8, 24),
+    ],
+  },
+  {
+    id: "window",
+    name: "Background & batas chat window",
+    description: "Background, garis utama, dan radius panel chat. Berlaku untuk Chatbot dan Engagement.",
+    className: "engagement-widget",
+    defaultCss: `.engagement-widget {
+  --engagement-line: #e5e5e5;
+  background-color: #ffffff;
+  border-color: var(--engagement-line);
+  border-radius: 16px;
+}`,
+    parameters: [
+      color("Background chat window", ".engagement-widget", "background-color", "#ffffff"),
+      color("Warna garis", ".engagement-widget", "--engagement-line", "#e5e5e5"),
+      number("Radius chat window", ".engagement-widget", "border-radius", "16px", 0, 64),
     ],
   },
   {
@@ -395,6 +457,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
       color("Warna judul", ".engagement-link-title", "color", "#18181b"),
       color("Warna subjudul", ".engagement-link-subtitle", "color", "#52525b"),
       color("Warna teks tombol", ".engagement-button.engagement-link-button", "color", "#18181b"),
+      color("Background tombol", ".engagement-button.engagement-link-button", "background", "#ffffff"),
       color("Background card", ".engagement-link-card", "background", "#ffffff"),
       color("Warna border", ".engagement-link-card", "border-color", "#e5e5e5"),
       color("Warna border tombol", ".engagement-button.engagement-link-button", "border-color", "#d4d4d4"),
@@ -675,6 +738,42 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
     ],
   },
   {
+    id: "chatbot-input",
+    name: "Input pesan Chatbot",
+    description: "Input dan area bawah pada menu Chatbot. Style input Engagement diatur terpisah.",
+    className: "chatbot-input",
+    defaultCss: `.chatbot-composer {
+  background: #080808;
+  border-color: #262626;
+}
+.chatbot-input {
+  width: 100%;
+  height: 40px;
+  margin: 0;
+  color: #ffffff;
+  background: #000000;
+  border: 1px solid #262626;
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 14px;
+}
+.chatbot-input::placeholder {
+  color: #525252;
+}`,
+    parameters: [
+      color("Background area bersama", ".chatbot-composer", "background", "#080808"),
+      color("Warna garis area", ".chatbot-composer", "border-color", "#262626"),
+      color("Warna teks input", ".chatbot-input", "color", "#ffffff"),
+      color("Warna placeholder", ".chatbot-input::placeholder", "color", "#525252"),
+      color("Background input", ".chatbot-input", "background", "#000000"),
+      color("Warna border input", ".chatbot-input", "border-color", "#262626"),
+      ...layout(".chatbot-input", {
+        width: "100%", height: "40px", margin: "0px", padding: "12px", borderWidth: "1px", borderRadius: "12px",
+      }),
+      number("Ukuran teks", ".chatbot-input", "font-size", "14px", 8, 32),
+    ],
+  },
+  {
     id: "send",
     name: "Tombol kirim",
     description: "Tombol kirim, termasuk gambar ikon khusus dari URL.",
@@ -711,6 +810,14 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
 ];
 
 export const GLOBAL_CHAT_STYLE_COMPONENT_IDS = [
+  "window",
+  "launcher",
+  "header",
+  "chatbot-header",
+  "input",
+  "chatbot-input",
+  "send",
+  "scrollbar",
   "reply-buttons",
   "link-buttons",
   "card",
@@ -747,6 +854,51 @@ export function normalizeGlobalChatStyles(value: unknown): Record<string, string
       .replace(/expression\s*\([^)]*\)/gi, "")
       .replace(/behavior\s*:/gi, "");
   }
+  return styles;
+}
+
+export function mergeGlobalChatStylesWithEngagement(
+  value: unknown,
+  sourceWindow: unknown
+): Record<string, string> {
+  const styles = normalizeGlobalChatStyles(value);
+  if (!sourceWindow || typeof sourceWindow !== "object" || Array.isArray(sourceWindow)) return styles;
+
+  const windowConfig = sourceWindow as Record<string, unknown>;
+  const sourceStyles = windowConfig.componentStyles && typeof windowConfig.componentStyles === "object" && !Array.isArray(windowConfig.componentStyles)
+    ? migrateLegacyComponentStyles(windowConfig.componentStyles as Record<string, string>)
+    : {};
+  const existing = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+
+  for (const id of GLOBAL_CHAT_STYLE_COMPONENT_IDS) {
+    if (Object.prototype.hasOwnProperty.call(existing, id) || typeof sourceStyles[id] !== "string") continue;
+    styles[id] = sourceStyles[id];
+  }
+
+  const setDefaultWindowValue = (property: string, value: string) => {
+    styles.window = setEngagementStyleProperty(styles.window, ".engagement-widget", property, value);
+  };
+  if (!Object.prototype.hasOwnProperty.call(existing, "window")) {
+    if (typeof windowConfig.backgroundColor === "string") {
+      setDefaultWindowValue("background-color", windowConfig.backgroundColor);
+    }
+    if (typeof windowConfig.lineColor === "string") {
+      setDefaultWindowValue("--engagement-line", windowConfig.lineColor);
+    }
+    if (typeof windowConfig.borderRadius === "number" && Number.isFinite(windowConfig.borderRadius)) {
+      setDefaultWindowValue("border-radius", `${windowConfig.borderRadius}px`);
+    }
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(existing, "launcher") && typeof windowConfig.accentColor === "string") {
+    styles.launcher = setEngagementStyleProperty(styles.launcher, ".engagement-launcher", "background", windowConfig.accentColor);
+  }
+  if (!Object.prototype.hasOwnProperty.call(existing, "send") && typeof windowConfig.accentColor === "string") {
+    styles.send = setEngagementStyleProperty(styles.send, ".engagement-send", "background", windowConfig.accentColor);
+  }
+
   return styles;
 }
 
@@ -923,6 +1075,9 @@ export function scopeEngagementCss(css: string, scope: string): string {
         .filter(Boolean)
         .map((selector) => {
           if (selector.startsWith("@")) return selector;
+          if (selector === ".engagement-widget") {
+            return `${scope}.engagement-widget, ${scope} ${selector}`;
+          }
           return `${scope} ${selector}`;
         });
       return `${selectors.join(",")} {${declarations}}`;

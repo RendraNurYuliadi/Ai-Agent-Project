@@ -94,7 +94,7 @@ export default function EngagementsPage() {
           <MessagesSquare className="h-6 w-6" />Engagement
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-neutral-400">
-          Buat widget chat untuk website, pilih skill bot, lalu salin kode iframe ke website Anda.
+          Konfigurasi Engagement dibagikan dan dapat dikelola oleh semua admin dan manager. Buat widget chat, pilih skill bot, lalu salin kode iframe ke website Anda.
         </p>
       </header>
 
@@ -116,7 +116,7 @@ export default function EngagementsPage() {
       </form>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-white">Engagement Anda</h2>
+        <h2 className="text-sm font-semibold text-white">Engagement bersama</h2>
         {loading ? (
           <div className="flex items-center gap-2 py-12 text-sm text-neutral-500"><Loader2 className="h-4 w-4 animate-spin" />Memuat...</div>
         ) : engagements.length ? (

@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = await getDatabase();
-    const engagements = await db.collection("engagements").find({ createdBy: session.id }).sort({ updatedAt: -1 }).toArray();
+    const engagements = await db.collection("engagements").find({}).sort({ updatedAt: -1 }).toArray();
     return NextResponse.json({
       engagements: engagements.map((item) => ({
         id: item._id.toString(),

@@ -25,7 +25,7 @@ export async function GET(
 
   try {
     const db = await getDatabase();
-    const item = await db.collection("engagements").findOne({ _id: new ObjectId(id), createdBy: session.id });
+    const item = await db.collection("engagements").findOne({ _id: new ObjectId(id) });
     if (!item) return NextResponse.json({ error: "Engagement tidak ditemukan." }, { status: 404 });
     return NextResponse.json({
       engagement: {
@@ -80,7 +80,7 @@ export async function PUT(
 
     const now = new Date();
     const result = await db.collection("engagements").updateOne(
-      { _id: new ObjectId(id), createdBy: session.id },
+      { _id: new ObjectId(id) },
       { $set: { name, entryPoints, windows, isActive, updatedAt: now } }
     );
     if (!result.matchedCount) return NextResponse.json({ error: "Engagement tidak ditemukan." }, { status: 404 });
@@ -106,7 +106,6 @@ export async function DELETE(
     const db = await getDatabase();
     const result = await db.collection("engagements").deleteOne({
       _id: new ObjectId(id),
-      createdBy: session.id,
     });
     if (!result.deletedCount) return NextResponse.json({ error: "Engagement tidak ditemukan." }, { status: 404 });
     return NextResponse.json({ success: true });

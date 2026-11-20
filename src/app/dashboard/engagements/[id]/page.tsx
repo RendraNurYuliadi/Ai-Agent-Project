@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Loader2, Plus, Save, Sparkles, Trash2, MessageCircle, MoreVertical } from "lucide-react";
@@ -43,6 +43,25 @@ const DEFAULT_BACKGROUND = "#ffffff";
 const DEFAULT_LINE = "#e5e5e5";
 const GLOBAL_CHAT_STYLE_ID_SET = new Set<string>(GLOBAL_CHAT_STYLE_COMPONENT_IDS);
 
+function getComponentPreviewCss(
+  styles: Record<string, string>,
+  componentId: string
+): string {
+  const dependencies: Record<string, string[]> = {
+    "link-buttons": ["reply-buttons"],
+    card: ["reply-buttons"],
+    carousel: ["card", "reply-buttons"],
+    interaction: ["reply-buttons"],
+    "welcome-message": ["reply-buttons"],
+    input: ["send"],
+  };
+  const componentIds = [componentId, ...(dependencies[componentId] || [])];
+  return [...new Set(componentIds)]
+    .map((id) => styles[id] || ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === id)?.defaultCss || "")
+    .filter(Boolean)
+    .join("\n");
+}
+
 function normalizeWindow(windowItem: EngagementWindow): EngagementWindow {
   const componentStyles = migrateLegacyComponentStyles({
     ...getDefaultComponentStyles(),
@@ -75,25 +94,6 @@ function normalizeWindow(windowItem: EngagementWindow): EngagementWindow {
 
 type EngagementTab = "general" | "windows" | "embed";
 
-function getComponentPreviewCss(
-  styles: Record<string, string>,
-  componentId: string
-): string {
-  const dependencies: Record<string, string[]> = {
-    "link-buttons": ["reply-buttons"],
-    card: ["reply-buttons"],
-    carousel: ["card", "reply-buttons"],
-    interaction: ["reply-buttons"],
-    "welcome-message": ["reply-buttons"],
-    input: ["send"],
-  };
-  const componentIds = [componentId, ...(dependencies[componentId] || [])];
-  return [...new Set(componentIds)]
-    .map((id) => styles[id] || ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === id)?.defaultCss || "")
-    .filter(Boolean)
-    .join("\n");
-}
-
 function EngagementComponentPreview({
   item,
   componentId,
@@ -108,11 +108,6 @@ function EngagementComponentPreview({
           type="button"
           aria-label="Preview icon chat"
           className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl"
-          style={{
-            backgroundColor: item.accentColor,
-            borderRadius: readCssProperty(item.componentStyles.launcher, ".engagement-launcher", "border-radius", "36px"),
-            "--engagement-line": item.lineColor,
-          } as CSSProperties}
         >
           <MessageCircle className="h-7 w-7" />
         </button>
@@ -619,21 +614,6 @@ export default function EngagementDetailPage() {
                     <span className="text-[11px] text-neutral-400">Subjudul</span>
                     <input value={item.subtitle} onChange={(event) => updateWindow(item.id, { subtitle: event.target.value })} maxLength={160} className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 text-xs text-white outline-none focus:border-neutral-600" />
                   </label>
-                  <label className="flex items-center gap-3 text-[11px] text-neutral-400">
-                    <span>Warna utama</span>
-                    <input type="color" value={item.accentColor} onChange={(event) => {
-                      const accentColor = event.target.value;
-                      updateWindow(item.id, {
-                        accentColor,
-                        componentStyles: {
-                          ...item.componentStyles,
-                          header: setCssProperty(item.componentStyles.header, ".engagement-header", "background", accentColor),
-                          send: setCssProperty(item.componentStyles.send, ".engagement-send", "background", accentColor),
-                        },
-                      });
-                    }} className="h-8 w-12 cursor-pointer rounded border border-neutral-700 bg-transparent p-0.5" />
-                    <span className="font-mono">{item.accentColor}</span>
-                  </label>
                   <label className="space-y-1.5">
                     <span className="text-[11px] text-neutral-400">URL icon header</span>
                     <input value={item.headerIconUrl} onChange={(event) => updateWindow(item.id, { headerIconUrl: event.target.value })} maxLength={2048} placeholder="https://example.com/icon.png" className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 text-xs text-white outline-none placeholder:text-neutral-700 focus:border-neutral-600" />
@@ -642,20 +622,9 @@ export default function EngagementDetailPage() {
                     <span className="text-[11px] text-neutral-400">URL ikon tombol kirim</span>
                     <input value={item.sendIconUrl} onChange={(event) => updateWindow(item.id, { sendIconUrl: event.target.value })} maxLength={2048} placeholder="https://example.com/send-icon.svg" className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-950 px-3 text-xs text-white outline-none placeholder:text-neutral-700 focus:border-neutral-600" />
                   </label>
-                  <label className="flex items-center gap-3 text-[11px] text-neutral-400">
-                    <span>Background window</span>
-                    <input type="color" value={item.backgroundColor} onChange={(event) => updateWindow(item.id, { backgroundColor: event.target.value })} className="h-8 w-12 cursor-pointer rounded border border-neutral-700 bg-transparent p-0.5" />
-                    <span className="font-mono">{item.backgroundColor}</span>
-                  </label>
-                  <label className="flex items-center gap-3 text-[11px] text-neutral-400">
-                    <span>Warna garis</span>
-                    <input type="color" value={item.lineColor} onChange={(event) => updateWindow(item.id, { lineColor: event.target.value })} className="h-8 w-12 cursor-pointer rounded border border-neutral-700 bg-transparent p-0.5" />
-                    <span className="font-mono">{item.lineColor}</span>
-                  </label>
-                  <label className="space-y-1.5">
-                    <span className="text-[11px] text-neutral-400">Rounded window: {item.borderRadius}px</span>
-                    <input type="range" min={0} max={32} value={item.borderRadius} onChange={(event) => updateWindow(item.id, { borderRadius: Number(event.target.value) })} className="h-3 w-full accent-white" />
-                  </label>
+                  <p className="md:col-span-2 text-[10px] leading-4 text-neutral-500">
+                    Warna window, header, tombol, dan komponen chat diatur bersama di Setting → Style global chatbot.
+                  </p>
                   <label className="flex h-9 items-center gap-2 text-[11px] text-neutral-400">
                     <input type="checkbox" checked={item.allowClose} onChange={(event) => updateWindow(item.id, { allowClose: event.target.checked })} className="h-4 w-4 accent-white" />
                     Tampilkan tombol close pada menu titik tiga
@@ -731,9 +700,9 @@ export default function EngagementDetailPage() {
                   </div>
                   <div className="md:col-span-2 space-y-3">
                     <div>
-                      <h4 className="text-xs font-semibold text-white">Custom CSS per komponen</h4>
+                      <h4 className="text-xs font-semibold text-white">Style komponen chat</h4>
                       <p className="mt-1 text-[10px] leading-4 text-neutral-500">
-                        Input pesan dan tombol kirim diatur dalam satu kartu, tetapi properti serta CSS masing-masing tetap terpisah. Struktur, teks, data, dan action bot tidak berubah.
+                        Semua style komponen sekarang dikelola di Setting → Style global chatbot dan berlaku untuk Chatbot serta seluruh Engagement.
                       </p>
                     </div>
                     <div className="grid gap-3 xl:grid-cols-2">
@@ -907,7 +876,7 @@ export default function EngagementDetailPage() {
                     `.engagement-preview-window-${item.id}`
                   ) }} />
                   <div className={`engagement-preview-window-${item.id} relative mx-auto h-[457px] w-[280px] overflow-hidden`}>
-                    <div className="engagement-widget absolute left-0 top-0 flex h-[620px] w-[380px] flex-col overflow-hidden border-2 shadow-2xl outline outline-1 outline-white/40" style={{ height: "620px", width: "380px", transform: "scale(0.736842)", transformOrigin: "top left", borderRadius: `${item.borderRadius}px`, backgroundColor: item.backgroundColor, borderColor: item.lineColor, outlineOffset: "2px", "--engagement-line": item.lineColor } as CSSProperties}>
+                  <div className="engagement-widget absolute left-0 top-0 flex h-[620px] w-[380px] flex-col overflow-hidden border-2 shadow-2xl outline outline-1 outline-white/40" style={{ height: "620px", width: "380px", transform: "scale(0.736842)", transformOrigin: "top left", outlineOffset: "2px" }}>
                       <EngagementComponentPreview item={item} componentId="header" />
                       <div className="engagement-message-list min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
                         <EngagementComponentPreview item={item} componentId="welcome-message" />
