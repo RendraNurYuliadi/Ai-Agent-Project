@@ -73,10 +73,12 @@ function MessageButtons({
   buttons,
   onReply,
   disabled,
+  previewMode = false,
 }: {
   buttons: ConversationMessageButton[];
   onReply?: (value: string) => void;
   disabled: boolean;
+  previewMode?: boolean;
 }) {
   return <div className="engagement-button-list flex flex-wrap gap-2">
     {buttons.map((button, index) => button.action === "reply" ? (
@@ -88,24 +90,26 @@ function MessageButtons({
         className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs transition-colors hover:brightness-95 disabled:opacity-40"
       >{button.label}</button>
     ) : (
-      <a key={`${button.label}-${index}`} href={button.value} target="_blank" rel="noopener noreferrer" className="engagement-button engagement-link-button inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors hover:brightness-95">
+      <a key={`${button.label}-${index}`} href={previewMode ? undefined : button.value} target={previewMode ? undefined : "_blank"} rel={previewMode ? undefined : "noopener noreferrer"} className="engagement-button engagement-link-button inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors hover:brightness-95">
         {button.label}<ExternalLink className="h-3 w-3" />
       </a>
     ))}
   </div>;
 }
 
-function MessageCardView({ card, onReply, disabled, imageProxyToken }: { card: ConversationMessageCard; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
+function MessageCardView({ card, onReply, disabled, imageProxyToken, previewMode = false }: { card: ConversationMessageCard; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string; previewMode?: boolean }) {
   return <article className="engagement-card engagement-content-card w-full min-w-0 overflow-hidden rounded-xl border">
-    {card.imageUrl && <Image src={getImageProxyUrl(card.imageUrl, imageProxyToken)} alt={card.title} width={520} height={card.imageHeight ?? 128} unoptimized style={{ "--engagement-card-image-height": `${card.imageHeight ?? 128}px` } as CSSProperties} className="engagement-card-image w-full object-cover" />}
+    {card.imageUrl
+      ? <Image src={getImageProxyUrl(card.imageUrl, imageProxyToken)} alt={card.title} width={520} height={card.imageHeight ?? 128} unoptimized style={{ "--engagement-card-image-height": `${card.imageHeight ?? 128}px` } as CSSProperties} className="engagement-card-image w-full object-cover" />
+      : previewMode && <Image src="/engagement-preview-card.svg" alt="" width={520} height={card.imageHeight ?? 128} unoptimized style={{ "--engagement-card-image-height": `${card.imageHeight ?? 128}px` } as CSSProperties} className="engagement-card-image w-full object-cover" />}
     <div className="space-y-2.5 p-3">
       <div><h3 className="engagement-card-title font-semibold">{card.title}</h3><p className="engagement-card-subtitle mt-1 whitespace-pre-wrap leading-5">{card.subtitle}</p></div>
-      <MessageButtons buttons={card.buttons} onReply={onReply} disabled={disabled} />
+      <MessageButtons buttons={card.buttons} onReply={onReply} disabled={disabled} previewMode={previewMode} />
     </div>
   </article>;
 }
 
-function MessageCarousel({ component, onReply, disabled, imageProxyToken }: { component: ConversationMessageComponent; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
+function MessageCarousel({ component, onReply, disabled, imageProxyToken, previewMode = false }: { component: ConversationMessageComponent; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string; previewMode?: boolean }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const count = component.cards.length;
   useEffect(() => {
@@ -116,7 +120,7 @@ function MessageCarousel({ component, onReply, disabled, imageProxyToken }: { co
   if (!count) return null;
   return <div className="engagement-carousel w-full max-w-[260px]" aria-roledescription="carousel">
     <div className="overflow-hidden"><div className="flex transition-transform duration-500 ease-out motion-reduce:transition-none" style={{ transform: `translateX(-${currentIndex * 100}%)` }}>
-      {component.cards.map((card, index) =>       <div key={`${component.id}-${index}`} className="w-full shrink-0"><MessageCardView card={card} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} /></div>)}
+      {component.cards.map((card, index) =>       <div key={`${component.id}-${index}`} className="w-full shrink-0"><MessageCardView card={card} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} previewMode={previewMode} /></div>)}
     </div></div>
     {count > 1 && <div className="engagement-carousel-controls mt-2 flex items-center justify-between px-1">
       <button type="button" onClick={() => setCurrentIndex((index) => (index - 1 + count) % count)} aria-label="Card sebelumnya" title="Card sebelumnya" className="engagement-carousel-button p-1.5 transition-colors hover:brightness-95"><ChevronLeft className="h-4 w-4" /></button>
@@ -126,15 +130,15 @@ function MessageCarousel({ component, onReply, disabled, imageProxyToken }: { co
   </div>;
 }
 
-function AssistantComponentView({ component, onReply, disabled, imageProxyToken }: { component: ConversationMessageComponent; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
-  if (component.type === "reply_buttons") return <MessageButtons buttons={component.buttons} onReply={onReply} disabled={disabled} />;
+export function AssistantComponentView({ component, onReply, disabled, imageProxyToken, previewMode = false }: { component: ConversationMessageComponent; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string; previewMode?: boolean }) {
+  if (component.type === "reply_buttons") return <MessageButtons buttons={component.buttons} onReply={onReply} disabled={disabled} previewMode={previewMode} />;
   if (component.type === "link_buttons") return <article className="engagement-link-card w-full max-w-[320px]">
     {component.title && <h3 className="engagement-link-title font-semibold">{component.title}</h3>}
     {component.subtitle && <p className="engagement-link-subtitle mt-1 whitespace-pre-wrap leading-5">{component.subtitle}</p>}
-    <div className="mt-3"><MessageButtons buttons={component.buttons.map((button) => ({ ...button, action: "link" }))} onReply={onReply} disabled={disabled} /></div>
+    <div className="mt-3"><MessageButtons buttons={component.buttons.map((button) => ({ ...button, action: "link" }))} onReply={onReply} disabled={disabled} previewMode={previewMode} /></div>
   </article>;
-  if (component.type === "card" && component.card) return <div className="w-full max-w-[260px]"><MessageCardView card={component.card} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} /></div>;
-  if (component.type === "carousel") return <MessageCarousel component={component} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} />;
+  if (component.type === "card" && component.card) return <div className="w-full max-w-[260px]"><MessageCardView card={component.card} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} previewMode={previewMode} /></div>;
+  if (component.type === "carousel") return <MessageCarousel component={component} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} previewMode={previewMode} />;
   return null;
 }
 

@@ -22,6 +22,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
+import { AssistantComponentView, type ConversationMessageComponent } from "@/components/conversation-message-body";
 import {
   ArrowLeft,
   Bot,
@@ -65,6 +66,11 @@ import {
   isLLMInteractionType,
 } from "@/lib/bot-flows";
 import { buildChatCompletionPayload } from "@/lib/chat-completion-payload";
+import {
+  getDefaultGlobalChatStyles,
+  normalizeGlobalChatStyles,
+  scopeEngagementCss,
+} from "@/lib/engagement-theme";
 import type { ProviderConnectionSummary } from "@/types/providers";
 
 interface BotDetail extends BotDefinitionInput {
@@ -394,6 +400,8 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
   const [skills, setSkills] = useState<SkillOption[]>([]);
   const [providerOptions, setProviderOptions] = useState<ProviderConnectionSummary[]>([]);
+  const [globalComponentStyles, setGlobalComponentStyles] = useState<Record<string, string>>(getDefaultGlobalChatStyles);
+  const [globalStylesError, setGlobalStylesError] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [interactionsOpen, setInteractionsOpen] = useState(true);
   const [configOpen, setConfigOpen] = useState(false);
@@ -408,6 +416,20 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
   const [nodes, setNodes, onNodesChange] = useNodesState<FlowCanvasNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const selectedInteraction = interactions.find((item) => item.id === selectedId) || null;
+
+  useEffect(() => {
+    let current = true;
+    fetch("/api/chat-styles")
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Gagal memuat style global.");
+        if (current) setGlobalComponentStyles(normalizeGlobalChatStyles(data.componentStyles));
+      })
+      .catch((loadError: unknown) => {
+        if (current) setGlobalStylesError(loadError instanceof Error ? loadError.message : "Gagal memuat style global.");
+      });
+    return () => { current = false; };
+  }, []);
 
   useEffect(() => {
     let current = true;
@@ -1045,7 +1067,7 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                           variable: `jawaban_${nextIndex}`,
                         }] });
                       }} className="inline-flex items-center gap-1 text-[10px] text-neutral-400 hover:text-white disabled:opacity-40"><Plus className="h-3 w-3" />Tambah</button></div>
-                      {(selectedInteraction.config.dataCollectionQuestions || []).map((question, index) => <DataCollectionQuestionFields key={`${selectedInteraction.id}-data-question-${index}`} question={question} index={index} aiMode={selectedInteraction.type === "data_collection_ai"} canRemove={(selectedInteraction.config.dataCollectionQuestions?.length || 0) > 1} variableOptions={availableVariableOptions} onChange={(patch) => {
+                      {(selectedInteraction.config.dataCollectionQuestions || []).map((question, index) => <DataCollectionQuestionFields key={`${selectedInteraction.id}-data-question-${index}`} question={question} index={index} aiMode={selectedInteraction.type === "data_collection_ai"} canRemove={(selectedInteraction.config.dataCollectionQuestions?.length || 0) > 1} variableOptions={availableVariableOptions} componentStyles={globalComponentStyles} globalStylesError={globalStylesError} onChange={(patch) => {
                         const questions = [...(selectedInteraction.config.dataCollectionQuestions || [])];
                         questions[index] = { ...questions[index], ...patch };
                         updateConfig({ dataCollectionQuestions: questions });
@@ -1428,12 +1450,14 @@ function LLMParameterFields({ config, defaultTemperature, defaultMaxTokens, onCh
   </>;
 }
 
-function DataCollectionQuestionFields({ question, index, canRemove, aiMode, variableOptions, onChange, onRemove }: {
+function DataCollectionQuestionFields({ question, index, canRemove, aiMode, variableOptions, componentStyles, globalStylesError, onChange, onRemove }: {
   question: DataCollectionQuestion;
   index: number;
   canRemove: boolean;
   aiMode: boolean;
   variableOptions?: string[];
+  componentStyles: Record<string, string>;
+  globalStylesError: string;
   onChange: (patch: Partial<DataCollectionQuestion>) => void;
   onRemove: () => void;
 }) {
@@ -1460,7 +1484,7 @@ function DataCollectionQuestionFields({ question, index, canRemove, aiMode, vari
     <TextField label="Variable jawaban" value={question.variable || question.name} onChange={(value) => onChange({ variable: value })} placeholder="nama_lengkap" />
     <div className="space-y-2 border-t border-neutral-900 pt-2">
       <span className="text-[9px] font-medium text-neutral-400">Komponen pertanyaan</span>
-      {(question.components || []).map((component, componentIndex) => <DataCollectionComponentFields key={`${index}-component-${componentIndex}`} component={component} variableOptions={variableOptions} onChange={(updated) => {
+      {(question.components || []).map((component, componentIndex) => <DataCollectionComponentFields key={`${index}-component-${componentIndex}`} component={component} variableOptions={variableOptions} componentStyles={componentStyles} globalStylesError={globalStylesError} onChange={(updated) => {
         const components = [...(question.components || [])];
         components[componentIndex] = updated;
         onChange({ components });
@@ -1479,14 +1503,37 @@ function emptyDataCard(): DataCollectionComponentCard {
   return { imageUrl: "", imageHeight: 128, title: "", subtitle: "", buttons: [] };
 }
 
-function DataCollectionComponentFields({ component, variableOptions, onChange, onRemove }: {
+function DataCollectionComponentFields({ component, variableOptions, componentStyles, globalStylesError, onChange, onRemove }: {
   component: DataCollectionComponent;
   variableOptions?: string[];
+  componentStyles: Record<string, string>;
+  globalStylesError: string;
   onChange: (component: DataCollectionComponent) => void;
   onRemove: () => void;
 }) {
   const updateButtons = (buttons: BotQuickButton[]) => onChange({ ...component, buttons });
   const updateCard = (card: DataCollectionComponentCard) => onChange({ ...component, card });
+  const previewButtons = component.buttons.length
+    ? component.buttons
+    : [{ label: component.type === "reply_buttons" ? "Contoh pilihan" : "Lihat detail", action: component.type === "link_buttons" ? "link" as const : "reply" as const, value: "" }];
+  const previewCard = (card: DataCollectionComponentCard): DataCollectionComponentCard => ({
+    ...card,
+    title: card.title || "Judul card",
+    subtitle: card.subtitle || "Deskripsi card ditampilkan di sini.",
+    buttons: card.buttons.length ? card.buttons : [{ label: "Lihat detail", action: "reply", value: "" }],
+  });
+  const previewComponent: ConversationMessageComponent = {
+    id: component.name || component.type,
+    name: component.name,
+    type: component.type,
+    title: component.title || (component.type === "link_buttons" ? "Informasi layanan" : ""),
+    subtitle: component.subtitle || (component.type === "link_buttons" ? "Lihat informasi dan detail lebih lanjut." : ""),
+    buttons: previewButtons,
+    card: component.card ? previewCard(component.card) : null,
+    cards: component.cards.length
+      ? component.cards.map(previewCard)
+      : component.type === "carousel" ? [previewCard(emptyDataCard())] : [],
+  };
   return <div className="space-y-2 rounded border border-neutral-900 p-2">
     <div className="flex items-center justify-between"><span className="text-[9px] uppercase text-neutral-500">{component.type.replaceAll("_", " ")}</span><button type="button" onClick={onRemove} aria-label="Hapus komponen pertanyaan" className="p-1 text-neutral-600 hover:text-red-300"><X className="h-3 w-3" /></button></div>
     <TextField label="Nama komponen" value={component.name} onChange={(name) => onChange({ ...component, name })} />
@@ -1500,6 +1547,17 @@ function DataCollectionComponentFields({ component, variableOptions, onChange, o
       {component.cards.map((card, index) => <div key={index} className="space-y-1"><div className="flex justify-end"><button type="button" onClick={() => onChange({ ...component, cards: component.cards.filter((_, cardIndex) => cardIndex !== index) })} className="text-[9px] text-neutral-500 hover:text-red-300">Hapus card</button></div><DataCollectionCardFields card={card} onChange={(updated) => onChange({ ...component, cards: component.cards.map((item, cardIndex) => cardIndex === index ? updated : item) })} /></div>)}
       <button type="button" onClick={() => onChange({ ...component, cards: [...component.cards, emptyDataCard()] })} disabled={component.cards.length >= 10} className="inline-flex items-center gap-1 text-[9px] text-neutral-400 disabled:opacity-40"><Plus className="h-3 w-3" />Tambah card</button>
     </div>}
+    <div className="space-y-1.5 border-t border-neutral-900 pt-2">
+      <span className="text-[9px] font-medium uppercase text-neutral-500">Preview — global style</span>
+      {globalStylesError && <p className="text-[9px] text-amber-400">{globalStylesError} Preview menggunakan style bawaan.</p>}
+      <div className="bot-management-data-collection-preview engagement-widget max-w-full space-y-2 overflow-hidden rounded-lg border border-neutral-800 bg-white p-3 text-neutral-900">
+        <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".bot-management-data-collection-preview") }} />
+        <div className="engagement-bot-bubble w-fit max-w-full break-words rounded-2xl rounded-tl-sm border px-3 py-2 text-xs">
+          {component.type === "reply_buttons" ? "Pilih salah satu opsi berikut:" : "Berikut informasi yang mungkin membantu:"}
+        </div>
+        <AssistantComponentView component={previewComponent} onReply={() => {}} disabled={false} previewMode />
+      </div>
+    </div>
   </div>;
 }
 
