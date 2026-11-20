@@ -14,12 +14,18 @@ export async function GET(req: NextRequest) {
 
   try {
     const db = await getDatabase();
-    const setting = await db.collection("botSettings").findOne(
-      { key: GLOBAL_CHAT_STYLES_KEY },
-      { projection: { componentStyles: 1 } }
-    );
+    const [userSetting, legacySetting] = await Promise.all([
+      db.collection("botSettings").findOne(
+        { key: GLOBAL_CHAT_STYLES_KEY, userId: session.id },
+        { projection: { componentStyles: 1 } }
+      ),
+      db.collection("botSettings").findOne(
+        { key: GLOBAL_CHAT_STYLES_KEY, userId: { $exists: false } },
+        { projection: { componentStyles: 1 } }
+      ),
+    ]);
     return NextResponse.json({
-      componentStyles: normalizeGlobalChatStyles(setting?.componentStyles),
+      componentStyles: normalizeGlobalChatStyles((userSetting || legacySetting)?.componentStyles),
     });
   } catch (error) {
     console.error("GET global chat styles error:", error);
@@ -30,9 +36,6 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   const session = await getSessionFromRequest(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (session.role !== "admin" && session.role !== "manager") {
-    return NextResponse.json({ error: "Akses ditolak" }, { status: 403 });
-  }
 
   try {
     const body = await req.json();
@@ -48,10 +51,17 @@ export async function PUT(req: NextRequest) {
     }
 
     const db = await getDatabase();
-    const current = await db.collection("botSettings").findOne(
-      { key: GLOBAL_CHAT_STYLES_KEY },
-      { projection: { componentStyles: 1 } }
-    );
+    const [userSetting, legacySetting] = await Promise.all([
+      db.collection("botSettings").findOne(
+        { key: GLOBAL_CHAT_STYLES_KEY, userId: session.id },
+        { projection: { componentStyles: 1 } }
+      ),
+      db.collection("botSettings").findOne(
+        { key: GLOBAL_CHAT_STYLES_KEY, userId: { $exists: false } },
+        { projection: { componentStyles: 1 } }
+      ),
+    ]);
+    const current = userSetting || legacySetting;
     const componentStyles = normalizeGlobalChatStyles(current?.componentStyles);
     let updated = false;
     for (const id of GLOBAL_CHAT_STYLE_COMPONENT_IDS) {
@@ -62,8 +72,8 @@ export async function PUT(req: NextRequest) {
     if (!updated) return NextResponse.json({ error: "Tidak ada style untuk disimpan." }, { status: 400 });
 
     await db.collection("botSettings").updateOne(
-      { key: GLOBAL_CHAT_STYLES_KEY },
-      { $set: { componentStyles, updatedAt: new Date(), updatedBy: { id: session.id, name: session.name } } },
+      { key: GLOBAL_CHAT_STYLES_KEY, userId: session.id },
+      { $set: { componentStyles, updatedAt: new Date(), userId: session.id, updatedBy: { id: session.id, name: session.name } } },
       { upsert: true }
     );
 

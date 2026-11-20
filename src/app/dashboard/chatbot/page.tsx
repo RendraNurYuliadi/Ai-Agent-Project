@@ -17,14 +17,13 @@ import {
   Copy,
   Check,
   Pencil,
-  Palette,
 } from "lucide-react";
 import { ActionToast, ConfirmDialog } from "@/components/action-feedback";
 import { ConversationMessageBody, type ConversationMessageComponent, type ConversationMessageData } from "@/components/conversation-message-body";
-import GlobalChatStyleEditor from "@/components/global-chat-style-editor";
 import {
   getChatScrollAnimationSnapshot,
   getChatScrollAnimationStyleSnapshot,
+  loadChatScrollAnimationPreferences,
   subscribeToChatScrollAnimation,
 } from "@/lib/chat-ui-preferences";
 import {
@@ -252,11 +251,6 @@ export default function ChatbotPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [globalComponentStyles, setGlobalComponentStyles] = useState<Record<string, string>>(getDefaultGlobalChatStyles);
-  const [savedGlobalComponentStyles, setSavedGlobalComponentStyles] = useState<Record<string, string>>(getDefaultGlobalChatStyles);
-  const [globalStyleEditorOpen, setGlobalStyleEditorOpen] = useState(false);
-  const [globalStylesLoading, setGlobalStylesLoading] = useState(true);
-  const [globalStylesSaving, setGlobalStylesSaving] = useState(false);
-  const [globalStylesError, setGlobalStylesError] = useState("");
   const [speechLanguage, setSpeechLanguage] = useState("id-ID");
   const [isListening, setIsListening] = useState(false);
   const [speechModalOpen, setSpeechModalOpen] = useState(false);
@@ -272,9 +266,20 @@ export default function ChatbotPage() {
     () => false
   );
   const selectedSkill = skills.find((skill) => skill.id === selectedSkillId) || null;
-  const activeBot = skills.length > 0 ? selectedSkill?.bot || null : fallbackActiveBot;
-  const skillSelectionRequired = skills.length > 0 && !selectedSkillId && !activeConvId;
+  const activeBot = skillsLoading ? null : skills.length > 0 ? selectedSkill?.bot || null : fallbackActiveBot;
+  const skillSelectionRequired = !activeConvId && (skillsLoading || (skills.length > 0 && !selectedSkillId));
   const notify = (type: "success" | "error", message: string) => setNotification({ type, message });
+
+  useEffect(() => {
+    let active = true;
+    loadChatScrollAnimationPreferences().catch((error: unknown) => {
+      if (active) setNotification({
+        type: "error",
+        message: error instanceof Error ? error.message : "Gagal memuat pengaturan animasi.",
+      });
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -288,40 +293,15 @@ export default function ChatbotPage() {
         if (!active) return;
         const styles = normalizeGlobalChatStyles(data.componentStyles);
         setGlobalComponentStyles(styles);
-        setSavedGlobalComponentStyles(styles);
       })
       .catch((error: unknown) => {
-        if (active) setGlobalStylesError(error instanceof Error ? error.message : "Gagal memuat style global.");
-      })
-      .finally(() => {
-        if (active) setGlobalStylesLoading(false);
+        if (active) setNotification({
+          type: "error",
+          message: error instanceof Error ? error.message : "Gagal memuat style global.",
+        });
       });
     return () => { active = false; };
   }, []);
-
-  const saveGlobalStyles = async () => {
-    setGlobalStylesSaving(true);
-    setGlobalStylesError("");
-    try {
-      const response = await fetch("/api/chat-styles", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ componentStyles: globalComponentStyles }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Gagal menyimpan style global.");
-      const styles = normalizeGlobalChatStyles(data.componentStyles);
-      setGlobalComponentStyles(styles);
-      setSavedGlobalComponentStyles(styles);
-      notify("success", "Style global berhasil disimpan.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Gagal menyimpan style global.";
-      setGlobalStylesError(message);
-      notify("error", message);
-    } finally {
-      setGlobalStylesSaving(false);
-    }
-  };
 
   const scrollToBottom = () => {
     const container = messagesContainerRef.current;
@@ -942,17 +922,6 @@ export default function ChatbotPage() {
           </div>
 
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {userProfile && ["admin", "manager"].includes(userProfile.role) && (
-              <button
-                type="button"
-                onClick={() => setGlobalStyleEditorOpen(true)}
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-800 px-2 text-[10px] text-neutral-300 hover:bg-neutral-900 sm:px-2.5 sm:text-xs"
-                title="Atur style global chatbot"
-              >
-                <Palette className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Style global</span>
-              </button>
-            )}
             {skills.length > 0 && <select
               value={selectedSkillId}
               onChange={(event) => {
@@ -999,7 +968,13 @@ export default function ChatbotPage() {
         <div ref={messagesContainerRef} className="min-h-0 flex-1 overflow-y-auto p-4 space-y-5">
           {!activeConvId && messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center">
-              {skillSelectionRequired ? (
+              {skillsLoading ? (
+                <div className="max-w-sm rounded-xl border border-neutral-800 bg-[#080808] p-5">
+                  <Loader2 className="mx-auto mb-3 h-6 w-6 animate-spin text-neutral-400" />
+                  <h3 className="text-sm font-semibold text-white">Memuat daftar skill</h3>
+                  <p className="mt-1 text-xs text-neutral-500">Silakan pilih skill untuk memulai percakapan.</p>
+                </div>
+              ) : skillSelectionRequired ? (
                 <div className="max-w-sm rounded-xl border border-neutral-800 bg-[#080808] p-5">
                   <Bot className="mx-auto mb-3 h-7 w-7 text-neutral-400" />
                   <h3 className="text-sm font-semibold text-white">Pilih skill untuk memulai</h3>
@@ -1221,66 +1196,6 @@ export default function ChatbotPage() {
           </form>
         </div>
       </div>
-      {globalStyleEditorOpen && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="global-chat-style-title"
-            className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-neutral-800 bg-neutral-950 shadow-2xl"
-          >
-            <header className="flex items-start justify-between gap-4 border-b border-neutral-800 p-4">
-              <div>
-                <h2 id="global-chat-style-title" className="text-sm font-semibold text-white">Style global chatbot</h2>
-                <p className="mt-1 text-[10px] leading-4 text-neutral-500">
-                  Berlaku untuk tampilan pesan di Chatbot dan semua Engagement. Style header, icon, input, dan window diatur di Engagement.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setGlobalComponentStyles(savedGlobalComponentStyles);
-                  setGlobalStyleEditorOpen(false);
-                }}
-                aria-label="Tutup pengaturan style global"
-                className="rounded-md p-1 text-neutral-500 hover:bg-neutral-900 hover:text-white"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              {globalStylesError && <p role="alert" className="mb-3 rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-[10px] text-red-200">{globalStylesError}</p>}
-              {globalStylesLoading
-                ? <p className="py-6 text-center text-xs text-neutral-500">Memuat style global...</p>
-                : <GlobalChatStyleEditor
-                    componentStyles={globalComponentStyles}
-                    onChange={setGlobalComponentStyles}
-                  />}
-            </div>
-            <footer className="flex justify-end gap-2 border-t border-neutral-800 p-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setGlobalComponentStyles(savedGlobalComponentStyles);
-                  setGlobalStyleEditorOpen(false);
-                }}
-                className="rounded-lg border border-neutral-700 px-3 py-2 text-[10px] text-neutral-300 hover:bg-neutral-900"
-              >
-                Batal
-              </button>
-              <button
-                type="button"
-                onClick={() => void saveGlobalStyles()}
-                disabled={globalStylesLoading || globalStylesSaving}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-[10px] font-semibold text-black hover:bg-neutral-200 disabled:opacity-50"
-              >
-                {globalStylesSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Simpan style global
-              </button>
-            </footer>
-          </section>
-        </div>
-      )}
       <ActionToast type={notification?.type || "success"} message={notification?.message || ""} />
       <ConfirmDialog
         open={Boolean(pendingDelete)}

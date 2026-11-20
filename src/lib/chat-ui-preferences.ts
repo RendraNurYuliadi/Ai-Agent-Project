@@ -1,5 +1,3 @@
-export const CHAT_SCROLL_ANIMATION_STORAGE_KEY = "ai-chatbot:chat-scroll-animation";
-export const CHAT_SCROLL_ANIMATION_STYLE_STORAGE_KEY = "ai-chatbot:chat-scroll-animation-style";
 export const CHAT_SCROLL_ANIMATION_STYLES = [
   { value: "fade", label: "Fade", description: "Bubble memudar masuk." },
   { value: "slide", label: "Slide kiri / kanan", description: "Bot dari kiri, pesan Anda dari kanan." },
@@ -17,73 +15,76 @@ export const CHAT_WINDOW_ANIMATION_DESCRIPTIONS: Record<ChatScrollAnimationStyle
   blur: "Chat window muncul dari blur dan kembali blur saat disembunyikan.",
 };
 
-export function isChatScrollAnimationStyle(value: unknown): value is ChatScrollAnimationStyle {
-  return CHAT_SCROLL_ANIMATION_STYLES.some((style) => style.value === value);
+interface ChatUiPreferences {
+  animationEnabled: boolean;
+  animationStyle: ChatScrollAnimationStyle;
 }
 
+const DEFAULT_PREFERENCES: ChatUiPreferences = {
+  animationEnabled: false,
+  animationStyle: "fade",
+};
+
+let preferences = DEFAULT_PREFERENCES;
 const subscribers = new Set<() => void>();
-let readErrorLogged = false;
 
 const notifySubscribers = () => {
   subscribers.forEach((subscriber) => subscriber());
 };
 
-const handleStorage = (event: StorageEvent) => {
-  if (
-    event.key === CHAT_SCROLL_ANIMATION_STORAGE_KEY ||
-    event.key === CHAT_SCROLL_ANIMATION_STYLE_STORAGE_KEY ||
-    event.key === null
-  ) {
-    notifySubscribers();
-  }
-};
+function updateSnapshot(value: unknown) {
+  const candidate = value && typeof value === "object"
+    ? value as Record<string, unknown>
+    : {};
+  preferences = {
+    animationEnabled: candidate.animationEnabled === true,
+    animationStyle: isChatScrollAnimationStyle(candidate.animationStyle)
+      ? candidate.animationStyle
+      : "fade",
+  };
+  notifySubscribers();
+}
+
+async function savePreferences(updates: Partial<ChatUiPreferences>) {
+  const response = await fetch("/api/chat-preferences", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Pengaturan animasi tidak dapat disimpan.");
+  updateSnapshot(data.preferences);
+}
+
+export function isChatScrollAnimationStyle(value: unknown): value is ChatScrollAnimationStyle {
+  return CHAT_SCROLL_ANIMATION_STYLES.some((style) => style.value === value);
+}
 
 export function subscribeToChatScrollAnimation(subscriber: () => void): () => void {
   subscribers.add(subscriber);
-  if (subscribers.size === 1 && typeof window !== "undefined") {
-    window.addEventListener("storage", handleStorage);
-  }
-  return () => {
-    subscribers.delete(subscriber);
-    if (subscribers.size === 0 && typeof window !== "undefined") {
-      window.removeEventListener("storage", handleStorage);
-    }
-  };
+  return () => subscribers.delete(subscriber);
 }
 
 export function getChatScrollAnimationSnapshot(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(CHAT_SCROLL_ANIMATION_STORAGE_KEY) === "true";
-  } catch (error) {
-    if (!readErrorLogged) {
-      console.error("Could not read chat animation setting:", error);
-      readErrorLogged = true;
-    }
-    return false;
-  }
+  return preferences.animationEnabled;
 }
 
 export function getChatScrollAnimationStyleSnapshot(): ChatScrollAnimationStyle {
-  if (typeof window === "undefined") return "fade";
-  try {
-    const storedStyle = window.localStorage.getItem(CHAT_SCROLL_ANIMATION_STYLE_STORAGE_KEY);
-    return isChatScrollAnimationStyle(storedStyle) ? storedStyle : "fade";
-  } catch (error) {
-    if (!readErrorLogged) {
-      console.error("Could not read chat animation setting:", error);
-      readErrorLogged = true;
-    }
-    return "fade";
-  }
+  return preferences.animationStyle;
 }
 
-export function setChatScrollAnimationPreference(enabled: boolean): void {
-  window.localStorage.setItem(CHAT_SCROLL_ANIMATION_STORAGE_KEY, String(enabled));
-  notifySubscribers();
+export async function loadChatScrollAnimationPreferences(): Promise<void> {
+  updateSnapshot(DEFAULT_PREFERENCES);
+  const response = await fetch("/api/chat-preferences");
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || "Pengaturan animasi tidak dapat dimuat.");
+  updateSnapshot(data.preferences);
 }
 
-export function setChatScrollAnimationStylePreference(style: ChatScrollAnimationStyle): void {
-  window.localStorage.setItem(CHAT_SCROLL_ANIMATION_STYLE_STORAGE_KEY, style);
-  notifySubscribers();
+export function setChatScrollAnimationPreference(enabled: boolean): Promise<void> {
+  return savePreferences({ animationEnabled: enabled });
+}
+
+export function setChatScrollAnimationStylePreference(style: ChatScrollAnimationStyle): Promise<void> {
+  return savePreferences({ animationStyle: style });
 }

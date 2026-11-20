@@ -46,7 +46,10 @@ export default async function EngagementWidgetPage({
   }
 
   const globalStyleSetting = await db.collection("botSettings").findOne(
-    { key: "globalChatStyles" },
+    { key: "globalChatStyles", userId: engagement.createdBy },
+    { projection: { componentStyles: 1 } }
+  ) || await db.collection("botSettings").findOne(
+    { key: "globalChatStyles", userId: { $exists: false } },
     { projection: { componentStyles: 1 } }
   );
   const componentStyles = {

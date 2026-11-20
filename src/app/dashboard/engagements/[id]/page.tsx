@@ -6,7 +6,6 @@ import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Loader2, Plus, Save, Sparkles, Trash2, MessageCircle, MoreVertical } from "lucide-react";
 import Image from "next/image";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
-import GlobalChatStyleEditor from "@/components/global-chat-style-editor";
 import {
   CHAT_WINDOW_ANIMATION_DESCRIPTIONS,
   CHAT_SCROLL_ANIMATION_STYLES,
@@ -278,8 +277,6 @@ export default function EngagementDetailPage() {
   const [entryPoints, setEntryPoints] = useState<EngagementEntryPoint[]>([]);
   const [windows, setWindows] = useState<EngagementWindow[]>([]);
   const [globalComponentStyles, setGlobalComponentStyles] = useState<Record<string, string>>(getDefaultGlobalChatStyles);
-  const [globalStylesSaving, setGlobalStylesSaving] = useState(false);
-  const [globalStylesSaved, setGlobalStylesSaved] = useState(true);
   const [entryName, setEntryName] = useState("");
   const [entryOrigin, setEntryOrigin] = useState("");
   const [snippetEntryPointId, setSnippetEntryPointId] = useState("");
@@ -354,7 +351,6 @@ export default function EngagementDetailPage() {
         setWindows((item.windows || []).map(normalizeWindow));
         setSkills(skillsData.skills || []);
         setGlobalComponentStyles(normalizeGlobalChatStyles(styleData.componentStyles));
-        setGlobalStylesSaved(true);
         setSnippetEntryPointId(item.entryPoints?.[0]?.id || "");
         setSnippetWindowId(item.windows?.[0]?.id || "");
       })
@@ -449,27 +445,6 @@ export default function EngagementDetailPage() {
       setError(saveError instanceof Error ? saveError.message : "Gagal menyimpan Engagement.");
     } finally {
       setSaving(false);
-    }
-  };
-
-  const saveGlobalChatStyles = async () => {
-    setGlobalStylesSaving(true);
-    setError("");
-    try {
-      const response = await fetch("/api/chat-styles", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ componentStyles: globalComponentStyles }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Gagal menyimpan style global.");
-      const styles = normalizeGlobalChatStyles(data.componentStyles);
-      setGlobalComponentStyles(styles);
-      setGlobalStylesSaved(true);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Gagal menyimpan style global.");
-    } finally {
-      setGlobalStylesSaving(false);
     }
   };
 
@@ -615,36 +590,6 @@ export default function EngagementDetailPage() {
             </div>
             <button type="button" onClick={addWindow} className="inline-flex h-9 items-center gap-2 rounded-lg border border-neutral-700 px-3 text-xs font-medium text-white hover:bg-neutral-900"><Plus className="h-4 w-4" />Tambah window</button>
           </div>
-
-          <section className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="text-xs font-semibold text-white">Style global chatbot</h3>
-                <p className="mt-1 text-[10px] leading-4 text-neutral-500">
-                  Dipakai bersama oleh menu Chatbot dan semua Engagement. Header, icon, input, tombol kirim, dan background window tetap diatur per Engagement.
-                </p>
-                <p className={`mt-1 text-[10px] ${globalStylesSaved ? "text-emerald-400" : "text-amber-400"}`}>
-                  {globalStylesSaved ? "Style global tersimpan." : "Ada perubahan style global yang belum disimpan."}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void saveGlobalChatStyles()}
-                disabled={globalStylesSaving || globalStylesSaved}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 text-[10px] font-semibold text-black hover:bg-neutral-200 disabled:opacity-50"
-              >
-                {globalStylesSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                Simpan style global
-              </button>
-            </div>
-            <GlobalChatStyleEditor
-              componentStyles={globalComponentStyles}
-              onChange={(styles) => {
-                setGlobalComponentStyles(styles);
-                setGlobalStylesSaved(false);
-              }}
-            />
-          </section>
 
           {activeBotSkills.length === 0 && <p className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-3 text-xs text-amber-200">Belum ada skill yang terhubung ke bot aktif. Atur bot pada menu Skills terlebih dahulu.</p>}
           <div className="space-y-3">
