@@ -436,7 +436,7 @@ export async function initializeBotConversation(
         type: "welcome_message",
         title: applyPromptVariables(entry.config.title || "", "", user, "", bot.variables || []),
         subtitle: applyPromptVariables(entry.config.subtitle || "", "", user, "", bot.variables || []),
-        icon: entry.config.icon || "sparkles",
+        icon: entry.config.icon || "bot",
         iconUrl: entry.config.iconUrl || "",
         footerText: applyPromptVariables(entry.config.footerText || "", "", user, "", bot.variables || []),
         buttons: quickButtons.map((button) => ({

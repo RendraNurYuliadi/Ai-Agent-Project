@@ -111,10 +111,7 @@ interface FlowNodeData extends Record<string, unknown> {
 type FlowCanvasNode = Node<FlowNodeData, "botInteraction">;
 
 const iconChoices = [
-  { id: "sparkles", label: "Sparkles", Icon: Sparkles },
   { id: "bot", label: "Bot", Icon: Bot },
-  { id: "message", label: "Message", Icon: MessageSquare },
-  { id: "help", label: "Help", Icon: CircleHelp },
   { id: "custom", label: "Custom", Icon: ImagePlus },
 ];
 
@@ -327,7 +324,7 @@ function toEdges(interactions: BotInteraction[]): Edge[] {
 function initialConfig(type: BotInteractionType, promptId?: string): BotInteractionConfig {
   switch (type) {
     case "welcome_message":
-      return { title: "Selamat datang", subtitle: "Ada yang bisa kami bantu?", icon: "sparkles", footerText: "", quickButtons: [] };
+      return { title: "Selamat datang", subtitle: "Ada yang bisa kami bantu?", icon: "bot", footerText: "", quickButtons: [] };
     case "guided_routing":
       return { text: "Pilih topik yang ingin dibahas.", temperature: 0, maxTokens: 64, promptId, options: [], fallbackMessageEnabled: true };
     case "small_talk":
@@ -951,7 +948,7 @@ function FlowEditor({ botId, initialNotice }: { botId: string; initialNotice?: s
                     <TextField label="Title" value={selectedInteraction.config.title || ""} onChange={(value) => updateConfig({ title: value })} />
                     <TextAreaField label="Subtitle" value={selectedInteraction.config.subtitle || ""} onChange={(value) => updateConfig({ subtitle: value })} rows={3} />
                     <label className="block space-y-1.5 text-[10px] text-neutral-500">Icon
-                      <select value={selectedInteraction.config.icon || "sparkles"} onChange={(event) => updateConfig({ icon: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
+                      <select value={selectedInteraction.config.icon === "custom" ? "custom" : "bot"} onChange={(event) => updateConfig({ icon: event.target.value })} className="w-full rounded-md border border-neutral-800 bg-black px-2.5 py-2 text-xs text-neutral-200 outline-none focus:border-neutral-600">
                         {iconChoices.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                       </select>
                     </label>

@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Copy, ExternalLink, Loader2, Plus, Save, Sparkles, Trash2, MessageCircle, MoreVertical } from "lucide-react";
+import { ArrowLeft, ArrowUp, Bot, ChevronLeft, ChevronRight, Copy, ExternalLink, Loader2, Plus, Save, Trash2, MessageCircle, MoreVertical } from "lucide-react";
 import Image from "next/image";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import {
@@ -216,7 +216,7 @@ function EngagementComponentPreview({
         <article className="engagement-component engagement-welcome-message w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3.5 sm:max-w-[360px]">
           <div className="mb-2 flex items-center gap-2">
             <span className="engagement-welcome-icon flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md">
-              <Sparkles className="h-4 w-4" />
+              <Bot className="h-4 w-4" />
             </span>
             <h3 className="engagement-welcome-title font-semibold">Selamat datang!</h3>
           </div>

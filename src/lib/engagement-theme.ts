@@ -654,8 +654,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
     name: "Welcome message",
     description: "Desain kartu sambutan, judul, ikon, subtitle, dan tombol welcome.",
     className: "engagement-welcome-message",
-    defaultCss: `.engagement-welcome-message {
-      --engagement-welcome-icon-url: "";
+    defaultCss: `    .engagement-welcome-message {
   width: 100%;
   max-width: 360px;
   min-height: 120px;
@@ -686,7 +685,6 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   color: #18181b;
 }`,
     parameters: [
-      text("URL icon custom", ".engagement-welcome-message", "--engagement-welcome-icon-url", ""),
       color("Warna judul", ".engagement-welcome-message .engagement-welcome-title", "color", "#18181b"),
       color("Warna subjudul", ".engagement-welcome-message .engagement-welcome-subtitle", "color", "#52525b"),
       color("Warna teks tombol", ".engagement-welcome-message .engagement-button.engagement-reply-button", "color", "#18181b"),

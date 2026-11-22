@@ -157,13 +157,13 @@ function RotatingComponents({ components, onReply, disabled, imageProxyToken }: 
 
 function BotInteractionView({ data, onReply, disabled, imageProxyToken, componentStyles }: { data: NonNullable<ConversationMessageData["botInteraction"]>; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string; componentStyles?: Record<string, string> }) {
   const buttons = data.buttons || data.quickButtons || [];
-  const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
-  const iconLabel = data.icon === "custom" ? "Custom" : data.icon || "Sparkles";
   const isWelcomeMessage = data.type === "welcome_message";
-  const globalIconUrl = readEngagementStyleProperty(
-    componentStyles?.[isWelcomeMessage ? "welcome-message" : "interaction"] || "",
-    isWelcomeMessage ? ".engagement-welcome-message" : ".engagement-interaction-card",
-    isWelcomeMessage ? "--engagement-welcome-icon-url" : "--engagement-interaction-icon-url",
+  const Icon = isWelcomeMessage || data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
+  const iconLabel = isWelcomeMessage && data.icon !== "custom" ? "Bot" : data.icon === "custom" ? "Custom" : data.icon || "Sparkles";
+  const globalIconUrl = isWelcomeMessage ? "" : readEngagementStyleProperty(
+    componentStyles?.interaction || "",
+    ".engagement-interaction-card",
+    "--engagement-interaction-icon-url",
     ""
   );
   const iconUrl = (data.icon === "custom" ? data.iconUrl : "") || globalIconUrl;

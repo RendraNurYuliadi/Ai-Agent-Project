@@ -662,7 +662,7 @@ export function createStarterBot(name = "Bot Baru"): BotDefinitionInput {
         config: {
           title: "Selamat datang",
           subtitle: "Ada yang bisa kami bantu?",
-          icon: "sparkles",
+          icon: "bot",
           footerText: "Pilih opsi atau kirim pesan untuk memulai.",
           quickButtons: [],
         },
