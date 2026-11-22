@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import Image from "next/image";
 import {
   Bot,
   Send,
@@ -29,8 +30,11 @@ import {
 import {
   getDefaultGlobalChatStyles,
   normalizeGlobalChatStyles,
+  readEngagementStyleProperty,
+  setEngagementStyleProperty,
   scopeEngagementCss,
 } from "@/lib/engagement-theme";
+import { getImageProxyUrl } from "@/lib/image-proxy-url";
 
 interface SpeechRecognitionResultEventLike {
   resultIndex: number;
@@ -163,6 +167,19 @@ function renderWelcomeText(template: string | undefined, user: UserProfile | nul
   return template.replace(/\{([^{}]+)\}/g, (placeholder, key: string) => values.get(key) ?? placeholder);
 }
 
+function getInitialChatbotStyles(): Record<string, string> {
+  const styles = getDefaultGlobalChatStyles();
+  return {
+    ...styles,
+    window: setEngagementStyleProperty(
+      styles.window,
+      ".engagement-widget",
+      "background-color",
+      "#000000"
+    ),
+  };
+}
+
 function getInitials(fullName: string, name: string): string {
   const source = (fullName || name || "?").trim();
   const parts = source.split(/\s+/);
@@ -250,7 +267,7 @@ export default function ChatbotPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [globalComponentStyles, setGlobalComponentStyles] = useState<Record<string, string>>(getDefaultGlobalChatStyles);
+  const [globalComponentStyles, setGlobalComponentStyles] = useState<Record<string, string>>(getInitialChatbotStyles);
   const [speechLanguage, setSpeechLanguage] = useState("id-ID");
   const [isListening, setIsListening] = useState(false);
   const [speechModalOpen, setSpeechModalOpen] = useState(false);
@@ -737,6 +754,19 @@ export default function ChatbotPage() {
   const welcomeInteraction = activeBot?.interactions.find(
     (item) => item.id === activeBot.entryInteractionId && item.type === "welcome_message"
   );
+  const chatbotHeaderCss = globalComponentStyles["chatbot-header"] || "";
+  const chatbotHeaderIconUrl = readEngagementStyleProperty(
+    chatbotHeaderCss,
+    ".chatbot-header-icon",
+    "--chatbot-header-icon-url",
+    ""
+  );
+  const sendIconUrl = readEngagementStyleProperty(
+    globalComponentStyles.send || "",
+    ".engagement-send",
+    "--engagement-send-icon-url",
+    ""
+  );
 
   return (
     <div className="flex h-full min-h-0 w-full min-w-0 overflow-hidden rounded-2xl border border-neutral-800 bg-black">
@@ -883,7 +913,7 @@ export default function ChatbotPage() {
           ".global-chat-style-scope"
         ) }} />
         {/* Header */}
-        <div className="chatbot-header flex flex-wrap items-center justify-between gap-2 border-b border-neutral-900 bg-[#080808] px-2.5 py-2.5 sm:flex-nowrap sm:px-4 sm:py-3">
+        <div className="chatbot-header flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-neutral-900 bg-[#080808] px-2.5 py-2.5 sm:px-4 sm:py-3">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -903,9 +933,11 @@ export default function ChatbotPage() {
               )}
             </button>
 
-            <div className="flex items-center gap-2">
-              <div className="chatbot-header-icon p-1.5 rounded-lg shadow">
-                <Bot className="w-4 h-4" />
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="chatbot-header-icon flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg p-1.5 shadow">
+                {chatbotHeaderIconUrl
+                  ? <Image src={getImageProxyUrl(chatbotHeaderIconUrl)} alt="" width={32} height={32} unoptimized className="h-full w-full object-cover" />
+                  : <Bot className="w-4 h-4" />}
               </div>
 
               <div className="min-w-0">
@@ -913,7 +945,7 @@ export default function ChatbotPage() {
                   {activeBot?.name || "GenAI Chatbot"}
                 </h2>
 
-                <p className="chatbot-header-subtitle flex max-w-36 items-center gap-1 truncate text-[10px] text-neutral-500 sm:max-w-64">
+                <p className="chatbot-header-subtitle flex max-w-[7rem] items-center gap-1 truncate text-[10px] text-neutral-500 sm:max-w-64">
                   <Cpu className="w-2.5 h-2.5" />
                   {escalationStatus === "pending" ? "Menunggu human agent menerima" : escalationStatus === "accepted" ? "Ditangani human agent" : selectedSkill ? `${selectedSkill.name} · ${selectedSkill.botUser?.fullName || selectedSkill.botUser?.name || "Bot"}` : activeBot ? "Bot flow aktif (fallback)" : `NVIDIA NIM • ${chatModel}`}
                 </p>
@@ -921,7 +953,7 @@ export default function ChatbotPage() {
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
             {skills.length > 0 && <select
               value={selectedSkillId}
               onChange={(event) => {
@@ -933,13 +965,13 @@ export default function ChatbotPage() {
               }}
               disabled={skillsLoading || sending}
               aria-label="Pilih skill chatbot"
-              className="h-9 max-w-24 truncate rounded-lg border border-neutral-800 bg-black px-1.5 text-[10px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 sm:max-w-56 sm:px-2 sm:text-[11px]"
+              className="h-9 w-20 max-w-[7rem] truncate rounded-lg border border-neutral-800 bg-black px-1.5 text-[10px] text-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-700 sm:w-auto sm:max-w-56 sm:px-2 sm:text-[11px]"
             >
               <option value="">Pilih skill</option>
               {skills.map((skill) => <option key={skill.id} value={skill.id}>{skill.name}</option>)}
             </select>}
             {userProfile && (
-              <div className="hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-neutral-900/70 border border-neutral-800">
+              <div className="hidden md:flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-neutral-900/70 border border-neutral-800">
                 <div
                   className={`w-5 h-5 rounded-full bg-gradient-to-tr ${avatarGradient} flex items-center justify-center text-[9px] font-bold text-black select-none shrink-0`}
                 >
@@ -1191,7 +1223,9 @@ export default function ChatbotPage() {
               disabled={sending || !input.trim() || conversationStatus === "closed"}
               className="engagement-send flex h-10 w-10 shrink-0 items-center justify-center rounded-xl shadow-md transition-all hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <Send className="engagement-send-glyph w-4 h-4" />
+              {sendIconUrl
+                ? <Image src={getImageProxyUrl(sendIconUrl)} alt="" width={20} height={20} unoptimized className="engagement-send-icon" />
+                : <Send className="engagement-send-glyph w-4 h-4" />}
             </button>
           </form>
         </div>

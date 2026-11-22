@@ -279,6 +279,24 @@ export default function EngagementChatWidget({
     "border-radius",
     "36px"
   );
+  const launcherIconUrl = readEngagementStyleProperty(
+    componentStyles.launcher,
+    ".engagement-launcher",
+    "--engagement-launcher-icon-url",
+    ""
+  );
+  const headerIconUrl = readEngagementStyleProperty(
+    componentStyles.header,
+    ".engagement-header-icon",
+    "--engagement-header-icon-url",
+    ""
+  ) || config.window.headerIconUrl;
+  const sendIconUrl = readEngagementStyleProperty(
+    componentStyles.send,
+    ".engagement-send",
+    "--engagement-send-icon-url",
+    ""
+  ) || config.window.sendIconUrl;
   const scopedComponentCss = scopeEngagementCss(
     Object.values(componentStyles).join("\n"),
     `.engagement-window-${config.windowId}`
@@ -300,7 +318,11 @@ export default function EngagementChatWidget({
           className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           style={{ borderRadius: launcherBorderRadius } as CSSProperties}
         >
-          {initializing ? <Loader2 className="h-6 w-6 animate-spin" /> : <MessageCircle className="h-7 w-7" />}
+          {launcherIconUrl
+            ? <Image src={launcherIconUrl} alt="" width={72} height={72} unoptimized className="h-full w-full rounded-full object-cover" />
+            : initializing
+              ? <Loader2 className="h-6 w-6 animate-spin" />
+              : <MessageCircle className="h-7 w-7" />}
         </button>
       </div>
     );
@@ -321,8 +343,8 @@ export default function EngagementChatWidget({
       >
       <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4">
         <span className="engagement-header-icon flex h-9 w-9 items-center justify-center rounded-full">
-          {config.window.headerIconUrl
-            ? <Image src={getImageProxyUrl(config.window.headerIconUrl, config.token)} alt="" width={36} height={36} unoptimized className="h-9 w-9 rounded-full object-cover" />
+          {headerIconUrl
+            ? <Image src={getImageProxyUrl(headerIconUrl, config.token)} alt="" width={36} height={36} unoptimized className="h-9 w-9 rounded-full object-cover" />
             : <MessageCircle className="h-5 w-5" />}
         </span>
         <div className="min-w-0 flex-1">
@@ -433,8 +455,8 @@ export default function EngagementChatWidget({
         >
           {sending
             ? <Loader2 className="engagement-send-glyph animate-spin" />
-            : config.window.sendIconUrl
-              ? <Image src={getImageProxyUrl(config.window.sendIconUrl, config.token)} alt="" width={20} height={20} unoptimized className="engagement-send-icon" />
+            : sendIconUrl
+              ? <Image src={getImageProxyUrl(sendIconUrl, config.token)} alt="" width={20} height={20} unoptimized className="engagement-send-icon" />
               : <ArrowUp className="engagement-send-glyph" />}
         </button>
       </form>

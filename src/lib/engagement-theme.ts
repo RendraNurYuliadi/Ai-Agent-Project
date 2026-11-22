@@ -119,7 +119,7 @@ export interface EngagementStyleParameterDefinition {
   label: string;
   selector: string;
   property: string;
-  type: "color" | "number";
+  type: "color" | "number" | "text";
   defaultValue: string;
   min?: number;
   max?: number;
@@ -162,6 +162,19 @@ const number = (
   unit,
 });
 
+const text = (
+  label: string,
+  selector: string,
+  property: string,
+  defaultValue: string
+): EngagementStyleParameterDefinition => ({
+  label,
+  selector,
+  property,
+  type: "text",
+  defaultValue,
+});
+
 const layout = (
   selector: string,
   options: {
@@ -199,6 +212,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
     className: "engagement-launcher",
     defaultCss: `.engagement-launcher {
   --engagement-launcher-shadow-color: #000000;
+  --engagement-launcher-icon-url: "";
   background: #171717;
   width: 72px;
   height: 72px;
@@ -211,6 +225,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
 }`,
     parameters: [
       color("Warna background", ".engagement-launcher", "background", "#171717"),
+      text("URL icon custom", ".engagement-launcher", "--engagement-launcher-icon-url", ""),
       color("Warna box shadow", ".engagement-launcher", "--engagement-launcher-shadow-color", "#000000"),
       color("Warna border", ".engagement-launcher", "border-color", "#e5e5e5"),
       ...layout(".engagement-launcher", {
@@ -245,14 +260,21 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
 .chatbot-header-icon {
   background: #ffffff;
   color: #000000;
+  --chatbot-header-icon-url: "";
+  border: 1px solid #262626;
+  border-radius: 8px;
 }`,
     parameters: [
       color("Warna judul bot", ".chatbot-header-title", "color", "#ffffff"),
       color("Warna subjudul", ".chatbot-header-subtitle", "color", "#a3a3a3"),
       color("Background header", ".chatbot-header", "background", "#080808"),
       color("Warna border", ".chatbot-header", "border-color", "#262626"),
+      text("URL icon custom", ".chatbot-header-icon", "--chatbot-header-icon-url", ""),
       color("Background icon bot", ".chatbot-header-icon", "background", "#ffffff"),
       color("Warna icon bot", ".chatbot-header-icon", "color", "#000000"),
+      color("Warna border icon", ".chatbot-header-icon", "border-color", "#262626"),
+      number("Ketebalan border icon", ".chatbot-header-icon", "border-width", "1px", 0, 12),
+      number("Radius icon", ".chatbot-header-icon", "border-radius", "8px", 0, 32),
       ...layout(".chatbot-header", {
         width: "100%", height: "64px", margin: "0px", padding: "12px", borderWidth: "1px", borderRadius: "0px",
         widthLabel: "Lebar", heightProperty: "min-height", heightLabel: "Tinggi minimum", borderWidthProperty: "border-bottom-width",
@@ -287,12 +309,20 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
 }
 .engagement-header-icon {
   background: rgba(255, 255, 255, .12);
+  --engagement-header-icon-url: "";
+  border: 1px solid #404040;
+  border-radius: 999px;
 }`,
     parameters: [
       color("Warna judul", ".engagement-header-title", "color", "#ffffff"),
       color("Warna subjudul", ".engagement-header-subtitle", "color", "#a3a3a3"),
       color("Background header", ".engagement-header", "background", "#171717"),
       color("Warna border", ".engagement-header", "border-color", "#404040"),
+      text("URL icon custom", ".engagement-header-icon", "--engagement-header-icon-url", ""),
+      color("Background icon", ".engagement-header-icon", "background", "#262626"),
+      color("Warna border icon", ".engagement-header-icon", "border-color", "#404040"),
+      number("Ketebalan border icon", ".engagement-header-icon", "border-width", "1px", 0, 12),
+      number("Radius icon", ".engagement-header-icon", "border-radius", "999px", 0, 64),
       ...layout(".engagement-header", {
         width: "100%", height: "64px", margin: "0px", padding: "12px", borderWidth: "1px", borderRadius: "0px",
         widthLabel: "Lebar", heightProperty: "height", borderWidthProperty: "border-bottom-width",
@@ -780,6 +810,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
     className: "engagement-send",
     defaultCss: `.engagement-send {
   color: #ffffff;
+      --engagement-send-icon-url: "";
       width: 44px;
       height: 44px;
       margin: 0;
@@ -799,6 +830,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   object-fit: contain;
 }`,
     parameters: [
+      text("URL icon kirim custom", ".engagement-send", "--engagement-send-icon-url", ""),
       color("Warna ikon", ".engagement-send-glyph", "color", "#ffffff"),
       color("Background tombol", ".engagement-send", "background", "#171717"),
       color("Warna border", ".engagement-send", "border-color", "#171717"),
@@ -932,6 +964,7 @@ export function readEngagementStyleProperty(
     value = borderShorthand.match(/#[\da-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|var\([^)]*\)|transparent|currentColor/i)?.[0] || "";
   }
 
+  if (property.startsWith("--") && /^(['"])\1$/.test(value)) return fallback;
   return value || fallback;
 }
 
@@ -941,7 +974,8 @@ export function setEngagementStyleProperty(
   property: string,
   value: string
 ): string {
-  if (!value.trim()) return css;
+  const nextValue = value.trim() || (property.startsWith("--") ? '""' : "");
+  if (!nextValue) return css;
   const rulePattern = new RegExp(`(^|})\\s*(${escapeCssRegExp(selector)})\\s*\\{([^}]*)\\}`, "gi");
   const propertyPattern = new RegExp(`(^|;)\\s*${escapeCssRegExp(property)}\\s*:\\s*[^;]+;?`, "gi");
   let foundProperty = false;
@@ -952,12 +986,12 @@ export function setEngagementStyleProperty(
     foundProperty = true;
     const nextDeclarations = declarations.replace(
       propertyPattern,
-      (_declaration, separator: string) => `${separator}\n  ${property}: ${value};`
+      (_declaration, separator: string) => `${separator}\n  ${property}: ${nextValue};`
     );
     return `${prefix}\n${selector} {\n${nextDeclarations.trim()}\n}`;
   });
 
-  if (!foundProperty) return `${updatedCss.trimEnd()}\n${selector} {\n  ${property}: ${value};\n}`;
+  if (!foundProperty) return `${updatedCss.trimEnd()}\n${selector} {\n  ${property}: ${nextValue};\n}`;
   return updatedCss;
 }
 

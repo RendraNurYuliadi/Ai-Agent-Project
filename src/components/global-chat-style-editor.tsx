@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import {
   Bot,
   Cpu,
@@ -21,6 +22,7 @@ import {
   scopeEngagementCss,
   setEngagementStyleProperty,
 } from "@/lib/engagement-theme";
+import { getImageProxyUrl } from "@/lib/image-proxy-url";
 
 const previewComponents: ConversationMessageComponent[] = [
   {
@@ -101,16 +103,20 @@ function getPreviewCss(componentStyles: Record<string, string>, componentId: str
     .join("\n");
 }
 
-function ChatbotHeaderPreview() {
+function ChatbotHeaderPreview({ componentStyles }: { componentStyles?: Record<string, string> }) {
+  const css = componentStyles?.["chatbot-header"] || "";
+  const iconUrl = readEngagementStyleProperty(css, ".chatbot-header-icon", "--chatbot-header-icon-url", "");
   return (
-    <header className="chatbot-header flex flex-wrap items-center justify-between gap-2 border-b px-2.5 py-2.5 sm:flex-nowrap sm:px-4 sm:py-3">
+    <header className="chatbot-header flex min-w-0 flex-wrap items-center justify-between gap-2 border-b px-2.5 py-2.5 sm:px-4 sm:py-3">
       <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
         <button type="button" className="hidden h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-neutral-800 px-2 text-neutral-300 shadow-sm sm:flex">
           <MessageSquare className="h-4 w-4 text-white" />
           <span className="hidden text-xs font-medium text-neutral-300 sm:inline">Percakapan (6)</span>
         </button>
         <div className="flex min-w-0 items-center gap-2">
-          <div className="chatbot-header-icon rounded-lg p-1.5 shadow"><Bot className="h-4 w-4" /></div>
+          <div className="chatbot-header-icon flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg p-1.5 shadow">
+            {iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={32} height={32} unoptimized className="h-full w-full object-cover" /> : <Bot className="h-4 w-4" />}
+          </div>
           <div className="min-w-0">
             <h2 className="chatbot-header-title truncate text-sm font-semibold">GenAI Chatbot</h2>
             <p className="chatbot-header-subtitle flex items-center gap-1 truncate text-[10px]">
@@ -120,11 +126,11 @@ function ChatbotHeaderPreview() {
           </div>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
         <select aria-label="Preview pilih skill" defaultValue="skill" className="h-9 max-w-24 truncate rounded-lg border border-neutral-800 bg-black px-1.5 text-[10px] text-neutral-300 sm:max-w-40 sm:px-2 sm:text-[11px]">
           <option value="skill">Pilih skill</option>
         </select>
-        <div className="hidden items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900/70 px-2.5 py-1.5 sm:flex">
+        <div className="hidden items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900/70 px-2.5 py-1.5 md:flex">
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[9px] font-bold text-black">RN</span>
           <span className="text-[11px] font-medium text-neutral-300">Rendra Nur Yuliadi</span>
         </div>
@@ -136,10 +142,14 @@ function ChatbotHeaderPreview() {
   );
 }
 
-function EngagementHeaderPreview() {
+function EngagementHeaderPreview({ componentStyles }: { componentStyles?: Record<string, string> }) {
+  const css = componentStyles?.header || "";
+  const iconUrl = readEngagementStyleProperty(css, ".engagement-header-icon", "--engagement-header-icon-url", "");
   return (
     <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4">
-      <span className="engagement-header-icon flex h-9 w-9 items-center justify-center rounded-full"><MessageCircle className="h-5 w-5" /></span>
+      <span className="engagement-header-icon flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full">
+        {iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={36} height={36} unoptimized className="h-full w-full object-cover" /> : <MessageCircle className="h-5 w-5" />}
+      </span>
       <div className="min-w-0 flex-1">
         <h2 className="engagement-header-title truncate font-semibold">Judul chat window</h2>
         <p className="engagement-header-subtitle mt-0.5 truncate">Subjudul chat</p>
@@ -171,14 +181,17 @@ function EngagementComposerPreview() {
   );
 }
 
-function ComponentPreviewContent({ id }: { id: string }) {
+function ComponentPreviewContent({ id, componentStyles }: { id: string; componentStyles: Record<string, string> }) {
   switch (id) {
-    case "launcher":
-      return <div className="flex min-h-24 items-center justify-center"><button type="button" className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl"><MessageCircle className="h-7 w-7" /></button></div>;
+    case "launcher": {
+      const css = componentStyles.launcher || "";
+      const iconUrl = readEngagementStyleProperty(css, ".engagement-launcher", "--engagement-launcher-icon-url", "");
+      return <div className="flex min-h-24 items-center justify-center"><button type="button" className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full text-white shadow-xl">{iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={72} height={72} unoptimized className="h-full w-full object-cover" /> : <MessageCircle className="h-7 w-7" />}</button></div>;
+    }
     case "header":
-      return <EngagementHeaderPreview />;
+      return <EngagementHeaderPreview componentStyles={componentStyles} />;
     case "chatbot-header":
-      return <ChatbotHeaderPreview />;
+      return <ChatbotHeaderPreview componentStyles={componentStyles} />;
     case "window":
       return <div className="engagement-widget flex min-h-28 items-center justify-center border p-3 text-xs">Area window chat</div>;
     case "bot-bubble":
@@ -207,7 +220,11 @@ function ComponentPreviewContent({ id }: { id: string }) {
     case "chatbot-input":
       return <ChatbotComposerPreview />;
     case "send":
-      return <div className="flex min-h-24 items-center justify-center"><button type="button" aria-label="Preview tombol kirim" className="engagement-send flex h-11 w-11 items-center justify-center rounded-xl"><Send className="engagement-send-glyph h-5 w-5" /></button></div>;
+      {
+        const css = componentStyles.send || "";
+        const iconUrl = readEngagementStyleProperty(css, ".engagement-send", "--engagement-send-icon-url", "");
+        return <div className="flex min-h-24 items-center justify-center"><button type="button" aria-label="Preview tombol kirim" className="engagement-send flex h-11 w-11 items-center justify-center rounded-xl">{iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={20} height={20} unoptimized className="engagement-send-icon" /> : <Send className="engagement-send-glyph h-5 w-5" />}</button></div>;
+      }
     default:
       return null;
   }
@@ -233,7 +250,7 @@ function ComponentPreviewCard({
       </div>
       <div className={`${scopeClass} engagement-widget flex min-h-24 items-center overflow-hidden bg-white p-3 text-neutral-900`}>
         <div className="w-full min-w-0">
-          <ComponentPreviewContent id={id} />
+          <ComponentPreviewContent id={id} componentStyles={componentStyles} />
         </div>
       </div>
     </article>
@@ -249,7 +266,7 @@ function FullChatbotWindowPreview({ componentStyles }: { componentStyles: Record
       </div>
       <div className="global-chatbot-full-preview engagement-widget flex h-[520px] min-w-0 flex-col overflow-hidden rounded-xl border border-neutral-800 bg-black text-white shadow-xl">
         <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-chatbot-full-preview") }} />
-        <ChatbotHeaderPreview />
+        <ChatbotHeaderPreview componentStyles={componentStyles} />
         <div className="engagement-message-list flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-4">
           <div className="max-w-sm text-center">
             <Bot className="mx-auto mb-3 h-7 w-7 text-neutral-400" />
@@ -273,7 +290,7 @@ function FullEngagementWindowPreview({ componentStyles }: { componentStyles: Rec
       <div className="mx-auto w-full max-w-[380px]">
         <div className="global-engagement-full-preview engagement-widget flex h-[620px] min-w-0 flex-col overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-xl">
           <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-engagement-full-preview") }} />
-          <EngagementHeaderPreview />
+          <EngagementHeaderPreview componentStyles={componentStyles} />
           <div className="engagement-message-list min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
             <div className="engagement-bot-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tl-sm border px-3 py-2 text-sm">Halo! Ada yang bisa kami bantu hari ini?</div>
             <div className="flex justify-end"><div className="engagement-user-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tr-sm border px-3 py-2 text-sm">Saya ingin bertanya tentang layanan.</div></div>
@@ -332,6 +349,30 @@ export default function GlobalChatStyleEditor({
                                 [id]: setEngagementStyleProperty(css, parameter.selector, parameter.property, event.target.value),
                               })}
                               className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 p-0.5"
+                            />
+                          </label>
+                        );
+                      }
+
+                      if (parameter.type === "text") {
+                        return (
+                          <label key={controlId} className="col-span-2 space-y-1 text-[9px] text-neutral-500">
+                            {parameter.label}
+                            <input
+                              type="url"
+                              aria-label={`${component.name}: ${parameter.label}`}
+                              placeholder="https://example.com/icon.png"
+                              value={value === parameter.defaultValue ? "" : value}
+                              onChange={(event) => onChange({
+                                ...componentStyles,
+                                [id]: setEngagementStyleProperty(
+                                  css,
+                                  parameter.selector,
+                                  parameter.property,
+                                  event.target.value.trim()
+                                ),
+                              })}
+                              className="h-7 w-full rounded border border-neutral-700 bg-neutral-950 px-2 text-[10px] text-white placeholder:text-neutral-700"
                             />
                           </label>
                         );
