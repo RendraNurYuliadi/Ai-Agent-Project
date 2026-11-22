@@ -876,22 +876,9 @@ export const GLOBAL_CHAT_STYLE_COMPONENT_IDS = [
   "user-bubble",
 ] as const;
 
-export const ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS = [
-  "window",
-  "launcher",
-  "header",
-  "input",
-  "send",
-  "scrollbar",
-  "reply-buttons",
-  "link-buttons",
-  "card",
-  "carousel",
-  "interaction",
-  "welcome-message",
-  "bot-bubble",
-  "user-bubble",
-] as const;
+export const ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS = GLOBAL_CHAT_STYLE_COMPONENT_IDS.filter(
+  (id) => id !== "chatbot-header" && id !== "chatbot-input"
+);
 
 export function getDefaultComponentStyles(): Record<string, string> {
   return Object.fromEntries(

@@ -17,6 +17,7 @@ import {
 } from "@/components/conversation-message-body";
 import {
   ENGAGEMENT_COMPONENT_STYLES,
+  ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS,
   GLOBAL_CHAT_STYLE_COMPONENT_IDS,
   readEngagementStyleProperty,
   scopeEngagementCss,
@@ -424,28 +425,36 @@ export default function GlobalChatStyleEditor({
   componentStyles,
   onChange,
   previewWindow,
+  scope = "global",
 }: {
   componentStyles: Record<string, string>;
   onChange: (styles: Record<string, string>) => void;
   previewWindow?: HeaderPreviewWindow | null;
+  scope?: "global" | "engagement";
 }) {
+  const componentIds = scope === "engagement"
+    ? ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS
+    : GLOBAL_CHAT_STYLE_COMPONENT_IDS;
+
   return (
     <div className="space-y-7">
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold text-white">Preview full chat window</h3>
-          <p className="mt-1 text-[10px] leading-4 text-neutral-500">
-            Header Engagement memakai konfigurasi window terbaru. Preview komponen di bawah hanya menampilkan bagian yang sedang diedit.
-          </p>
-        </div>
-        <div className="space-y-5">
-          <FullChatbotWindowPreview componentStyles={componentStyles} />
-          <FullEngagementWindowPreview componentStyles={componentStyles} previewWindow={previewWindow} />
-        </div>
-      </section>
+      {scope === "global" && (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Preview full chat window</h3>
+            <p className="mt-1 text-[10px] leading-4 text-neutral-500">
+              Header Engagement memakai konfigurasi window terbaru. Preview komponen di bawah hanya menampilkan bagian yang sedang diedit.
+            </p>
+          </div>
+          <div className="space-y-5">
+            <FullChatbotWindowPreview componentStyles={componentStyles} />
+            <FullEngagementWindowPreview componentStyles={componentStyles} previewWindow={previewWindow} />
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-2">
-        {GLOBAL_CHAT_STYLE_COMPONENT_IDS.map((id) => {
+        {componentIds.map((id) => {
           const component = ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === id);
           if (!component) return null;
           const css = componentStyles[id] || component.defaultCss;
