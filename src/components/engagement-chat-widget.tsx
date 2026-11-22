@@ -360,7 +360,7 @@ export default function EngagementChatWidget({
     <>
       <style dangerouslySetInnerHTML={{ __html: scopedComponentCss }} />
       <main
-        className={`engagement-window-${config.windowId} engagement-widget flex h-full min-h-0 w-full flex-col overflow-hidden border text-white ${windowAnimationDirection ? `engagement-widget-window-${windowAnimationDirection}` : ""}`}
+        className={`engagement-window-${config.windowId} engagement-widget flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden border text-white ${windowAnimationDirection ? `engagement-widget-window-${windowAnimationDirection}` : ""}`}
         data-window-animation={config.window.windowAnimationStyle}
         onAnimationEnd={(event) => {
           if (event.target !== event.currentTarget || !windowAnimationDirection) return;
@@ -417,7 +417,7 @@ export default function EngagementChatWidget({
         </div>
       </header>
 
-      <div ref={messageListRef} className="engagement-message-list min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
+      <div ref={messageListRef} className="engagement-message-list min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-4">
         {initializing && (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-neutral-400">
             <Loader2 className="h-4 w-4 animate-spin" /> Menghubungkan chat...

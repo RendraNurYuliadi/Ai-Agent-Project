@@ -499,7 +499,7 @@ export default function EngagementDetailPage() {
   title="Chat widget"
   width="${launcherFrameWidth}"
   height="${launcherFrameHeight}"
-  style="position:fixed;top:${frameTop};right:${frameRight};bottom:${frameBottom};left:${frameLeft};width:${launcherFrameWidth}px;height:${launcherFrameHeight}px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);z-index:9999;border:0;background:transparent"
+  style="position:fixed;top:${frameTop};right:${frameRight};bottom:${frameBottom};left:${frameLeft};width:${launcherFrameWidth}px;height:${launcherFrameHeight}px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);z-index:9999;border:0;background:transparent"
   referrerpolicy="strict-origin-when-cross-origin"
   allow="clipboard-write"
 ></iframe>`
@@ -511,16 +511,33 @@ export default function EngagementDetailPage() {
   if (!frame || !document.body) return;
   if (frame.parentElement !== document.body) document.body.appendChild(frame);
   const widgetOrigin = new URL(frame.src).origin;
-  const setFrameSize = (isOpen, animate = false, launcherWidth = ${launcherFrameWidth}, launcherHeight = ${launcherFrameHeight}) => {
+  const horizontalAnchor = "${horizontalAnchor}";
+  const verticalAnchor = "${verticalAnchor}";
+  let frameIsOpen = false;
+  let currentLauncherWidth = ${launcherFrameWidth};
+  let currentLauncherHeight = ${launcherFrameHeight};
+  const setFrameSize = (isOpen, animate = false, launcherWidth = currentLauncherWidth, launcherHeight = currentLauncherHeight) => {
+    frameIsOpen = isOpen;
+    currentLauncherWidth = launcherWidth;
+    currentLauncherHeight = launcherHeight;
+    const viewport = window.visualViewport;
+    const viewportWidth = Math.max(0, Math.floor(viewport?.width || window.innerWidth));
+    const viewportHeight = Math.max(0, Math.floor(viewport?.height || window.innerHeight));
+    const minimumFrameWidth = Math.min(240, Math.max(0, viewportWidth - 16));
+    const minimumFrameHeight = Math.min(240, Math.max(0, viewportHeight - 16));
+    const offsetX = Math.min(${launcherOffsetX}, Math.max(0, viewportWidth - minimumFrameWidth - 8));
+    const offsetY = Math.min(${launcherOffsetY}, Math.max(0, viewportHeight - minimumFrameHeight - 8));
+    const availableWidth = Math.max(0, viewportWidth - offsetX - 8);
+    const availableHeight = Math.max(0, viewportHeight - offsetY - 8);
     frame.style.setProperty("position", "fixed", "important");
-    frame.style.setProperty("top", "${frameTop}", "important");
-    frame.style.setProperty("left", "${frameLeft}", "important");
-    frame.style.setProperty("right", "${frameRight}", "important");
-    frame.style.setProperty("bottom", "${frameBottom}", "important");
+    frame.style.setProperty("top", verticalAnchor === "top" ? \`\${offsetY}px\` : "auto", "important");
+    frame.style.setProperty("left", horizontalAnchor === "left" ? \`\${offsetX}px\` : "auto", "important");
+    frame.style.setProperty("right", horizontalAnchor === "right" ? \`\${offsetX}px\` : "auto", "important");
+    frame.style.setProperty("bottom", verticalAnchor === "bottom" ? \`\${offsetY}px\` : "auto", "important");
     frame.style.setProperty("margin", "0", "important");
     frame.style.setProperty("z-index", "2147483000", "important");
-    frame.style.setProperty("max-width", "calc(100vw - 32px)", "important");
-    frame.style.setProperty("max-height", "calc(100vh - 32px)", "important");
+    frame.style.setProperty("max-width", \`\${availableWidth}px\`, "important");
+    frame.style.setProperty("max-height", \`\${availableHeight}px\`, "important");
     frame.style.setProperty("border", "0", "important");
     frame.style.setProperty("background", "transparent", "important");
     frame.style.setProperty(
@@ -530,9 +547,12 @@ export default function EngagementDetailPage() {
         : "none",
       "important"
     );
-    frame.style.setProperty("width", isOpen ? "min(380px, calc(100vw - 32px))" : \`\${launcherWidth}px\`, "important");
-    frame.style.setProperty("height", isOpen ? "min(620px, calc(100vh - 32px))" : \`\${launcherHeight}px\`, "important");
+    frame.style.setProperty("width", isOpen ? \`\${Math.min(380, availableWidth)}px\` : \`\${Math.min(launcherWidth, availableWidth)}px\`, "important");
+    frame.style.setProperty("height", isOpen ? \`\${Math.min(620, availableHeight)}px\` : \`\${Math.min(launcherHeight, availableHeight)}px\`, "important");
   };
+  const resizeFrameToViewport = () => setFrameSize(frameIsOpen);
+  window.addEventListener("resize", resizeFrameToViewport);
+  window.visualViewport?.addEventListener("resize", resizeFrameToViewport);
   setFrameSize(false);
   window.addEventListener("message", (event) => {
     if (event.origin !== widgetOrigin || event.source !== frame.contentWindow) return;
