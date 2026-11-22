@@ -330,7 +330,7 @@ export default function EngagementChatWidget({
 
   if (!isOpen) {
     return (
-      <div className={`engagement-window-${config.windowId} engagement-widget flex h-full w-full items-center justify-center`} style={accentStyle}>
+      <div className={`engagement-window-${config.windowId} flex h-full w-full items-center justify-center bg-transparent`} style={{ ...accentStyle, backgroundColor: "transparent" }}>
         <style dangerouslySetInnerHTML={{ __html: scopedComponentCss }} />
         <button
           ref={launcherButtonRef}
