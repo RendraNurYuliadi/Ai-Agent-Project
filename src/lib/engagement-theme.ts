@@ -213,7 +213,6 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
     description: "Tombol chat yang tampil di pojok kanan bawah website.",
     className: "engagement-launcher",
     defaultCss: `.engagement-launcher {
-  --engagement-launcher-shadow-color: #000000;
   --engagement-launcher-icon-url: "";
   background: #171717;
   width: 72px;
@@ -223,12 +222,10 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   border: 1px solid var(--engagement-line, #e5e5e5);
   border-radius: 36px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--engagement-launcher-shadow-color) 36%, transparent);
 }`,
     parameters: [
       color("Warna background", ".engagement-launcher", "background", "#171717"),
       text("URL icon custom", ".engagement-launcher", "--engagement-launcher-icon-url", ""),
-      color("Warna box shadow", ".engagement-launcher", "--engagement-launcher-shadow-color", "#000000"),
       color("Warna border", ".engagement-launcher", "border-color", "#e5e5e5"),
       ...layout(".engagement-launcher", {
         width: "72px", height: "72px", margin: "0px", padding: "0px", borderWidth: "1px", borderRadius: "36px",
