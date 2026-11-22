@@ -12,10 +12,12 @@ import {
   CHAT_SCROLL_ANIMATION_STYLES,
   isChatScrollAnimationStyle,
 } from "@/lib/chat-ui-preferences";
-import type {
-  EngagementEntryPoint,
-  EngagementRecord,
-  EngagementWindow,
+import {
+  ENGAGEMENT_WINDOW_POSITIONS,
+  type EngagementEntryPoint,
+  type EngagementRecord,
+  type EngagementWindow,
+  type EngagementWindowPosition,
 } from "@/types/engagement";
 import {
   DEFAULT_ENGAGEMENT_CSS,
@@ -40,6 +42,12 @@ interface SkillOption {
 const DEFAULT_ACCENT = "#171717";
 const DEFAULT_BACKGROUND = "#ffffff";
 const DEFAULT_LINE = "#e5e5e5";
+const ENGAGEMENT_POSITION_LABELS: Record<EngagementWindowPosition, string> = {
+  "bottom-right": "Kanan bawah",
+  "bottom-left": "Kiri bawah",
+  "top-right": "Kanan atas",
+  "top-left": "Kiri atas",
+};
 
 function normalizeWindow(
   windowItem: EngagementWindow,
@@ -58,6 +66,15 @@ function normalizeWindow(
       ? DEFAULT_LINE
       : windowItem.lineColor,
     borderRadius: typeof windowItem.borderRadius === "number" ? windowItem.borderRadius : 16,
+    launcherPosition: ENGAGEMENT_WINDOW_POSITIONS.includes(windowItem.launcherPosition)
+      ? windowItem.launcherPosition
+      : "bottom-right",
+    launcherOffsetX: typeof windowItem.launcherOffsetX === "number" && Number.isFinite(windowItem.launcherOffsetX)
+      ? Math.min(1000, Math.max(0, Math.round(windowItem.launcherOffsetX)))
+      : 8,
+    launcherOffsetY: typeof windowItem.launcherOffsetY === "number" && Number.isFinite(windowItem.launcherOffsetY)
+      ? Math.min(1000, Math.max(0, Math.round(windowItem.launcherOffsetY)))
+      : 8,
     allowClose: windowItem.allowClose !== false,
     windowAnimationStyle: isChatScrollAnimationStyle(windowItem.windowAnimationStyle)
       ? windowItem.windowAnimationStyle
@@ -398,6 +415,9 @@ export default function EngagementDetailPage() {
       backgroundColor: DEFAULT_BACKGROUND,
       lineColor: DEFAULT_LINE,
       borderRadius: 16,
+      launcherPosition: "bottom-right",
+      launcherOffsetX: 8,
+      launcherOffsetY: 8,
       allowClose: true,
       windowAnimationStyle: "pop",
       bubbleAnimationEnabled: false,
@@ -464,6 +484,14 @@ export default function EngagementDetailPage() {
   };
   const launcherFrameWidth = getLauncherFrameDimension("width");
   const launcherFrameHeight = getLauncherFrameDimension("height");
+  const horizontalAnchor = selectedWindow?.launcherPosition.endsWith("left") ? "left" : "right";
+  const verticalAnchor = selectedWindow?.launcherPosition.startsWith("top") ? "top" : "bottom";
+  const launcherOffsetX = selectedWindow?.launcherOffsetX ?? 8;
+  const launcherOffsetY = selectedWindow?.launcherOffsetY ?? 8;
+  const frameLeft = horizontalAnchor === "left" ? `${launcherOffsetX}px` : "auto";
+  const frameRight = horizontalAnchor === "right" ? `${launcherOffsetX}px` : "auto";
+  const frameTop = verticalAnchor === "top" ? `${launcherOffsetY}px` : "auto";
+  const frameBottom = verticalAnchor === "bottom" ? `${launcherOffsetY}px` : "auto";
   let snippet = selectedEntry && selectedWindow && typeof window !== "undefined"
     ? `<iframe
   id="${snippetFrameId}"
@@ -471,7 +499,7 @@ export default function EngagementDetailPage() {
   title="Chat widget"
   width="${launcherFrameWidth}"
   height="${launcherFrameHeight}"
-  style="position:fixed;right:8px;bottom:8px;width:${launcherFrameWidth}px;height:${launcherFrameHeight}px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);z-index:9999;border:0;background:transparent"
+  style="position:fixed;top:${frameTop};right:${frameRight};bottom:${frameBottom};left:${frameLeft};width:${launcherFrameWidth}px;height:${launcherFrameHeight}px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);z-index:9999;border:0;background:transparent"
   referrerpolicy="strict-origin-when-cross-origin"
   allow="clipboard-write"
 ></iframe>`
@@ -485,10 +513,10 @@ export default function EngagementDetailPage() {
   const widgetOrigin = new URL(frame.src).origin;
   const setFrameSize = (isOpen, animate = false, launcherWidth = ${launcherFrameWidth}, launcherHeight = ${launcherFrameHeight}) => {
     frame.style.setProperty("position", "fixed", "important");
-    frame.style.setProperty("top", "auto", "important");
-    frame.style.setProperty("left", "auto", "important");
-    frame.style.setProperty("right", isOpen ? "24px" : "8px", "important");
-    frame.style.setProperty("bottom", isOpen ? "24px" : "8px", "important");
+    frame.style.setProperty("top", "${frameTop}", "important");
+    frame.style.setProperty("left", "${frameLeft}", "important");
+    frame.style.setProperty("right", "${frameRight}", "important");
+    frame.style.setProperty("bottom", "${frameBottom}", "important");
     frame.style.setProperty("margin", "0", "important");
     frame.style.setProperty("z-index", "2147483000", "important");
     frame.style.setProperty("max-width", "calc(100vw - 32px)", "important");
@@ -660,6 +688,59 @@ export default function EngagementDetailPage() {
                     <input type="checkbox" checked={item.allowClose} onChange={(event) => updateWindow(item.id, { allowClose: event.target.checked })} className="h-4 w-4 accent-white" />
                     Tampilkan tombol close pada menu titik tiga
                   </label>
+                  <section className="md:col-span-2 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
+                    <h4 className="text-xs font-semibold text-white">Posisi iframe</h4>
+                    <p className="mt-1 text-[10px] leading-4 text-neutral-500">
+                      Pilih sudut, lalu atur jarak X/Y dalam px. Posisi yang sama dipakai saat icon dan chat window ditampilkan.
+                    </p>
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      <label className="space-y-1.5">
+                        <span className="text-[11px] text-neutral-400">Posisi sudut</span>
+                        <select
+                          value={item.launcherPosition}
+                          onChange={(event) => {
+                            const position = ENGAGEMENT_WINDOW_POSITIONS.find((candidate) => candidate === event.target.value);
+                            if (position) updateWindow(item.id, { launcherPosition: position });
+                          }}
+                          className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 text-xs text-white outline-none focus:border-neutral-600"
+                        >
+                          {ENGAGEMENT_WINDOW_POSITIONS.map((position) => (
+                            <option key={position} value={position}>{ENGAGEMENT_POSITION_LABELS[position]}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[11px] text-neutral-400">Jarak X (px)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={1000}
+                          step={1}
+                          value={item.launcherOffsetX}
+                          onChange={(event) => {
+                            const value = Number(event.target.value);
+                            if (Number.isFinite(value)) updateWindow(item.id, { launcherOffsetX: Math.min(1000, Math.max(0, Math.round(value))) });
+                          }}
+                          className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 text-xs text-white outline-none focus:border-neutral-600"
+                        />
+                      </label>
+                      <label className="space-y-1.5">
+                        <span className="text-[11px] text-neutral-400">Jarak Y (px)</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={1000}
+                          step={1}
+                          value={item.launcherOffsetY}
+                          onChange={(event) => {
+                            const value = Number(event.target.value);
+                            if (Number.isFinite(value)) updateWindow(item.id, { launcherOffsetY: Math.min(1000, Math.max(0, Math.round(value))) });
+                          }}
+                          className="h-9 w-full rounded-lg border border-neutral-800 bg-neutral-900 px-3 text-xs text-white outline-none focus:border-neutral-600"
+                        />
+                      </label>
+                    </div>
+                  </section>
                   <div className="md:col-span-2 grid gap-3 xl:grid-cols-2">
                   <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-3">
                     <h4 className="text-xs font-semibold text-white">Animasi tampil dan sembunyi chat window</h4>

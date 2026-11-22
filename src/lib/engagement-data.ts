@@ -1,4 +1,8 @@
 import { ObjectId, type Db } from "mongodb";
+import {
+  ENGAGEMENT_WINDOW_POSITIONS,
+  type EngagementWindowPosition,
+} from "@/types/engagement";
 import type {
   EngagementEntryPoint,
   EngagementWindow,
@@ -43,6 +47,12 @@ export function parseEngagementEntryPoints(value: unknown): EngagementEntryPoint
   return result;
 }
 
+function parsePositionOffset(value: unknown): number | null {
+  if (value === undefined) return 8;
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.min(1000, Math.max(0, Math.round(value)));
+}
+
 export function parseEngagementWindows(value: unknown): EngagementWindow[] | null {
   if (!Array.isArray(value) || value.length > 20) return null;
   const result: EngagementWindow[] = [];
@@ -67,6 +77,12 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
     const borderRadius = typeof candidate.borderRadius === "number"
       ? Math.min(32, Math.max(0, Math.round(candidate.borderRadius)))
       : 16;
+    const launcherPosition: EngagementWindowPosition | null =
+      candidate.launcherPosition === undefined
+        ? "bottom-right"
+        : ENGAGEMENT_WINDOW_POSITIONS.find((position) => position === candidate.launcherPosition) || null;
+    const launcherOffsetX = parsePositionOffset(candidate.launcherOffsetX);
+    const launcherOffsetY = parsePositionOffset(candidate.launcherOffsetY);
     const allowClose = candidate.allowClose !== false;
     const windowAnimationStyle: ChatScrollAnimationStyle | null =
       candidate.windowAnimationStyle === undefined
@@ -130,7 +146,10 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
       componentStylesMode === null ||
       !/^#[0-9a-fA-F]{6}$/.test(accentColor) ||
       !/^#[0-9a-fA-F]{6}$/.test(backgroundColor) ||
-      !/^#[0-9a-fA-F]{6}$/.test(lineColor)
+      !/^#[0-9a-fA-F]{6}$/.test(lineColor) ||
+      launcherPosition === null ||
+      launcherOffsetX === null ||
+      launcherOffsetY === null
     ) {
       return null;
     }
@@ -147,6 +166,9 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
       backgroundColor,
       lineColor,
       borderRadius,
+      launcherPosition,
+      launcherOffsetX,
+      launcherOffsetY,
       allowClose,
       windowAnimationStyle,
       bubbleAnimationEnabled,

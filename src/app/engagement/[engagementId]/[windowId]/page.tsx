@@ -8,7 +8,10 @@ import {
 } from "@/lib/engagement-theme";
 import { isChatScrollAnimationStyle } from "@/lib/chat-ui-preferences";
 import { signEngagementWidgetToken } from "@/lib/engagement-auth";
-import type { EngagementWidgetConfig } from "@/types/engagement";
+import {
+  ENGAGEMENT_WINDOW_POSITIONS,
+  type EngagementWidgetConfig,
+} from "@/types/engagement";
 import EngagementChatWidget from "@/components/engagement-chat-widget";
 
 export const dynamic = "force-dynamic";
@@ -94,6 +97,13 @@ export default async function EngagementWidgetPage({
       backgroundColor: windowConfig.backgroundColor || "#ffffff",
       lineColor: windowConfig.lineColor || "#e5e5e5",
       borderRadius: typeof windowConfig.borderRadius === "number" ? windowConfig.borderRadius : 16,
+      launcherPosition: ENGAGEMENT_WINDOW_POSITIONS.find((position) => position === windowConfig.launcherPosition) || "bottom-right",
+      launcherOffsetX: typeof windowConfig.launcherOffsetX === "number" && Number.isFinite(windowConfig.launcherOffsetX)
+        ? Math.min(1000, Math.max(0, Math.round(windowConfig.launcherOffsetX)))
+        : 8,
+      launcherOffsetY: typeof windowConfig.launcherOffsetY === "number" && Number.isFinite(windowConfig.launcherOffsetY)
+        ? Math.min(1000, Math.max(0, Math.round(windowConfig.launcherOffsetY)))
+        : 8,
       allowClose: windowConfig.allowClose !== false,
       windowAnimationStyle: isChatScrollAnimationStyle(windowConfig.windowAnimationStyle)
         ? windowConfig.windowAnimationStyle

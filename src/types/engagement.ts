@@ -1,5 +1,14 @@
 import type { ChatScrollAnimationStyle } from "@/lib/chat-ui-preferences";
 
+export const ENGAGEMENT_WINDOW_POSITIONS = [
+  "bottom-right",
+  "bottom-left",
+  "top-right",
+  "top-left",
+] as const;
+
+export type EngagementWindowPosition = typeof ENGAGEMENT_WINDOW_POSITIONS[number];
+
 export interface EngagementEntryPoint {
   id: string;
   name: string;
@@ -18,6 +27,9 @@ export interface EngagementWindow {
   backgroundColor: string;
   lineColor: string;
   borderRadius: number;
+  launcherPosition: EngagementWindowPosition;
+  launcherOffsetX: number;
+  launcherOffsetY: number;
   allowClose: boolean;
   windowAnimationStyle: ChatScrollAnimationStyle;
   bubbleAnimationEnabled: boolean;
