@@ -191,6 +191,8 @@ export function ConversationMessageBody({
   contentOverride,
   imageProxyToken,
   componentStyles,
+  embedded = false,
+  botName,
 }: {
   message: ConversationMessageData;
   isUser: boolean;
@@ -199,15 +201,17 @@ export function ConversationMessageBody({
   contentOverride?: React.ReactNode;
   imageProxyToken?: string;
   componentStyles?: Record<string, string>;
+  embedded?: boolean;
+  botName?: string;
 }) {
   const topArticles = message.topArticles || [];
   const uiComponents = message.uiComponents || [];
   const webSources = message.webSources || [];
   return <>
     {!isUser && <div className="engagement-author flex items-center gap-1.5 pl-1 text-[10px] text-neutral-500">
-      <span className="font-semibold text-white">{message.authorName || "GenAI"}</span>
-      {message.messageType && message.messageType !== "TEXT_QUESTION" && <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${message.messageType === "FAQ" ? "border-white/20 bg-white/10 text-white" : "border-neutral-700/40 bg-neutral-700/20 text-neutral-300"}`}>{message.messageType}</span>}
-      {message.lmStudioAvailable === false && <span className="rounded-full border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[9px] font-medium text-neutral-400">Offline</span>}
+      <span className="font-semibold text-white">{botName || message.authorName || "GenAI"}</span>
+      {!embedded && message.messageType && message.messageType !== "TEXT_QUESTION" && <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${message.messageType === "FAQ" ? "border-white/20 bg-white/10 text-white" : "border-neutral-700/40 bg-neutral-700/20 text-neutral-300"}`}>{message.messageType}</span>}
+      {!embedded && message.lmStudioAvailable === false && <span className="rounded-full border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[9px] font-medium text-neutral-400">Offline</span>}
     </div>}
     {(message.content || contentOverride) && <div className={`w-fit min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? "engagement-user-bubble rounded-tr-sm bg-white font-medium text-black shadow-lg" : "engagement-bot-bubble rounded-tl-sm border border-neutral-800 bg-[#111111] text-neutral-300 shadow-md"}`}>
       {contentOverride || <FormattedMessage content={message.content} isUser={isUser} />}
@@ -217,8 +221,10 @@ export function ConversationMessageBody({
     <ResponseMeta
       timestamp={message.timestamp}
       align={isUser ? "end" : "start"}
+      displayDate={embedded}
       generationDurationMs={isUser ? undefined : message.generationDurationMs}
-      showRetrieval={!isUser && (message.messageType === "FAQ" || message.messageType === "RAG" || message.messageType === "WEB_SEARCH")}
+      showDetails={!embedded}
+      showRetrieval={!embedded && !isUser && (message.messageType === "FAQ" || message.messageType === "RAG" || message.messageType === "WEB_SEARCH")}
       webSearch={!isUser && message.messageType === "WEB_SEARCH"}
       topArticles={topArticles}
       uiComponents={uiComponents}

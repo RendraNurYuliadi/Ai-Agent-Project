@@ -34,7 +34,9 @@ type WebSource = {
 export function ResponseMeta({
   timestamp,
   align = "start",
+  displayDate = false,
   generationDurationMs,
+  showDetails = true,
   showRetrieval,
   webSearch = false,
   topArticles = [],
@@ -43,7 +45,9 @@ export function ResponseMeta({
 }: {
   timestamp: string | Date;
   align?: "start" | "end";
+  displayDate?: boolean;
   generationDurationMs?: number;
+  showDetails?: boolean;
   showRetrieval?: boolean;
   webSearch?: boolean;
   topArticles?: RetrievalArticle[];
@@ -52,13 +56,15 @@ export function ResponseMeta({
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const date = new Date(timestamp);
-  const time = Number.isNaN(date.getTime())
+  const formattedTimestamp = Number.isNaN(date.getTime())
     ? ""
-    : date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+    : displayDate
+      ? date.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+      : date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
 
   return <div className={`flex w-fit flex-wrap items-center gap-2 px-1 text-[10px] ${align === "end" ? "self-end justify-end" : "self-start justify-start"}`}>
-    {time && <span className="select-none text-neutral-600">{time}</span>}
-    {(showRetrieval || webSources.length > 0) && <>
+    {formattedTimestamp && <span className="select-none text-neutral-600">{formattedTimestamp}</span>}
+    {showDetails && (showRetrieval || webSources.length > 0) && <>
       <button type="button" onClick={() => setDetailsOpen(true)} className="cursor-pointer text-neutral-500 hover:text-neutral-300">
         {webSearch ? `Sumber web (${webSources.length})` : `Debug retrieval (${topArticles.length})`}
       </button>

@@ -260,7 +260,7 @@ function ComponentPreviewCard({
         <p className="text-[10px] font-semibold text-white">{component.name}</p>
         <p className="mt-0.5 text-[9px] leading-4 text-neutral-500">{component.description}</p>
       </div>
-      <div className={`${scopeClass} engagement-widget flex min-h-24 items-center overflow-hidden bg-white p-3 text-neutral-900`}>
+      <div className={`${scopeClass} engagement-widget flex min-h-24 items-center bg-white text-neutral-900 ${id === "launcher" ? "overflow-visible p-6" : "overflow-hidden p-3"}`}>
         <div className="w-full min-w-0">
           <ComponentPreviewContent id={id} componentStyles={componentStyles} />
         </div>

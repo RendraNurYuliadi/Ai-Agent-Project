@@ -416,6 +416,8 @@ export default function EngagementChatWidget({
               disabled={sending || conversationUnavailable || isWaitingForAgent}
               imageProxyToken={config.token}
               componentStyles={componentStyles}
+              embedded
+              botName={config.window.title}
             />
           </div>
         ))}
