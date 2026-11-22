@@ -23,6 +23,7 @@ export interface EngagementWindow {
   bubbleAnimationEnabled: boolean;
   bubbleAnimationStyle: ChatScrollAnimationStyle;
   customCss: string;
+  componentStylesMode: "global" | "specific";
   componentStyles: Record<string, string>;
 }
 

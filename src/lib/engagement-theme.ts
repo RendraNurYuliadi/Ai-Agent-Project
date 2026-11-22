@@ -1,3 +1,5 @@
+export const ENGAGEMENT_LAUNCHER_SHADOW_GUTTER = 32;
+
 export const DEFAULT_ENGAGEMENT_CSS = `/*
 Engagement Widget CSS
 Edit these variables. Structure and bot data do not need to change.
@@ -866,6 +868,23 @@ export const GLOBAL_CHAT_STYLE_COMPONENT_IDS = [
   "user-bubble",
 ] as const;
 
+export const ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS = [
+  "window",
+  "launcher",
+  "header",
+  "input",
+  "send",
+  "scrollbar",
+  "reply-buttons",
+  "link-buttons",
+  "card",
+  "carousel",
+  "interaction",
+  "welcome-message",
+  "bot-bubble",
+  "user-bubble",
+] as const;
+
 export function getDefaultComponentStyles(): Record<string, string> {
   return Object.fromEntries(
     ENGAGEMENT_COMPONENT_STYLES.map((component) => [component.id, component.defaultCss])
@@ -1099,6 +1118,23 @@ export function migrateLegacyComponentStyles(
   }
 
   return migratedStyles;
+}
+
+export function resolveEngagementComponentStyles(
+  windowStyles: Record<string, string> | undefined,
+  globalStyles: Record<string, string> | undefined,
+  mode: "global" | "specific" = "global"
+): Record<string, string> {
+  const resolved = migrateLegacyComponentStyles({
+    ...getDefaultComponentStyles(),
+    ...(windowStyles || {}),
+  });
+  if (mode === "specific") return resolved;
+
+  for (const id of ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS) {
+    if (typeof globalStyles?.[id] === "string") resolved[id] = globalStyles[id];
+  }
+  return resolved;
 }
 
 export function scopeEngagementCss(css: string, scope: string): string {

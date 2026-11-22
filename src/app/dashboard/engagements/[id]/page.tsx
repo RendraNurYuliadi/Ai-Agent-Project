@@ -18,12 +18,13 @@ import type {
 } from "@/types/engagement";
 import {
   DEFAULT_ENGAGEMENT_CSS,
+  ENGAGEMENT_LAUNCHER_SHADOW_GUTTER,
   ENGAGEMENT_COMPONENT_STYLES,
-  GLOBAL_CHAT_STYLE_COMPONENT_IDS,
+  ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS,
   getDefaultComponentStyles,
   getDefaultGlobalChatStyles,
-  migrateLegacyComponentStyles,
   normalizeGlobalChatStyles,
+  resolveEngagementComponentStyles,
   readEngagementStyleProperty as readCssProperty,
   setEngagementStyleProperty as setCssProperty,
   scopeEngagementCss,
@@ -41,7 +42,6 @@ interface SkillOption {
 const DEFAULT_ACCENT = "#171717";
 const DEFAULT_BACKGROUND = "#ffffff";
 const DEFAULT_LINE = "#e5e5e5";
-const GLOBAL_CHAT_STYLE_ID_SET = new Set<string>(GLOBAL_CHAT_STYLE_COMPONENT_IDS);
 
 function getComponentPreviewCss(
   styles: Record<string, string>,
@@ -62,11 +62,11 @@ function getComponentPreviewCss(
     .join("\n");
 }
 
-function normalizeWindow(windowItem: EngagementWindow): EngagementWindow {
-  const componentStyles = migrateLegacyComponentStyles({
-    ...getDefaultComponentStyles(),
-    ...(windowItem.componentStyles || {}),
-  });
+function normalizeWindow(
+  windowItem: EngagementWindow,
+  globalStyles: Record<string, string>
+): EngagementWindow {
+  const componentStylesMode = windowItem.componentStylesMode === "specific" ? "specific" : "global";
   return {
     ...windowItem,
     accentColor: windowItem.accentColor?.toLowerCase() === "#2563eb" ? "#171717" : windowItem.accentColor,
@@ -88,7 +88,12 @@ function normalizeWindow(windowItem: EngagementWindow): EngagementWindow {
       ? windowItem.bubbleAnimationStyle
       : "fade",
     customCss: typeof windowItem.customCss === "string" ? windowItem.customCss : DEFAULT_ENGAGEMENT_CSS,
-    componentStyles,
+    componentStylesMode,
+    componentStyles: resolveEngagementComponentStyles(
+      windowItem.componentStyles,
+      globalStyles,
+      componentStylesMode
+    ),
   };
 }
 
@@ -289,22 +294,27 @@ export default function EngagementDetailPage() {
   );
 
   const loadData = useCallback(async () => {
-    const [engagementResponse, skillsResponse] = await Promise.all([
+    const [engagementResponse, skillsResponse, stylesResponse] = await Promise.all([
       fetch(`/api/engagements/${id}`),
       fetch("/api/skills"),
+      fetch("/api/chat-styles"),
     ]);
-    const [engagementData, skillsData] = await Promise.all([
+    const [engagementData, skillsData, styleData] = await Promise.all([
       engagementResponse.json(),
       skillsResponse.json(),
+      stylesResponse.json(),
     ]);
     if (!engagementResponse.ok) throw new Error(engagementData.error || "Gagal memuat Engagement.");
     if (!skillsResponse.ok) throw new Error(skillsData.error || "Gagal memuat daftar skill.");
+    if (!stylesResponse.ok) throw new Error(styleData.error || "Gagal memuat style global.");
     const item = engagementData.engagement as EngagementRecord;
+    const globalStyles = normalizeGlobalChatStyles(styleData.componentStyles);
     setEngagement(item);
     setName(item.name);
     setIsActive(item.isActive);
     setEntryPoints(item.entryPoints || []);
-    setWindows((item.windows || []).map(normalizeWindow));
+    setWindows((item.windows || []).map((windowItem) => normalizeWindow(windowItem, globalStyles)));
+    setGlobalComponentStyles(globalStyles);
     setSkills(skillsData.skills || []);
     setSnippetEntryPointId(item.entryPoints?.[0]?.id || "");
     setSnippetWindowId(item.windows?.[0]?.id || "");
@@ -343,9 +353,10 @@ export default function EngagementDetailPage() {
         setName(item.name);
         setIsActive(item.isActive);
         setEntryPoints(item.entryPoints || []);
-        setWindows((item.windows || []).map(normalizeWindow));
+        const globalStyles = normalizeGlobalChatStyles(styleData.componentStyles);
+        setWindows((item.windows || []).map((windowItem) => normalizeWindow(windowItem, globalStyles)));
         setSkills(skillsData.skills || []);
-        setGlobalComponentStyles(normalizeGlobalChatStyles(styleData.componentStyles));
+        setGlobalComponentStyles(globalStyles);
         setSnippetEntryPointId(item.entryPoints?.[0]?.id || "");
         setSnippetWindowId(item.windows?.[0]?.id || "");
       })
@@ -396,6 +407,7 @@ export default function EngagementDetailPage() {
       setError("Maksimal 20 chat window per Engagement.");
       return;
     }
+    const defaultComponentStyles = getDefaultComponentStyles();
     const nextWindow: EngagementWindow = {
       id: crypto.randomUUID(),
       name: `Chat window ${windows.length + 1}`,
@@ -413,7 +425,16 @@ export default function EngagementDetailPage() {
       bubbleAnimationEnabled: false,
       bubbleAnimationStyle: "fade",
       customCss: DEFAULT_ENGAGEMENT_CSS,
-      componentStyles: getDefaultComponentStyles(),
+      componentStylesMode: "specific",
+      componentStyles: {
+        ...defaultComponentStyles,
+        ...Object.fromEntries(
+          ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS.map((styleId) => [
+            styleId,
+            globalComponentStyles[styleId] || defaultComponentStyles[styleId],
+          ])
+        ),
+      },
     };
     setWindows((current) => [...current, nextWindow]);
     setSnippetWindowId((current) => current || nextWindow.id);
@@ -421,7 +442,10 @@ export default function EngagementDetailPage() {
   };
 
   const updateWindow = (windowId: string, updates: Partial<EngagementWindow>) => {
-    setWindows((current) => current.map((item) => item.id === windowId ? { ...item, ...updates } : item));
+    const nextUpdates = updates.componentStyles
+      ? { ...updates, componentStylesMode: "specific" as const }
+      : updates;
+    setWindows((current) => current.map((item) => item.id === windowId ? { ...item, ...nextUpdates } : item));
   };
 
   const save = async () => {
@@ -448,23 +472,32 @@ export default function EngagementDetailPage() {
   const snippetFrameId = selectedWindow
     ? `engagement-chat-${id}-${selectedWindow.id}`.replace(/[^a-zA-Z0-9_-]/g, "")
     : "";
+  const launcherFrameSize = 72 + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2;
   let snippet = selectedEntry && selectedWindow && typeof window !== "undefined"
-    ? `<iframe\n  id="${snippetFrameId}"\n  src="${window.location.origin}/engagement/${encodeURIComponent(id)}/${encodeURIComponent(selectedWindow.id)}?entryPointId=${encodeURIComponent(selectedEntry.id)}"\n  title="Chat widget"\n  width="72"\n  height="72"\n  style="position:fixed;right:24px;bottom:24px;width:72px;height:72px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);z-index:9999;border:0;background:transparent;transition:width .2s ease,height .2s ease"\n  referrerpolicy="strict-origin-when-cross-origin"\n  allow="clipboard-write"\n></iframe>\n<script>\n(() => {\n  const frame = document.getElementById("${snippetFrameId}");\n  if (!frame) return;\n  const widgetOrigin = new URL(frame.src).origin;\n  window.addEventListener("message", (event) => {\n    if (event.origin !== widgetOrigin || event.source !== frame.contentWindow) return;\n    if (event.data?.type !== "engagement-widget:resize") return;\n    const isOpen = event.data.open === true;\n    frame.style.width = isOpen ? "min(380px, calc(100vw - 32px))" : "72px";\n    frame.style.height = isOpen ? "min(620px, calc(100vh - 32px))" : "72px";\n  });\n})();\n</script>`
+    ? `<iframe
+  id="${snippetFrameId}"
+  src="${window.location.origin}/engagement/${encodeURIComponent(id)}/${encodeURIComponent(selectedWindow.id)}?entryPointId=${encodeURIComponent(selectedEntry.id)}"
+  title="Chat widget"
+  width="${launcherFrameSize}"
+  height="${launcherFrameSize}"
+  style="position:fixed;right:8px;bottom:8px;width:${launcherFrameSize}px;height:${launcherFrameSize}px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);z-index:9999;border:0;background:transparent"
+  referrerpolicy="strict-origin-when-cross-origin"
+  allow="clipboard-write"
+></iframe>`
     : "";
   if (snippet) {
-    snippet = snippet.replace(/<script>[\s\S]*?<\/script>$/, "");
     snippet += `\n<script>
 (() => {
   const frame = document.getElementById("${snippetFrameId}");
   if (!frame || !document.body) return;
   if (frame.parentElement !== document.body) document.body.appendChild(frame);
   const widgetOrigin = new URL(frame.src).origin;
-  const setFrameSize = (isOpen, animate = false) => {
+  const setFrameSize = (isOpen, animate = false, launcherWidth = ${launcherFrameSize}, launcherHeight = ${launcherFrameSize}) => {
     frame.style.setProperty("position", "fixed", "important");
     frame.style.setProperty("top", "auto", "important");
     frame.style.setProperty("left", "auto", "important");
-    frame.style.setProperty("right", "24px", "important");
-    frame.style.setProperty("bottom", "24px", "important");
+    frame.style.setProperty("right", isOpen ? "24px" : "8px", "important");
+    frame.style.setProperty("bottom", isOpen ? "24px" : "8px", "important");
     frame.style.setProperty("margin", "0", "important");
     frame.style.setProperty("z-index", "2147483000", "important");
     frame.style.setProperty("max-width", "calc(100vw - 32px)", "important");
@@ -478,14 +511,21 @@ export default function EngagementDetailPage() {
         : "none",
       "important"
     );
-    frame.style.setProperty("width", isOpen ? "min(380px, calc(100vw - 32px))" : "72px", "important");
-    frame.style.setProperty("height", isOpen ? "min(620px, calc(100vh - 32px))" : "72px", "important");
+    frame.style.setProperty("width", isOpen ? "min(380px, calc(100vw - 32px))" : \`\${launcherWidth}px\`, "important");
+    frame.style.setProperty("height", isOpen ? "min(620px, calc(100vh - 32px))" : \`\${launcherHeight}px\`, "important");
   };
   setFrameSize(false);
   window.addEventListener("message", (event) => {
     if (event.origin !== widgetOrigin || event.source !== frame.contentWindow) return;
     if (event.data?.type !== "engagement-widget:resize") return;
-    setFrameSize(event.data.open === true, event.data.animate === true);
+    const launcherWidth = Number(event.data.launcherWidth);
+    const launcherHeight = Number(event.data.launcherHeight);
+    setFrameSize(
+      event.data.open === true,
+      event.data.animate === true,
+      Number.isFinite(launcherWidth) && launcherWidth >= 72 ? launcherWidth : ${launcherFrameSize},
+      Number.isFinite(launcherHeight) && launcherHeight >= 72 ? launcherHeight : ${launcherFrameSize}
+    );
   });
 })();
 </script>`;
@@ -702,12 +742,14 @@ export default function EngagementDetailPage() {
                     <div>
                       <h4 className="text-xs font-semibold text-white">Style komponen chat</h4>
                       <p className="mt-1 text-[10px] leading-4 text-neutral-500">
-                        Semua style komponen sekarang dikelola di Setting → Style global chatbot dan berlaku untuk Chatbot serta seluruh Engagement.
+                        Setiap chat window memiliki style sendiri. Window baru dimulai dari style global; perubahan di sini hanya berlaku untuk window ini.
                       </p>
                     </div>
                     <div className="grid gap-3 xl:grid-cols-2">
                       {ENGAGEMENT_COMPONENT_STYLES.filter((component) =>
-                        component.id !== "send" && !GLOBAL_CHAT_STYLE_ID_SET.has(component.id)
+                        component.id !== "send" &&
+                        component.id !== "chatbot-header" &&
+                        component.id !== "chatbot-input"
                       ).map((component) => (
                         <article key={component.id} className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950">
                           <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(getComponentPreviewCss(item.componentStyles, component.id), `.engagement-preview-${item.id}-${component.id}`) }} />
@@ -872,7 +914,7 @@ export default function EngagementDetailPage() {
                     <span className="text-[10px] text-neutral-600">380 × 620</span>
                   </div>
                   <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(
-                    Object.values({ ...item.componentStyles, ...globalComponentStyles }).join("\n"),
+                    Object.values(item.componentStyles).join("\n"),
                     `.engagement-preview-window-${item.id}`
                   ) }} />
                   <div className={`engagement-preview-window-${item.id} relative mx-auto h-[457px] w-[280px] overflow-hidden`}>

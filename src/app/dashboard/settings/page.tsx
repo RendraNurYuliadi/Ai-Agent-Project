@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { Loader2, MessageSquare, Save, Settings2 } from "lucide-react";
+import { Copy, Loader2, MessageSquare, Save, Settings2 } from "lucide-react";
 import GlobalChatStyleEditor from "@/components/global-chat-style-editor";
 import {
   CHAT_SCROLL_ANIMATION_STYLES,
@@ -20,6 +20,13 @@ import {
 import type { EngagementWindow } from "@/types/engagement";
 
 type HeaderPreviewWindow = Pick<EngagementWindow, "title" | "subtitle" | "headerIconUrl">;
+type ChatbotPreviewHeader = { title: string; subtitle: string; skillName: string };
+type ChatbotPreviewSkill = {
+  name: string;
+  isAvailable: boolean;
+  bot: { name: string } | null;
+  botUser: { name: string; fullName: string } | null;
+};
 
 export default function SettingsPage() {
   const chatScrollAnimationEnabled = useSyncExternalStore(
@@ -37,10 +44,14 @@ export default function SettingsPage() {
   const [chatPreferencesError, setChatPreferencesError] = useState("");
   const [globalComponentStyles, setGlobalComponentStyles] = useState<Record<string, string>>(getDefaultGlobalChatStyles);
   const [engagementPreviewWindow, setEngagementPreviewWindow] = useState<HeaderPreviewWindow | null>(null);
+  const [chatbotPreviewHeader, setChatbotPreviewHeader] = useState<ChatbotPreviewHeader | null>(null);
+  const [chatbotPreviewError, setChatbotPreviewError] = useState("");
   const [globalStylesLoading, setGlobalStylesLoading] = useState(true);
   const [globalStylesSaving, setGlobalStylesSaving] = useState(false);
+  const [globalStylesApplying, setGlobalStylesApplying] = useState(false);
   const [globalStylesSaved, setGlobalStylesSaved] = useState(true);
   const [globalStylesError, setGlobalStylesError] = useState("");
+  const [globalStylesApplyResult, setGlobalStylesApplyResult] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -78,6 +89,44 @@ export default function SettingsPage() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      fetch("/api/skills"),
+      fetch("/api/bots/active"),
+    ])
+      .then(async ([skillsResponse, botResponse]) => {
+        const [skillsData, botData] = await Promise.all([
+          skillsResponse.json() as Promise<{ error?: string; skills?: ChatbotPreviewSkill[] }>,
+          botResponse.json() as Promise<{ error?: string; bot?: { name?: string } | null }>,
+        ]);
+        if (!skillsResponse.ok) throw new Error(skillsData.error || "Gagal memuat skill untuk preview Chatbot.");
+        if (!botResponse.ok) throw new Error(botData.error || "Gagal memuat bot untuk preview Chatbot.");
+        if (!Array.isArray(skillsData.skills)) throw new Error("Daftar skill untuk preview Chatbot tidak valid.");
+
+        const activeBotName = typeof botData.bot?.name === "string" ? botData.bot.name : "";
+        const previewSkill = skillsData.skills.find((skill) =>
+          skill.isAvailable && skill.bot && skill.bot.name === activeBotName
+        ) || skillsData.skills.find((skill) => skill.isAvailable && skill.bot);
+        const title = previewSkill?.bot?.name || activeBotName || "GenAI Chatbot";
+        const skillName = previewSkill?.name || "";
+        const subtitle = previewSkill
+          ? `${skillName} · ${previewSkill.botUser?.fullName || previewSkill.botUser?.name || "Bot"}`
+          : activeBotName
+            ? "Bot flow aktif (fallback)"
+            : "Pilih skill untuk memulai";
+
+        if (active) {
+          setChatbotPreviewHeader({ title, subtitle, skillName });
+          setChatbotPreviewError("");
+        }
+      })
+      .catch((loadError: unknown) => {
+        if (active) setChatbotPreviewError(loadError instanceof Error ? loadError.message : "Gagal memuat preview Chatbot.");
+      });
+    return () => { active = false; };
+  }, []);
+
   const saveGlobalStyles = async () => {
     setGlobalStylesSaving(true);
     setGlobalStylesError("");
@@ -95,6 +144,32 @@ export default function SettingsPage() {
       setGlobalStylesError(saveError instanceof Error ? saveError.message : "Gagal menyimpan style global.");
     } finally {
       setGlobalStylesSaving(false);
+    }
+  };
+
+  const applyGlobalStylesToEngagements = async () => {
+    if (!window.confirm("Terapkan style global ke semua chat window Engagement? Style spesifik yang ada akan ditimpa.")) return;
+    setGlobalStylesApplying(true);
+    setGlobalStylesError("");
+    setGlobalStylesApplyResult("");
+    try {
+      const response = await fetch("/api/chat-styles", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          componentStyles: globalComponentStyles,
+          applyToAllEngagements: true,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal menerapkan style ke Engagement.");
+      setGlobalComponentStyles(normalizeGlobalChatStyles(data.componentStyles));
+      setGlobalStylesSaved(true);
+      setGlobalStylesApplyResult(`Style diterapkan ke semua chat window pada ${data.updatedEngagements} Engagement.`);
+    } catch (applyError) {
+      setGlobalStylesError(applyError instanceof Error ? applyError.message : "Gagal menerapkan style ke Engagement.");
+    } finally {
+      setGlobalStylesApplying(false);
     }
   };
 
@@ -139,32 +214,47 @@ export default function SettingsPage() {
           <div>
             <h2 className="text-sm font-semibold text-white">Style global chatbot</h2>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-neutral-500">
-              Style ini dibagikan oleh semua pengguna dan digunakan pada Chatbot serta seluruh Engagement. Komponen chat dipakai bersama, sedangkan header dan input Chatbot/Engagement memiliki pengaturan terpisah.
+              Style global dipakai oleh Chatbot dan menjadi sumber style Engagement. Tiap chat window menyimpan style spesifik; gunakan tombol apply untuk menimpa style spesifik semua window dengan style global saat ini.
             </p>
             <p className={`mt-1 text-[10px] ${globalStylesSaved ? "text-emerald-400" : "text-amber-400"}`}>
               {globalStylesSaved ? "Style global tersimpan." : "Ada perubahan style global yang belum disimpan."}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void saveGlobalStyles()}
-            disabled={globalStylesLoading || globalStylesSaving || globalStylesSaved}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 text-xs font-semibold text-black hover:bg-neutral-200 disabled:opacity-50"
-          >
-            {globalStylesSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Simpan style global
-          </button>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void saveGlobalStyles()}
+              disabled={globalStylesLoading || globalStylesSaving || globalStylesApplying || globalStylesSaved}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-neutral-700 px-3 text-xs font-semibold text-neutral-200 hover:bg-neutral-900 disabled:opacity-50"
+            >
+              {globalStylesSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Simpan global
+            </button>
+            <button
+              type="button"
+              onClick={() => void applyGlobalStylesToEngagements()}
+              disabled={globalStylesLoading || globalStylesSaving || globalStylesApplying}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-white px-3 text-xs font-semibold text-black hover:bg-neutral-200 disabled:opacity-50"
+            >
+              {globalStylesApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
+              Apply ke semua Engagement
+            </button>
+          </div>
         </div>
+        {globalStylesApplyResult && <p role="status" className="text-[10px] text-emerald-400">{globalStylesApplyResult}</p>}
         {globalStylesError && <p role="alert" className="rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-[10px] text-red-200">{globalStylesError}</p>}
+        {chatbotPreviewError && <p role="alert" className="rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-[10px] text-red-200">{chatbotPreviewError}</p>}
         {globalStylesLoading
           ? <p className="py-6 text-center text-xs text-neutral-500">Memuat style global...</p>
           : <GlobalChatStyleEditor
               componentStyles={globalComponentStyles}
               previewWindow={engagementPreviewWindow}
+              chatbotPreviewHeader={chatbotPreviewHeader}
               onChange={(styles) => {
                 setGlobalComponentStyles(styles);
                 setGlobalStylesSaved(false);
                 setGlobalStylesError("");
+                setGlobalStylesApplyResult("");
               }}
             />}
       </section>

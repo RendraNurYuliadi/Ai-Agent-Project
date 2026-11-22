@@ -9,6 +9,7 @@ import {
 } from "@/components/conversation-message-body";
 import type { EngagementWidgetConfig } from "@/types/engagement";
 import {
+  ENGAGEMENT_LAUNCHER_SHADOW_GUTTER,
   getDefaultComponentStyles,
   readEngagementStyleProperty,
   scopeEngagementCss,
@@ -42,6 +43,7 @@ export default function EngagementChatWidget({
   const [closing, setClosing] = useState(false);
   const [windowAnimationDirection, setWindowAnimationDirection] = useState<"enter" | "exit" | null>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const launcherButtonRef = useRef<HTMLButtonElement>(null);
   const openingRef = useRef(false);
   const resizeAnimationRef = useRef(false);
 
@@ -81,8 +83,17 @@ export default function EngagementChatWidget({
 
   useEffect(() => {
     if (window.parent === window) return;
+    const launcherRect = !isOpen ? launcherButtonRef.current?.getBoundingClientRect() : undefined;
     window.parent.postMessage(
-      { type: "engagement-widget:resize", open: isOpen, animate: resizeAnimationRef.current },
+      {
+        type: "engagement-widget:resize",
+        open: isOpen,
+        animate: resizeAnimationRef.current,
+        ...(launcherRect ? {
+          launcherWidth: Math.ceil(launcherRect.width + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2),
+          launcherHeight: Math.ceil(launcherRect.height + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2),
+        } : {}),
+      },
       config.parentOrigin
     );
     resizeAnimationRef.current = false;
@@ -183,8 +194,17 @@ export default function EngagementChatWidget({
 
   const notifyParentResize = (open: boolean, animate: boolean) => {
     if (window.parent === window) return;
+    const launcherRect = !open ? launcherButtonRef.current?.getBoundingClientRect() : undefined;
     window.parent.postMessage(
-      { type: "engagement-widget:resize", open, animate },
+      {
+        type: "engagement-widget:resize",
+        open,
+        animate,
+        ...(launcherRect ? {
+          launcherWidth: Math.ceil(launcherRect.width + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2),
+          launcherHeight: Math.ceil(launcherRect.height + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2),
+        } : {}),
+      },
       config.parentOrigin
     );
   };
@@ -279,6 +299,12 @@ export default function EngagementChatWidget({
     "border-radius",
     "36px"
   );
+  const launcherBorderWidth = readEngagementStyleProperty(
+    componentStyles.launcher,
+    ".engagement-launcher",
+    "border-width",
+    "1px"
+  );
   const launcherIconUrl = readEngagementStyleProperty(
     componentStyles.launcher,
     ".engagement-launcher",
@@ -304,9 +330,10 @@ export default function EngagementChatWidget({
 
   if (!isOpen) {
     return (
-      <div className={`engagement-window-${config.windowId} engagement-widget h-full w-full`} style={accentStyle}>
+      <div className={`engagement-window-${config.windowId} engagement-widget flex h-full w-full items-center justify-center`} style={accentStyle}>
         <style dangerouslySetInnerHTML={{ __html: scopedComponentCss }} />
         <button
+          ref={launcherButtonRef}
           type="button"
           onClick={() => {
             resizeAnimationRef.current = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -315,11 +342,13 @@ export default function EngagementChatWidget({
           }}
           aria-label={`Buka chat ${config.window.title}`}
           title={config.window.title}
-          className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          className="engagement-launcher relative flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl transition-transform hover:scale-105 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           style={{ borderRadius: launcherBorderRadius } as CSSProperties}
         >
           {launcherIconUrl
-            ? <Image src={launcherIconUrl} alt="" width={72} height={72} unoptimized className="h-full w-full rounded-full object-cover" />
+            ? <span aria-hidden="true" className="absolute inset-0 overflow-hidden" style={{ borderRadius: launcherBorderRadius, inset: launcherBorderWidth }}>
+                <Image src={launcherIconUrl} alt="" width={72} height={72} unoptimized className="h-full w-full object-cover" />
+              </span>
             : initializing
               ? <Loader2 className="h-6 w-6 animate-spin" />
               : <MessageCircle className="h-7 w-7" />}
@@ -332,7 +361,7 @@ export default function EngagementChatWidget({
     <>
       <style dangerouslySetInnerHTML={{ __html: scopedComponentCss }} />
       <main
-        className={`engagement-window-${config.windowId} engagement-widget flex h-full min-h-0 w-full flex-col overflow-hidden text-white ${windowAnimationDirection ? `engagement-widget-window-${windowAnimationDirection}` : ""}`}
+        className={`engagement-window-${config.windowId} engagement-widget flex h-full min-h-0 w-full flex-col overflow-hidden border text-white ${windowAnimationDirection ? `engagement-widget-window-${windowAnimationDirection}` : ""}`}
         data-window-animation={config.window.windowAnimationStyle}
         onAnimationEnd={(event) => {
           if (event.target !== event.currentTarget || !windowAnimationDirection) return;

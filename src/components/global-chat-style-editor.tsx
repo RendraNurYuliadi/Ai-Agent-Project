@@ -26,6 +26,7 @@ import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import type { EngagementWindow } from "@/types/engagement";
 
 type HeaderPreviewWindow = Pick<EngagementWindow, "title" | "subtitle" | "headerIconUrl">;
+type ChatbotPreviewHeader = { title: string; subtitle: string; skillName: string };
 
 const previewComponents: ConversationMessageComponent[] = [
   {
@@ -106,7 +107,13 @@ function getPreviewCss(componentStyles: Record<string, string>, componentId: str
     .join("\n");
 }
 
-function ChatbotHeaderPreview({ componentStyles }: { componentStyles?: Record<string, string> }) {
+function ChatbotHeaderPreview({
+  componentStyles,
+  previewHeader,
+}: {
+  componentStyles?: Record<string, string>;
+  previewHeader?: ChatbotPreviewHeader | null;
+}) {
   const css = componentStyles?.["chatbot-header"] || "";
   const iconUrl = readEngagementStyleProperty(css, ".chatbot-header-icon", "--chatbot-header-icon-url", "");
   return (
@@ -121,17 +128,17 @@ function ChatbotHeaderPreview({ componentStyles }: { componentStyles?: Record<st
             {iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={32} height={32} unoptimized className="h-full w-full object-cover" /> : <Bot className="h-4 w-4" />}
           </div>
           <div className="min-w-0">
-            <h2 className="chatbot-header-title truncate text-sm font-semibold">GenAI Chatbot</h2>
+            <h2 className="chatbot-header-title truncate text-sm font-semibold">{previewHeader?.title || "GenAI Chatbot"}</h2>
             <p className="chatbot-header-subtitle flex items-center gap-1 truncate text-[10px]">
               <Cpu className="h-2.5 w-2.5 shrink-0" />
-              NVIDIA NIM · nvidia/nemotron-3.5-bolt-e4
+              {previewHeader?.subtitle || "Pilih skill untuk memulai"}
             </p>
           </div>
         </div>
       </div>
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
         <select aria-label="Preview pilih skill" defaultValue="skill" className="h-9 max-w-24 truncate rounded-lg border border-neutral-800 bg-black px-1.5 text-[10px] text-neutral-300 sm:max-w-40 sm:px-2 sm:text-[11px]">
-          <option value="skill">Pilih skill</option>
+          <option value="skill">{previewHeader?.skillName || "Pilih skill"}</option>
         </select>
         <div className="hidden items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900/70 px-2.5 py-1.5 md:flex">
           <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[9px] font-bold text-black">RN</span>
@@ -192,25 +199,81 @@ function EngagementComposerPreview() {
   );
 }
 
+function LauncherPreviewButton({ componentStyles }: { componentStyles: Record<string, string> }) {
+  const css = componentStyles.launcher || "";
+  const iconUrl = readEngagementStyleProperty(css, ".engagement-launcher", "--engagement-launcher-icon-url", "");
+  const borderRadius = readEngagementStyleProperty(css, ".engagement-launcher", "border-radius", "36px");
+  const borderWidth = readEngagementStyleProperty(css, ".engagement-launcher", "border-width", "1px");
+  return (
+    <button
+      type="button"
+      aria-label="Preview icon chat"
+      className="engagement-launcher relative flex h-[72px] w-[72px] items-center justify-center rounded-full text-white shadow-xl"
+      style={{ borderRadius }}
+    >
+      {iconUrl
+        ? <span aria-hidden="true" className="absolute inset-0 overflow-hidden" style={{ borderRadius, inset: borderWidth }}>
+            <Image src={getImageProxyUrl(iconUrl)} alt="" width={72} height={72} unoptimized className="h-full w-full object-cover" />
+          </span>
+        : <MessageCircle className="h-7 w-7" />}
+    </button>
+  );
+}
+
+function PreviewConversationSamples({
+  componentStyles,
+  botName,
+}: {
+  componentStyles: Record<string, string>;
+  botName: string;
+}) {
+  return (
+    <div className="engagement-message-list flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+      <div className="engagement-author pl-1 text-[10px] text-neutral-500">
+        <span className="font-semibold text-white">{botName}</span>
+      </div>
+      <div className="engagement-bot-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed">
+        Halo! Ada yang bisa saya bantu? Saya dapat membantu menjawab pertanyaan atau menampilkan informasi yang relevan.
+      </div>
+      <ComponentPreviewContent id="welcome-message" componentStyles={componentStyles} />
+      <div className="flex justify-end">
+        <div className="engagement-user-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tr-sm border px-4 py-3 text-sm">
+          Saya ingin bertanya tentang layanan.
+        </div>
+      </div>
+      {previewComponents.map((component) => (
+        <div key={component.id} className="engagement-component chat-component-enter w-full min-w-0 pl-1">
+          <AssistantComponentView
+            component={component}
+            onReply={() => {}}
+            disabled={false}
+            previewMode
+          />
+        </div>
+      ))}
+      <ComponentPreviewContent id="interaction" componentStyles={componentStyles} />
+    </div>
+  );
+}
+
 function ComponentPreviewContent({
   id,
   componentStyles,
   previewWindow,
+  chatbotPreviewHeader,
 }: {
   id: string;
   componentStyles: Record<string, string>;
   previewWindow?: HeaderPreviewWindow | null;
+  chatbotPreviewHeader?: ChatbotPreviewHeader | null;
 }) {
   switch (id) {
-    case "launcher": {
-      const css = componentStyles.launcher || "";
-      const iconUrl = readEngagementStyleProperty(css, ".engagement-launcher", "--engagement-launcher-icon-url", "");
-      return <div className="flex min-h-24 items-center justify-center"><button type="button" className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full text-white shadow-xl">{iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={72} height={72} unoptimized className="h-full w-full object-cover" /> : <MessageCircle className="h-7 w-7" />}</button></div>;
-    }
+    case "launcher":
+      return <div className="flex min-h-24 items-center justify-center"><LauncherPreviewButton componentStyles={componentStyles} /></div>;
     case "header":
       return <EngagementHeaderPreview componentStyles={componentStyles} previewWindow={previewWindow} />;
     case "chatbot-header":
-      return <ChatbotHeaderPreview componentStyles={componentStyles} />;
+      return <ChatbotHeaderPreview componentStyles={componentStyles} previewHeader={chatbotPreviewHeader} />;
     case "window":
       return <div className="engagement-widget flex min-h-28 items-center justify-center border p-3 text-xs">Area window chat</div>;
     case "bot-bubble":
@@ -265,32 +328,45 @@ function ComponentPreviewCard({
   id,
   componentStyles,
   previewWindow,
+  chatbotPreviewHeader,
 }: {
   id: string;
   componentStyles: Record<string, string>;
   previewWindow?: HeaderPreviewWindow | null;
+  chatbotPreviewHeader?: ChatbotPreviewHeader | null;
 }) {
   const component = ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === id);
   if (!component) return null;
   const scopeClass = `global-style-component-${id}`;
 
   return (
-    <article className="min-w-0 overflow-hidden rounded-lg border border-neutral-800 bg-black/50">
+    <article className={`min-w-0 rounded-lg border border-neutral-800 bg-black/50 ${id === "launcher" ? "overflow-visible" : "overflow-hidden"}`}>
       <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(getPreviewCss(componentStyles, id), `.${scopeClass}`) }} />
       <div className="border-b border-neutral-800 px-3 py-2">
         <p className="text-[10px] font-semibold text-white">{component.name}</p>
         <p className="mt-0.5 text-[9px] leading-4 text-neutral-500">{component.description}</p>
       </div>
-      <div className={`${scopeClass} engagement-widget flex min-h-24 items-center bg-white text-neutral-900 ${id === "launcher" ? "overflow-visible p-6" : "overflow-hidden p-3"}`}>
+      <div className={`${scopeClass} engagement-widget flex min-h-24 items-center bg-white text-neutral-900 ${id === "launcher" ? "overflow-visible rounded-b-lg p-6" : "overflow-hidden p-3"}`}>
         <div className="w-full min-w-0">
-          <ComponentPreviewContent id={id} componentStyles={componentStyles} previewWindow={previewWindow} />
+          <ComponentPreviewContent
+            id={id}
+            componentStyles={componentStyles}
+            previewWindow={previewWindow}
+            chatbotPreviewHeader={chatbotPreviewHeader}
+          />
         </div>
       </div>
     </article>
   );
 }
 
-function FullChatbotWindowPreview({ componentStyles }: { componentStyles: Record<string, string> }) {
+function FullChatbotWindowPreview({
+  componentStyles,
+  previewHeader,
+}: {
+  componentStyles: Record<string, string>;
+  previewHeader?: ChatbotPreviewHeader | null;
+}) {
   return (
     <article className="space-y-2">
       <div>
@@ -299,14 +375,8 @@ function FullChatbotWindowPreview({ componentStyles }: { componentStyles: Record
       </div>
       <div className="global-chatbot-full-preview engagement-widget flex h-[520px] min-w-0 flex-col overflow-hidden rounded-xl border border-neutral-800 bg-black text-white shadow-xl">
         <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-chatbot-full-preview") }} />
-        <ChatbotHeaderPreview componentStyles={componentStyles} />
-        <div className="engagement-message-list flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-4">
-          <div className="max-w-sm text-center">
-            <Bot className="mx-auto mb-3 h-7 w-7 text-neutral-400" />
-            <h5 className="text-sm font-semibold text-white">Pilih skill untuk memulai</h5>
-            <p className="mt-1 text-xs text-neutral-500">Skill menentukan user bot dan bot flow yang digunakan dalam percakapan.</p>
-          </div>
-        </div>
+        <ChatbotHeaderPreview componentStyles={componentStyles} previewHeader={previewHeader} />
+        <PreviewConversationSamples componentStyles={componentStyles} botName={previewHeader?.title || "GenAI Chatbot"} />
         <ChatbotComposerPreview />
       </div>
     </article>
@@ -326,15 +396,18 @@ function FullEngagementWindowPreview({
         <h4 className="text-xs font-semibold text-white">Engagement</h4>
         <p className="text-[9px] text-neutral-500">Window embed dengan header dan input khusus Engagement.</p>
       </div>
-      <div className="mx-auto w-full max-w-[380px]">
-        <div className="global-engagement-full-preview engagement-widget flex h-[620px] min-w-0 flex-col overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-xl">
-          <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-engagement-full-preview") }} />
-          <EngagementHeaderPreview componentStyles={componentStyles} previewWindow={previewWindow} />
-          <div className="engagement-message-list min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
-            <div className="engagement-bot-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tl-sm border px-3 py-2 text-sm">Halo! Ada yang bisa kami bantu hari ini?</div>
-            <div className="flex justify-end"><div className="engagement-user-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tr-sm border px-3 py-2 text-sm">Saya ingin bertanya tentang layanan.</div></div>
+      <div className="space-y-4">
+        <div className="global-engagement-launcher-preview flex min-h-28 items-center justify-center overflow-visible p-6">
+          <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(componentStyles.launcher || "", ".global-engagement-launcher-preview") }} />
+          <LauncherPreviewButton componentStyles={componentStyles} />
+        </div>
+        <div className="mx-auto w-full max-w-[380px]">
+          <div className="global-engagement-full-preview engagement-widget flex h-[620px] min-w-0 flex-col overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-xl">
+            <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-engagement-full-preview") }} />
+            <EngagementHeaderPreview componentStyles={componentStyles} previewWindow={previewWindow} />
+            <PreviewConversationSamples componentStyles={componentStyles} botName={previewWindow?.title || "Vera"} />
+            <EngagementComposerPreview />
           </div>
-          <EngagementComposerPreview />
         </div>
       </div>
     </article>
@@ -345,10 +418,12 @@ export default function GlobalChatStyleEditor({
   componentStyles,
   onChange,
   previewWindow,
+  chatbotPreviewHeader,
 }: {
   componentStyles: Record<string, string>;
   onChange: (styles: Record<string, string>) => void;
   previewWindow?: HeaderPreviewWindow | null;
+  chatbotPreviewHeader?: ChatbotPreviewHeader | null;
 }) {
   return (
     <div className="space-y-7">
@@ -360,7 +435,7 @@ export default function GlobalChatStyleEditor({
           </p>
         </div>
         <div className="space-y-5">
-          <FullChatbotWindowPreview componentStyles={componentStyles} />
+          <FullChatbotWindowPreview componentStyles={componentStyles} previewHeader={chatbotPreviewHeader} />
           <FullEngagementWindowPreview componentStyles={componentStyles} previewWindow={previewWindow} />
         </div>
       </section>
@@ -493,7 +568,12 @@ export default function GlobalChatStyleEditor({
                     </button>
                   </div>
                 </div>
-                <ComponentPreviewCard id={id} componentStyles={componentStyles} previewWindow={previewWindow} />
+                <ComponentPreviewCard
+                  id={id}
+                  componentStyles={componentStyles}
+                  previewWindow={previewWindow}
+                  chatbotPreviewHeader={chatbotPreviewHeader}
+                />
               </div>
             </details>
           );

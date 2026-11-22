@@ -909,7 +909,7 @@ export default function ChatbotPage() {
       )}
 
       {/* Chat Area */}
-      <div className="global-chat-style-scope engagement-widget flex min-h-0 min-w-0 flex-1 flex-col bg-black">
+      <div className="global-chat-style-scope engagement-widget flex min-h-0 min-w-0 flex-1 flex-col border bg-black">
         <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(
           Object.values(globalComponentStyles).join("\n"),
           ".global-chat-style-scope"

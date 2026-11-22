@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
 import { getSessionFromRequest } from "@/lib/auth";
 import {
+  ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS,
   GLOBAL_CHAT_STYLE_COMPONENT_IDS,
   mergeGlobalChatStylesWithEngagement,
 } from "@/lib/engagement-theme";
@@ -60,6 +61,9 @@ export async function PUT(req: NextRequest) {
     if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
       return NextResponse.json({ error: "Style global tidak valid." }, { status: 400 });
     }
+    if (body.applyToAllEngagements !== undefined && typeof body.applyToAllEngagements !== "boolean") {
+      return NextResponse.json({ error: "Pilihan penerapan style tidak valid." }, { status: 400 });
+    }
 
     for (const id of GLOBAL_CHAT_STYLE_COMPONENT_IDS) {
       if (incoming[id] !== undefined && (typeof incoming[id] !== "string" || incoming[id].length > 10000)) {
@@ -101,7 +105,43 @@ export async function PUT(req: NextRequest) {
       { upsert: true }
     );
 
-    return NextResponse.json({ success: true, componentStyles });
+    let updatedEngagements = 0;
+    if (body.applyToAllEngagements === true) {
+      const engagementStyles = Object.fromEntries(
+        ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS.map((id) => [id, componentStyles[id]])
+      );
+      const applyResult = await db.collection("engagements").updateMany(
+        { windows: { $type: "array", $ne: [] } },
+        [{
+          $set: {
+            windows: {
+              $map: {
+                input: "$windows",
+                as: "window",
+                in: {
+                  $mergeObjects: [
+                    "$$window",
+                    {
+                      componentStyles: {
+                        $mergeObjects: [
+                          { $ifNull: ["$$window.componentStyles", {}] },
+                          { $literal: engagementStyles },
+                        ],
+                      },
+                      componentStylesMode: "specific",
+                    },
+                  ],
+                },
+              },
+            },
+            updatedAt: new Date(),
+          },
+        }]
+      );
+      updatedEngagements = applyResult.matchedCount;
+    }
+
+    return NextResponse.json({ success: true, componentStyles, updatedEngagements });
   } catch (error) {
     console.error("PUT global chat styles error:", error);
     return NextResponse.json({ error: "Gagal menyimpan style global." }, { status: 500 });

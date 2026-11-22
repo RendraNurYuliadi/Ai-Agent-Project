@@ -3,8 +3,8 @@ import { ObjectId } from "mongodb";
 import { getDatabase } from "@/lib/mongodb";
 import { normalizeEngagementOrigin } from "@/lib/engagement-data";
 import {
-  migrateLegacyComponentStyles,
   mergeGlobalChatStylesWithEngagement,
+  resolveEngagementComponentStyles,
 } from "@/lib/engagement-theme";
 import { isChatScrollAnimationStyle } from "@/lib/chat-ui-preferences";
 import { signEngagementWidgetToken } from "@/lib/engagement-auth";
@@ -63,14 +63,13 @@ export default async function EngagementWidgetPage({
     (sharedStyleSetting || latestUserStyleSetting)?.componentStyles,
     Array.isArray(mostRecentEngagement?.windows) ? mostRecentEngagement.windows[0] : undefined
   );
-  const componentStyles = {
-    ...migrateLegacyComponentStyles(
-      windowConfig.componentStyles && typeof windowConfig.componentStyles === "object"
-        ? windowConfig.componentStyles as Record<string, string>
-        : {}
-    ),
-    ...globalComponentStyles,
-  };
+  const componentStyles = resolveEngagementComponentStyles(
+    windowConfig.componentStyles && typeof windowConfig.componentStyles === "object"
+      ? windowConfig.componentStyles as Record<string, string>
+      : {},
+    globalComponentStyles,
+    windowConfig.componentStylesMode === "specific" ? "specific" : "global"
+  );
 
   const widgetConfig: EngagementWidgetConfig = {
     engagementId,
@@ -104,6 +103,7 @@ export default async function EngagementWidgetPage({
         ? windowConfig.bubbleAnimationStyle
         : "fade",
       customCss: typeof windowConfig.customCss === "string" ? windowConfig.customCss : "",
+      componentStylesMode: windowConfig.componentStylesMode === "specific" ? "specific" : "global",
       componentStyles,
     },
   };

@@ -81,6 +81,12 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
         : isChatScrollAnimationStyle(candidate.bubbleAnimationStyle)
           ? candidate.bubbleAnimationStyle
           : null;
+    const componentStylesMode =
+      candidate.componentStylesMode === undefined || candidate.componentStylesMode === "global"
+        ? "global"
+        : candidate.componentStylesMode === "specific"
+          ? "specific"
+          : null;
     const rawComponentStyles =
       candidate.componentStyles && typeof candidate.componentStyles === "object" && !Array.isArray(candidate.componentStyles)
         ? candidate.componentStyles as Record<string, unknown>
@@ -121,6 +127,7 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
       windowAnimationStyle === null ||
       (candidate.bubbleAnimationEnabled !== undefined && typeof candidate.bubbleAnimationEnabled !== "boolean") ||
       bubbleAnimationStyle === null ||
+      componentStylesMode === null ||
       !/^#[0-9a-fA-F]{6}$/.test(accentColor) ||
       !/^#[0-9a-fA-F]{6}$/.test(backgroundColor) ||
       !/^#[0-9a-fA-F]{6}$/.test(lineColor)
@@ -145,6 +152,7 @@ export function parseEngagementWindows(value: unknown): EngagementWindow[] | nul
       bubbleAnimationEnabled,
       bubbleAnimationStyle,
       customCss,
+      componentStylesMode,
       componentStyles,
     });
   }
