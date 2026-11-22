@@ -121,10 +121,10 @@ function ChatbotHeaderPreview({ componentStyles }: { componentStyles?: Record<st
             {iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={32} height={32} unoptimized className="h-full w-full object-cover" /> : <Bot className="h-4 w-4" />}
           </div>
           <div className="min-w-0">
-            <h2 className="chatbot-header-title truncate text-sm font-semibold">Bot name</h2>
+            <h2 className="chatbot-header-title truncate text-sm font-semibold">Nama Bot</h2>
             <p className="chatbot-header-subtitle flex items-center gap-1 truncate text-[10px]">
               <Cpu className="h-2.5 w-2.5 shrink-0" />
-              Nama dan skill bot
+              Nama skill
             </p>
           </div>
         </div>
@@ -397,6 +397,12 @@ function FullEngagementWindowPreview({
   componentStyles: Record<string, string>;
   previewWindow?: HeaderPreviewWindow | null;
 }) {
+  const genericPreviewHeader: HeaderPreviewWindow = {
+    title: "Nama Bot",
+    subtitle: "Overview",
+    headerIconUrl: previewWindow?.headerIconUrl || "",
+  };
+
   return (
     <article className="space-y-2">
       <div>
@@ -411,7 +417,7 @@ function FullEngagementWindowPreview({
         <div className="mx-auto w-full max-w-[380px]">
           <div className="global-engagement-full-preview engagement-widget flex h-[620px] min-w-0 flex-col overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-xl">
             <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-engagement-full-preview") }} />
-            <EngagementHeaderPreview componentStyles={componentStyles} previewWindow={previewWindow} />
+            <EngagementHeaderPreview componentStyles={componentStyles} previewWindow={genericPreviewHeader} />
             <PreviewConversationSamples componentStyles={componentStyles} />
             <EngagementComposerPreview />
           </div>
