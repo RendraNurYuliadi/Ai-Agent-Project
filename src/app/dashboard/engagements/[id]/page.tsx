@@ -19,11 +19,11 @@ import type {
 } from "@/types/engagement";
 import {
   DEFAULT_ENGAGEMENT_CSS,
-  ENGAGEMENT_LAUNCHER_SHADOW_GUTTER,
   ENGAGEMENT_GLOBAL_STYLE_COMPONENT_IDS,
   getDefaultComponentStyles,
   getDefaultGlobalChatStyles,
   normalizeGlobalChatStyles,
+  readEngagementStyleProperty,
   resolveEngagementComponentStyles,
   scopeEngagementCss,
 } from "@/lib/engagement-theme";
@@ -450,15 +450,28 @@ export default function EngagementDetailPage() {
   const snippetFrameId = selectedWindow
     ? `engagement-chat-${id}-${selectedWindow.id}`.replace(/[^a-zA-Z0-9_-]/g, "")
     : "";
-  const launcherFrameSize = 72 + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2;
+  const getLauncherFrameDimension = (property: "width" | "height") => {
+    const value = readEngagementStyleProperty(
+      selectedWindow?.componentStyles.launcher || "",
+      ".engagement-launcher",
+      property,
+      "72px"
+    );
+    const pixelValue = /^(\d+(?:\.\d+)?)px$/i.exec(value.trim());
+    if (!pixelValue) return 72;
+    const dimension = Number(pixelValue[1]);
+    return Number.isFinite(dimension) ? Math.max(0, Math.ceil(dimension)) : 72;
+  };
+  const launcherFrameWidth = getLauncherFrameDimension("width");
+  const launcherFrameHeight = getLauncherFrameDimension("height");
   let snippet = selectedEntry && selectedWindow && typeof window !== "undefined"
     ? `<iframe
   id="${snippetFrameId}"
   src="${window.location.origin}/engagement/${encodeURIComponent(id)}/${encodeURIComponent(selectedWindow.id)}?entryPointId=${encodeURIComponent(selectedEntry.id)}"
   title="Chat widget"
-  width="${launcherFrameSize}"
-  height="${launcherFrameSize}"
-  style="position:fixed;right:8px;bottom:8px;width:${launcherFrameSize}px;height:${launcherFrameSize}px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);z-index:9999;border:0;background:transparent"
+  width="${launcherFrameWidth}"
+  height="${launcherFrameHeight}"
+  style="position:fixed;right:8px;bottom:8px;width:${launcherFrameWidth}px;height:${launcherFrameHeight}px;max-width:calc(100vw - 32px);max-height:calc(100vh - 32px);z-index:9999;border:0;background:transparent"
   referrerpolicy="strict-origin-when-cross-origin"
   allow="clipboard-write"
 ></iframe>`
@@ -470,7 +483,7 @@ export default function EngagementDetailPage() {
   if (!frame || !document.body) return;
   if (frame.parentElement !== document.body) document.body.appendChild(frame);
   const widgetOrigin = new URL(frame.src).origin;
-  const setFrameSize = (isOpen, animate = false, launcherWidth = ${launcherFrameSize}, launcherHeight = ${launcherFrameSize}) => {
+  const setFrameSize = (isOpen, animate = false, launcherWidth = ${launcherFrameWidth}, launcherHeight = ${launcherFrameHeight}) => {
     frame.style.setProperty("position", "fixed", "important");
     frame.style.setProperty("top", "auto", "important");
     frame.style.setProperty("left", "auto", "important");
@@ -501,8 +514,8 @@ export default function EngagementDetailPage() {
     setFrameSize(
       event.data.open === true,
       event.data.animate === true,
-      Number.isFinite(launcherWidth) && launcherWidth >= 72 ? launcherWidth : ${launcherFrameSize},
-      Number.isFinite(launcherHeight) && launcherHeight >= 72 ? launcherHeight : ${launcherFrameSize}
+      Number.isFinite(launcherWidth) && launcherWidth >= 0 ? launcherWidth : ${launcherFrameWidth},
+      Number.isFinite(launcherHeight) && launcherHeight >= 0 ? launcherHeight : ${launcherFrameHeight}
     );
   });
 })();

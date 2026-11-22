@@ -9,7 +9,6 @@ import {
 } from "@/components/conversation-message-body";
 import type { EngagementWidgetConfig } from "@/types/engagement";
 import {
-  ENGAGEMENT_LAUNCHER_SHADOW_GUTTER,
   getDefaultComponentStyles,
   readEngagementStyleProperty,
   scopeEngagementCss,
@@ -90,8 +89,8 @@ export default function EngagementChatWidget({
         open: isOpen,
         animate: resizeAnimationRef.current,
         ...(launcherRect ? {
-          launcherWidth: Math.ceil(launcherRect.width + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2),
-          launcherHeight: Math.ceil(launcherRect.height + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2),
+          launcherWidth: Math.ceil(launcherRect.width),
+          launcherHeight: Math.ceil(launcherRect.height),
         } : {}),
       },
       config.parentOrigin
@@ -201,8 +200,8 @@ export default function EngagementChatWidget({
         open,
         animate,
         ...(launcherRect ? {
-          launcherWidth: Math.ceil(launcherRect.width + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2),
-          launcherHeight: Math.ceil(launcherRect.height + ENGAGEMENT_LAUNCHER_SHADOW_GUTTER * 2),
+          launcherWidth: Math.ceil(launcherRect.width),
+          launcherHeight: Math.ceil(launcherRect.height),
         } : {}),
       },
       config.parentOrigin

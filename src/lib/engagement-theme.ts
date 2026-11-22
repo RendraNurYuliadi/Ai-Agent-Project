@@ -1,5 +1,3 @@
-export const ENGAGEMENT_LAUNCHER_SHADOW_GUTTER = 32;
-
 export const DEFAULT_ENGAGEMENT_CSS = `/*
 Engagement Widget CSS
 Edit these variables. Structure and bot data do not need to change.
