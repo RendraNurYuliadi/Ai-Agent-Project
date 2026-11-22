@@ -23,6 +23,9 @@ import {
   setEngagementStyleProperty,
 } from "@/lib/engagement-theme";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
+import type { EngagementWindow } from "@/types/engagement";
+
+type HeaderPreviewWindow = Pick<EngagementWindow, "title" | "subtitle" | "headerIconUrl">;
 
 const previewComponents: ConversationMessageComponent[] = [
   {
@@ -142,17 +145,25 @@ function ChatbotHeaderPreview({ componentStyles }: { componentStyles?: Record<st
   );
 }
 
-function EngagementHeaderPreview({ componentStyles }: { componentStyles?: Record<string, string> }) {
+function EngagementHeaderPreview({
+  componentStyles,
+  previewWindow,
+}: {
+  componentStyles?: Record<string, string>;
+  previewWindow?: HeaderPreviewWindow | null;
+}) {
   const css = componentStyles?.header || "";
-  const iconUrl = readEngagementStyleProperty(css, ".engagement-header-icon", "--engagement-header-icon-url", "");
+  const iconUrl = readEngagementStyleProperty(css, ".engagement-header-icon", "--engagement-header-icon-url", "")
+    || previewWindow?.headerIconUrl
+    || "";
   return (
     <header className="engagement-header relative flex shrink-0 items-center gap-3 border-b px-4 py-4">
       <span className="engagement-header-icon flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full">
         {iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={36} height={36} unoptimized className="h-full w-full object-cover" /> : <MessageCircle className="h-5 w-5" />}
       </span>
       <div className="min-w-0 flex-1">
-        <h2 className="engagement-header-title truncate font-semibold">Judul chat window</h2>
-        <p className="engagement-header-subtitle mt-0.5 truncate">Subjudul chat</p>
+        <h2 className="engagement-header-title truncate font-semibold">{previewWindow?.title || "Judul chat window"}</h2>
+        <p className="engagement-header-subtitle mt-0.5 truncate">{previewWindow?.subtitle || "Kami siap membantu Anda."}</p>
       </div>
       <button type="button" aria-label="Menu Engagement" className="shrink-0 rounded-lg p-2 text-neutral-400"><MoreVertical className="h-4 w-4" /></button>
     </header>
@@ -181,7 +192,15 @@ function EngagementComposerPreview() {
   );
 }
 
-function ComponentPreviewContent({ id, componentStyles }: { id: string; componentStyles: Record<string, string> }) {
+function ComponentPreviewContent({
+  id,
+  componentStyles,
+  previewWindow,
+}: {
+  id: string;
+  componentStyles: Record<string, string>;
+  previewWindow?: HeaderPreviewWindow | null;
+}) {
   switch (id) {
     case "launcher": {
       const css = componentStyles.launcher || "";
@@ -189,7 +208,7 @@ function ComponentPreviewContent({ id, componentStyles }: { id: string; componen
       return <div className="flex min-h-24 items-center justify-center"><button type="button" className="engagement-launcher flex h-[72px] w-[72px] items-center justify-center overflow-hidden rounded-full text-white shadow-xl">{iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={72} height={72} unoptimized className="h-full w-full object-cover" /> : <MessageCircle className="h-7 w-7" />}</button></div>;
     }
     case "header":
-      return <EngagementHeaderPreview componentStyles={componentStyles} />;
+      return <EngagementHeaderPreview componentStyles={componentStyles} previewWindow={previewWindow} />;
     case "chatbot-header":
       return <ChatbotHeaderPreview componentStyles={componentStyles} />;
     case "window":
@@ -245,9 +264,11 @@ function ComponentPreviewContent({ id, componentStyles }: { id: string; componen
 function ComponentPreviewCard({
   id,
   componentStyles,
+  previewWindow,
 }: {
   id: string;
   componentStyles: Record<string, string>;
+  previewWindow?: HeaderPreviewWindow | null;
 }) {
   const component = ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === id);
   if (!component) return null;
@@ -262,7 +283,7 @@ function ComponentPreviewCard({
       </div>
       <div className={`${scopeClass} engagement-widget flex min-h-24 items-center bg-white text-neutral-900 ${id === "launcher" ? "overflow-visible p-6" : "overflow-hidden p-3"}`}>
         <div className="w-full min-w-0">
-          <ComponentPreviewContent id={id} componentStyles={componentStyles} />
+          <ComponentPreviewContent id={id} componentStyles={componentStyles} previewWindow={previewWindow} />
         </div>
       </div>
     </article>
@@ -292,7 +313,13 @@ function FullChatbotWindowPreview({ componentStyles }: { componentStyles: Record
   );
 }
 
-function FullEngagementWindowPreview({ componentStyles }: { componentStyles: Record<string, string> }) {
+function FullEngagementWindowPreview({
+  componentStyles,
+  previewWindow,
+}: {
+  componentStyles: Record<string, string>;
+  previewWindow?: HeaderPreviewWindow | null;
+}) {
   return (
     <article className="space-y-2">
       <div>
@@ -302,7 +329,7 @@ function FullEngagementWindowPreview({ componentStyles }: { componentStyles: Rec
       <div className="mx-auto w-full max-w-[380px]">
         <div className="global-engagement-full-preview engagement-widget flex h-[620px] min-w-0 flex-col overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-xl">
           <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-engagement-full-preview") }} />
-          <EngagementHeaderPreview componentStyles={componentStyles} />
+          <EngagementHeaderPreview componentStyles={componentStyles} previewWindow={previewWindow} />
           <div className="engagement-message-list min-h-0 flex-1 space-y-4 overflow-y-auto px-3 py-4">
             <div className="engagement-bot-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tl-sm border px-3 py-2 text-sm">Halo! Ada yang bisa kami bantu hari ini?</div>
             <div className="flex justify-end"><div className="engagement-user-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tr-sm border px-3 py-2 text-sm">Saya ingin bertanya tentang layanan.</div></div>
@@ -317,12 +344,27 @@ function FullEngagementWindowPreview({ componentStyles }: { componentStyles: Rec
 export default function GlobalChatStyleEditor({
   componentStyles,
   onChange,
+  previewWindow,
 }: {
   componentStyles: Record<string, string>;
   onChange: (styles: Record<string, string>) => void;
+  previewWindow?: HeaderPreviewWindow | null;
 }) {
   return (
     <div className="space-y-7">
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-white">Preview full chat window</h3>
+          <p className="mt-1 text-[10px] leading-4 text-neutral-500">
+            Header Engagement memakai konfigurasi window terbaru. Preview komponen di bawah hanya menampilkan bagian yang sedang diedit.
+          </p>
+        </div>
+        <div className="space-y-5">
+          <FullChatbotWindowPreview componentStyles={componentStyles} />
+          <FullEngagementWindowPreview componentStyles={componentStyles} previewWindow={previewWindow} />
+        </div>
+      </section>
+
       <div className="grid gap-2">
         {GLOBAL_CHAT_STYLE_COMPONENT_IDS.map((id) => {
           const component = ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === id);
@@ -451,25 +493,12 @@ export default function GlobalChatStyleEditor({
                     </button>
                   </div>
                 </div>
-                <ComponentPreviewCard id={id} componentStyles={componentStyles} />
+                <ComponentPreviewCard id={id} componentStyles={componentStyles} previewWindow={previewWindow} />
               </div>
             </details>
           );
         })}
       </div>
-
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-semibold text-white">Preview full chat window</h3>
-          <p className="mt-1 text-[10px] leading-4 text-neutral-500">
-            Dua tampilan utuh ditampilkan terpisah. Komponen chat bersama memakai style yang sama; header dan input mengikuti variannya.
-          </p>
-        </div>
-        <div className="space-y-5">
-          <FullChatbotWindowPreview componentStyles={componentStyles} />
-          <FullEngagementWindowPreview componentStyles={componentStyles} />
-        </div>
-      </section>
     </div>
   );
 }

@@ -17,6 +17,9 @@ import {
   getDefaultGlobalChatStyles,
   normalizeGlobalChatStyles,
 } from "@/lib/engagement-theme";
+import type { EngagementWindow } from "@/types/engagement";
+
+type HeaderPreviewWindow = Pick<EngagementWindow, "title" | "subtitle" | "headerIconUrl">;
 
 export default function SettingsPage() {
   const chatScrollAnimationEnabled = useSyncExternalStore(
@@ -33,6 +36,7 @@ export default function SettingsPage() {
   const [chatPreferencesSaving, setChatPreferencesSaving] = useState(false);
   const [chatPreferencesError, setChatPreferencesError] = useState("");
   const [globalComponentStyles, setGlobalComponentStyles] = useState<Record<string, string>>(getDefaultGlobalChatStyles);
+  const [engagementPreviewWindow, setEngagementPreviewWindow] = useState<HeaderPreviewWindow | null>(null);
   const [globalStylesLoading, setGlobalStylesLoading] = useState(true);
   const [globalStylesSaving, setGlobalStylesSaving] = useState(false);
   const [globalStylesSaved, setGlobalStylesSaved] = useState(true);
@@ -58,6 +62,7 @@ export default function SettingsPage() {
         if (!response.ok) throw new Error(data.error || "Gagal memuat style global.");
         if (active) {
           setGlobalComponentStyles(normalizeGlobalChatStyles(data.componentStyles));
+          setEngagementPreviewWindow(data.previewWindow);
           setGlobalStylesSaved(true);
         }
       })
@@ -155,6 +160,7 @@ export default function SettingsPage() {
           ? <p className="py-6 text-center text-xs text-neutral-500">Memuat style global...</p>
           : <GlobalChatStyleEditor
               componentStyles={globalComponentStyles}
+              previewWindow={engagementPreviewWindow}
               onChange={(styles) => {
                 setGlobalComponentStyles(styles);
                 setGlobalStylesSaved(false);

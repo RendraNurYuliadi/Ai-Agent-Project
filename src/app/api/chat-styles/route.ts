@@ -24,15 +24,25 @@ export async function GET(req: NextRequest) {
         { sort: { updatedAt: -1 }, projection: { componentStyles: 1 } }
       ),
       db.collection("engagements").findOne(
-        {},
+        { windows: { $exists: true, $ne: [] } },
         { sort: { updatedAt: -1 }, projection: { windows: 1 } }
       ),
     ]);
+    const previewWindow = Array.isArray(mostRecentEngagement?.windows)
+      ? mostRecentEngagement.windows[0]
+      : undefined;
     return NextResponse.json({
       componentStyles: mergeGlobalChatStylesWithEngagement(
         (sharedSetting || latestUserSetting)?.componentStyles,
-        Array.isArray(mostRecentEngagement?.windows) ? mostRecentEngagement.windows[0] : undefined
+        previewWindow
       ),
+      previewWindow: previewWindow && typeof previewWindow === "object"
+        ? {
+            title: typeof previewWindow.title === "string" ? previewWindow.title : "",
+            subtitle: typeof previewWindow.subtitle === "string" ? previewWindow.subtitle : "",
+            headerIconUrl: typeof previewWindow.headerIconUrl === "string" ? previewWindow.headerIconUrl : "",
+          }
+        : null,
     });
   } catch (error) {
     console.error("GET global chat styles error:", error);
@@ -68,7 +78,7 @@ export async function PUT(req: NextRequest) {
         { sort: { updatedAt: -1 }, projection: { componentStyles: 1 } }
       ),
       db.collection("engagements").findOne(
-        {},
+        { windows: { $exists: true, $ne: [] } },
         { sort: { updatedAt: -1 }, projection: { windows: 1 } }
       ),
     ]);
