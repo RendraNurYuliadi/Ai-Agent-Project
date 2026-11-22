@@ -353,9 +353,11 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   {
     id: "bot-bubble",
     name: "Bubble jawaban bot",
-    description: "Teks jawaban bot, termasuk warna, tipografi, border, dan rounded.",
+    description: "Teks membungkus otomatis di dalam batas lebar bubble. Atur warna, tipografi, border, dan rounded.",
     className: "engagement-bot-bubble",
     defaultCss: `.engagement-bot-bubble {
+  width: fit-content;
+  min-width: 0;
       max-width: 320px;
       min-height: 40px;
       margin: 0;
@@ -366,6 +368,8 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
       padding: 10px;
   font-size: 13px;
   line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
 }
 .engagement-bot-bubble * {
@@ -387,9 +391,11 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   {
     id: "user-bubble",
     name: "Bubble user",
-    description: "Pesan teks yang dikirim visitor.",
+    description: "Pesan visitor membungkus otomatis di dalam batas lebar bubble.",
     className: "engagement-user-bubble",
     defaultCss: `.engagement-user-bubble {
+  width: fit-content;
+  min-width: 0;
       max-width: 320px;
       min-height: 40px;
       margin: 0;
@@ -400,6 +406,8 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
       padding: 10px;
   font-size: 13px;
   line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-weight: 500;
   box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
 }

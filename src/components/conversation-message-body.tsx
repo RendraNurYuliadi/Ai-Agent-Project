@@ -213,7 +213,7 @@ export function ConversationMessageBody({
       {!embedded && message.messageType && message.messageType !== "TEXT_QUESTION" && <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${message.messageType === "FAQ" ? "border-white/20 bg-white/10 text-white" : "border-neutral-700/40 bg-neutral-700/20 text-neutral-300"}`}>{message.messageType}</span>}
       {!embedded && message.lmStudioAvailable === false && <span className="rounded-full border border-neutral-700 bg-neutral-800 px-1.5 py-0.5 text-[9px] font-medium text-neutral-400">Offline</span>}
     </div>}
-    {(message.content || contentOverride) && <div className={`w-fit min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? "engagement-user-bubble rounded-tr-sm bg-white font-medium text-black shadow-lg" : "engagement-bot-bubble rounded-tl-sm border border-neutral-800 bg-[#111111] text-neutral-300 shadow-md"}`}>
+    {(message.content || contentOverride) && <div className={`w-fit min-w-0 max-w-full break-words whitespace-pre-wrap [overflow-wrap:anywhere] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? "engagement-user-bubble rounded-tr-sm bg-white font-medium text-black shadow-lg" : "engagement-bot-bubble rounded-tl-sm border border-neutral-800 bg-[#111111] text-neutral-300 shadow-md"}`}>
       {contentOverride || <FormattedMessage content={message.content} isUser={isUser} />}
     </div>}
     {!isUser && message.botInteraction && <BotInteractionView data={message.botInteraction} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} componentStyles={componentStyles} />}

@@ -20,13 +20,6 @@ import {
 import type { EngagementWindow } from "@/types/engagement";
 
 type HeaderPreviewWindow = Pick<EngagementWindow, "title" | "subtitle" | "headerIconUrl">;
-type ChatbotPreviewHeader = { title: string; subtitle: string; skillName: string };
-type ChatbotPreviewSkill = {
-  name: string;
-  isAvailable: boolean;
-  bot: { name: string } | null;
-  botUser: { name: string; fullName: string } | null;
-};
 
 export default function SettingsPage() {
   const chatScrollAnimationEnabled = useSyncExternalStore(
@@ -44,8 +37,6 @@ export default function SettingsPage() {
   const [chatPreferencesError, setChatPreferencesError] = useState("");
   const [globalComponentStyles, setGlobalComponentStyles] = useState<Record<string, string>>(getDefaultGlobalChatStyles);
   const [engagementPreviewWindow, setEngagementPreviewWindow] = useState<HeaderPreviewWindow | null>(null);
-  const [chatbotPreviewHeader, setChatbotPreviewHeader] = useState<ChatbotPreviewHeader | null>(null);
-  const [chatbotPreviewError, setChatbotPreviewError] = useState("");
   const [globalStylesLoading, setGlobalStylesLoading] = useState(true);
   const [globalStylesSaving, setGlobalStylesSaving] = useState(false);
   const [globalStylesApplying, setGlobalStylesApplying] = useState(false);
@@ -85,44 +76,6 @@ export default function SettingsPage() {
       })
       .finally(() => {
         if (active) setGlobalStylesLoading(false);
-      });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    Promise.all([
-      fetch("/api/skills"),
-      fetch("/api/bots/active"),
-    ])
-      .then(async ([skillsResponse, botResponse]) => {
-        const [skillsData, botData] = await Promise.all([
-          skillsResponse.json() as Promise<{ error?: string; skills?: ChatbotPreviewSkill[] }>,
-          botResponse.json() as Promise<{ error?: string; bot?: { name?: string } | null }>,
-        ]);
-        if (!skillsResponse.ok) throw new Error(skillsData.error || "Gagal memuat skill untuk preview Chatbot.");
-        if (!botResponse.ok) throw new Error(botData.error || "Gagal memuat bot untuk preview Chatbot.");
-        if (!Array.isArray(skillsData.skills)) throw new Error("Daftar skill untuk preview Chatbot tidak valid.");
-
-        const activeBotName = typeof botData.bot?.name === "string" ? botData.bot.name : "";
-        const previewSkill = skillsData.skills.find((skill) =>
-          skill.isAvailable && skill.bot && skill.bot.name === activeBotName
-        ) || skillsData.skills.find((skill) => skill.isAvailable && skill.bot);
-        const title = previewSkill?.bot?.name || activeBotName || "GenAI Chatbot";
-        const skillName = previewSkill?.name || "";
-        const subtitle = previewSkill
-          ? `${skillName} · ${previewSkill.botUser?.fullName || previewSkill.botUser?.name || "Bot"}`
-          : activeBotName
-            ? "Bot flow aktif (fallback)"
-            : "Pilih skill untuk memulai";
-
-        if (active) {
-          setChatbotPreviewHeader({ title, subtitle, skillName });
-          setChatbotPreviewError("");
-        }
-      })
-      .catch((loadError: unknown) => {
-        if (active) setChatbotPreviewError(loadError instanceof Error ? loadError.message : "Gagal memuat preview Chatbot.");
       });
     return () => { active = false; };
   }, []);
@@ -243,13 +196,11 @@ export default function SettingsPage() {
         </div>
         {globalStylesApplyResult && <p role="status" className="text-[10px] text-emerald-400">{globalStylesApplyResult}</p>}
         {globalStylesError && <p role="alert" className="rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-[10px] text-red-200">{globalStylesError}</p>}
-        {chatbotPreviewError && <p role="alert" className="rounded-md border border-red-900/60 bg-red-950/30 px-3 py-2 text-[10px] text-red-200">{chatbotPreviewError}</p>}
         {globalStylesLoading
           ? <p className="py-6 text-center text-xs text-neutral-500">Memuat style global...</p>
           : <GlobalChatStyleEditor
               componentStyles={globalComponentStyles}
               previewWindow={engagementPreviewWindow}
-              chatbotPreviewHeader={chatbotPreviewHeader}
               onChange={(styles) => {
                 setGlobalComponentStyles(styles);
                 setGlobalStylesSaved(false);

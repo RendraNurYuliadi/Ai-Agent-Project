@@ -26,8 +26,6 @@ import { getImageProxyUrl } from "@/lib/image-proxy-url";
 import type { EngagementWindow } from "@/types/engagement";
 
 type HeaderPreviewWindow = Pick<EngagementWindow, "title" | "subtitle" | "headerIconUrl">;
-type ChatbotPreviewHeader = { title: string; subtitle: string; skillName: string };
-
 const previewComponents: ConversationMessageComponent[] = [
   {
     id: "global-style-reply-preview",
@@ -107,13 +105,7 @@ function getPreviewCss(componentStyles: Record<string, string>, componentId: str
     .join("\n");
 }
 
-function ChatbotHeaderPreview({
-  componentStyles,
-  previewHeader,
-}: {
-  componentStyles?: Record<string, string>;
-  previewHeader?: ChatbotPreviewHeader | null;
-}) {
+function ChatbotHeaderPreview({ componentStyles }: { componentStyles?: Record<string, string> }) {
   const css = componentStyles?.["chatbot-header"] || "";
   const iconUrl = readEngagementStyleProperty(css, ".chatbot-header-icon", "--chatbot-header-icon-url", "");
   return (
@@ -128,21 +120,21 @@ function ChatbotHeaderPreview({
             {iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={32} height={32} unoptimized className="h-full w-full object-cover" /> : <Bot className="h-4 w-4" />}
           </div>
           <div className="min-w-0">
-            <h2 className="chatbot-header-title truncate text-sm font-semibold">{previewHeader?.title || "GenAI Chatbot"}</h2>
+            <h2 className="chatbot-header-title truncate text-sm font-semibold">Bot name</h2>
             <p className="chatbot-header-subtitle flex items-center gap-1 truncate text-[10px]">
               <Cpu className="h-2.5 w-2.5 shrink-0" />
-              {previewHeader?.subtitle || "Pilih skill untuk memulai"}
+              Nama dan skill bot
             </p>
           </div>
         </div>
       </div>
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
         <select aria-label="Preview pilih skill" defaultValue="skill" className="h-9 max-w-24 truncate rounded-lg border border-neutral-800 bg-black px-1.5 text-[10px] text-neutral-300 sm:max-w-40 sm:px-2 sm:text-[11px]">
-          <option value="skill">{previewHeader?.skillName || "Pilih skill"}</option>
+          <option value="skill">Pilih skill</option>
         </select>
         <div className="hidden items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900/70 px-2.5 py-1.5 md:flex">
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[9px] font-bold text-black">RN</span>
-          <span className="text-[11px] font-medium text-neutral-300">Rendra Nur Yuliadi</span>
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white text-[9px] font-bold text-black">UN</span>
+          <span className="text-[11px] font-medium text-neutral-300">User name</span>
         </div>
         <button type="button" className="flex items-center gap-1.5 rounded-lg border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-xs text-neutral-300">
           <Plus className="h-3 w-3" /><span className="hidden sm:inline">Chat Baru</span>
@@ -222,23 +214,27 @@ function LauncherPreviewButton({ componentStyles }: { componentStyles: Record<st
 
 function PreviewConversationSamples({
   componentStyles,
-  botName,
 }: {
   componentStyles: Record<string, string>;
-  botName: string;
 }) {
   return (
     <div className="engagement-message-list flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
       <div className="engagement-author pl-1 text-[10px] text-neutral-500">
-        <span className="font-semibold text-white">{botName}</span>
+        <span className="font-semibold text-white">Bot name</span>
       </div>
-      <div className="engagement-bot-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed">
-        Halo! Ada yang bisa saya bantu? Saya dapat membantu menjawab pertanyaan atau menampilkan informasi yang relevan.
+      <div className="flex w-full min-w-0">
+        <div className="min-w-0 max-w-[85%]">
+          <div className="engagement-bot-bubble w-fit min-w-0 max-w-full break-words whitespace-pre-wrap rounded-2xl rounded-tl-sm border px-4 py-3 text-sm leading-relaxed [overflow-wrap:anywhere]">
+            Halo! Saya siap membantu. Jika pesannya panjang, teks akan turun ke baris berikutnya dan tetap berada di dalam batas lebar bubble.
+          </div>
+        </div>
       </div>
       <ComponentPreviewContent id="welcome-message" componentStyles={componentStyles} />
-      <div className="flex justify-end">
-        <div className="engagement-user-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tr-sm border px-4 py-3 text-sm">
-          Saya ingin bertanya tentang layanan.
+      <div className="flex w-full min-w-0 justify-end">
+        <div className="min-w-0 max-w-[85%]">
+          <div className="engagement-user-bubble w-fit min-w-0 max-w-full break-words whitespace-pre-wrap rounded-2xl rounded-tr-sm border px-4 py-3 text-sm leading-relaxed [overflow-wrap:anywhere]">
+            Saya ingin bertanya tentang layanan dan informasi yang tersedia untuk kebutuhan saya.
+          </div>
         </div>
       </div>
       {previewComponents.map((component) => (
@@ -260,12 +256,10 @@ function ComponentPreviewContent({
   id,
   componentStyles,
   previewWindow,
-  chatbotPreviewHeader,
 }: {
   id: string;
   componentStyles: Record<string, string>;
   previewWindow?: HeaderPreviewWindow | null;
-  chatbotPreviewHeader?: ChatbotPreviewHeader | null;
 }) {
   switch (id) {
     case "launcher":
@@ -273,13 +267,13 @@ function ComponentPreviewContent({
     case "header":
       return <EngagementHeaderPreview componentStyles={componentStyles} previewWindow={previewWindow} />;
     case "chatbot-header":
-      return <ChatbotHeaderPreview componentStyles={componentStyles} previewHeader={chatbotPreviewHeader} />;
+      return <ChatbotHeaderPreview componentStyles={componentStyles} />;
     case "window":
       return <div className="engagement-widget flex min-h-28 items-center justify-center border p-3 text-xs">Area window chat</div>;
     case "bot-bubble":
-      return <div className="engagement-bot-bubble w-fit max-w-full break-words rounded-2xl rounded-tl-sm border px-3 py-2 text-xs">Halo! Ada yang bisa kami bantu?</div>;
+      return <div className="flex w-full min-w-0"><div className="min-w-0 max-w-[85%]"><div className="engagement-bot-bubble w-fit min-w-0 max-w-full break-words whitespace-pre-wrap rounded-2xl rounded-tl-sm border px-3 py-2 text-xs leading-relaxed [overflow-wrap:anywhere]">Halo! Saya siap membantu. Pesan panjang akan turun ke baris berikutnya di dalam batas lebar bubble.</div></div></div>;
     case "user-bubble":
-      return <div className="flex justify-end"><div className="engagement-user-bubble w-fit max-w-[85%] break-words rounded-2xl rounded-tr-sm border px-3 py-2 text-xs">Saya ingin bertanya tentang layanan.</div></div>;
+      return <div className="flex w-full min-w-0 justify-end"><div className="min-w-0 max-w-[85%]"><div className="engagement-user-bubble w-fit min-w-0 max-w-full break-words whitespace-pre-wrap rounded-2xl rounded-tr-sm border px-3 py-2 text-xs leading-relaxed [overflow-wrap:anywhere]">Saya ingin bertanya tentang layanan dan informasi yang tersedia untuk kebutuhan saya.</div></div></div>;
     case "reply-buttons":
     case "link-buttons":
     case "card":
@@ -308,7 +302,24 @@ function ComponentPreviewContent({
       </article>;
     }
     case "scrollbar":
-      return <div className="engagement-message-list max-h-24 space-y-3 overflow-y-auto p-2 text-xs"><p>Halo, ada yang bisa dibantu?</p><p>Saya ingin bertanya tentang layanan.</p><p>Silakan pilih salah satu pilihan di bawah.</p></div>;
+      return (
+        <div
+          aria-label="Preview scrollbar percakapan"
+          className="engagement-message-list h-44 min-h-0 overflow-y-scroll p-3 text-xs"
+          style={{ scrollbarGutter: "stable" }}
+        >
+          <div className="space-y-3">
+            <p>Halo, ada yang bisa dibantu?</p>
+            <p>Saya ingin bertanya tentang layanan dan informasi yang tersedia.</p>
+            <p>Tentu, saya bisa membantu menjelaskan pilihan yang sesuai dengan kebutuhan Anda.</p>
+            <p>Apakah Anda ingin mengetahui detail layanan, harga, atau cara memulainya?</p>
+            <p>Saya ingin melihat informasi lebih lanjut tentang layanan yang tersedia.</p>
+            <p>Baik, berikut ringkasan informasi yang bisa membantu Anda memilih.</p>
+            <p>Anda juga bisa memilih salah satu opsi berikut untuk melanjutkan percakapan.</p>
+            <p>Silakan pilih topik yang ingin dibahas atau tulis pertanyaan lainnya.</p>
+          </div>
+        </div>
+      );
     case "input":
       return <EngagementComposerPreview />;
     case "chatbot-input":
@@ -328,12 +339,10 @@ function ComponentPreviewCard({
   id,
   componentStyles,
   previewWindow,
-  chatbotPreviewHeader,
 }: {
   id: string;
   componentStyles: Record<string, string>;
   previewWindow?: HeaderPreviewWindow | null;
-  chatbotPreviewHeader?: ChatbotPreviewHeader | null;
 }) {
   const component = ENGAGEMENT_COMPONENT_STYLES.find((style) => style.id === id);
   if (!component) return null;
@@ -352,7 +361,6 @@ function ComponentPreviewCard({
             id={id}
             componentStyles={componentStyles}
             previewWindow={previewWindow}
-            chatbotPreviewHeader={chatbotPreviewHeader}
           />
         </div>
       </div>
@@ -362,10 +370,8 @@ function ComponentPreviewCard({
 
 function FullChatbotWindowPreview({
   componentStyles,
-  previewHeader,
 }: {
   componentStyles: Record<string, string>;
-  previewHeader?: ChatbotPreviewHeader | null;
 }) {
   return (
     <article className="space-y-2">
@@ -375,8 +381,8 @@ function FullChatbotWindowPreview({
       </div>
       <div className="global-chatbot-full-preview engagement-widget flex h-[520px] min-w-0 flex-col overflow-hidden rounded-xl border border-neutral-800 bg-black text-white shadow-xl">
         <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-chatbot-full-preview") }} />
-        <ChatbotHeaderPreview componentStyles={componentStyles} previewHeader={previewHeader} />
-        <PreviewConversationSamples componentStyles={componentStyles} botName={previewHeader?.title || "GenAI Chatbot"} />
+        <ChatbotHeaderPreview componentStyles={componentStyles} />
+        <PreviewConversationSamples componentStyles={componentStyles} />
         <ChatbotComposerPreview />
       </div>
     </article>
@@ -405,7 +411,7 @@ function FullEngagementWindowPreview({
           <div className="global-engagement-full-preview engagement-widget flex h-[620px] min-w-0 flex-col overflow-hidden rounded-xl border bg-white text-neutral-900 shadow-xl">
             <style dangerouslySetInnerHTML={{ __html: scopeEngagementCss(Object.values(componentStyles).join("\n"), ".global-engagement-full-preview") }} />
             <EngagementHeaderPreview componentStyles={componentStyles} previewWindow={previewWindow} />
-            <PreviewConversationSamples componentStyles={componentStyles} botName={previewWindow?.title || "Vera"} />
+            <PreviewConversationSamples componentStyles={componentStyles} />
             <EngagementComposerPreview />
           </div>
         </div>
@@ -418,12 +424,10 @@ export default function GlobalChatStyleEditor({
   componentStyles,
   onChange,
   previewWindow,
-  chatbotPreviewHeader,
 }: {
   componentStyles: Record<string, string>;
   onChange: (styles: Record<string, string>) => void;
   previewWindow?: HeaderPreviewWindow | null;
-  chatbotPreviewHeader?: ChatbotPreviewHeader | null;
 }) {
   return (
     <div className="space-y-7">
@@ -435,7 +439,7 @@ export default function GlobalChatStyleEditor({
           </p>
         </div>
         <div className="space-y-5">
-          <FullChatbotWindowPreview componentStyles={componentStyles} previewHeader={chatbotPreviewHeader} />
+          <FullChatbotWindowPreview componentStyles={componentStyles} />
           <FullEngagementWindowPreview componentStyles={componentStyles} previewWindow={previewWindow} />
         </div>
       </section>
@@ -572,7 +576,6 @@ export default function GlobalChatStyleEditor({
                   id={id}
                   componentStyles={componentStyles}
                   previewWindow={previewWindow}
-                  chatbotPreviewHeader={chatbotPreviewHeader}
                 />
               </div>
             </details>
