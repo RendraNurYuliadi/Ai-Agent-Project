@@ -218,10 +218,12 @@ function BotInteractionCard({
   data,
   onReply,
   disabled,
+  componentStyles,
 }: {
   data: BotInteractionCardData;
   onReply: (value: string) => void;
   disabled: boolean;
+  componentStyles: Record<string, string>;
 }) {
   return <ConversationMessageBody message={{
     id: "welcome-preview",
@@ -229,7 +231,7 @@ function BotInteractionCard({
     content: "",
     timestamp: new Date().toISOString(),
     botInteraction: data,
-  }} isUser={false} onReply={onReply} disabled={disabled} />;
+  }} isUser={false} onReply={onReply} disabled={disabled} componentStyles={componentStyles} />;
 }
 
 export default function ChatbotPage() {
@@ -1019,6 +1021,7 @@ export default function ChatbotPage() {
                     title: renderWelcomeText(welcomeInteraction.config.title, userProfile),
                     subtitle: renderWelcomeText(welcomeInteraction.config.subtitle, userProfile),
                     icon: welcomeInteraction.config.icon,
+                    iconUrl: welcomeInteraction.config.iconUrl,
                     footerText: renderWelcomeText(welcomeInteraction.config.footerText, userProfile),
                     quickButtons: welcomeInteraction.config.quickButtons?.map((button) => ({
                       ...button,
@@ -1028,6 +1031,7 @@ export default function ChatbotPage() {
                   }}
                   onReply={(value) => void submitMessage(value)}
                   disabled={sending}
+                  componentStyles={globalComponentStyles}
                 />
               ) : (
                 <>
@@ -1111,6 +1115,7 @@ export default function ChatbotPage() {
                         isUser={isUser}
                         onReply={(value) => void submitMessage(value)}
                         disabled={sending}
+                        componentStyles={globalComponentStyles}
                         contentOverride={isEditing ? <form className="w-full min-w-48 space-y-2" onSubmit={(event) => {
                           event.preventDefault();
                           void submitMessage(editingText, { editUserMessageId: msg.id });

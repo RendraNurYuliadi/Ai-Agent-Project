@@ -204,15 +204,25 @@ function ComponentPreviewContent({ id, componentStyles }: { id: string; componen
     case "carousel":
       return <AssistantComponentView component={previewComponents.find((component) => component.type === (id === "reply-buttons" ? "reply_buttons" : id === "link-buttons" ? "link_buttons" : id)) || previewComponents[0]} onReply={() => {}} disabled={false} previewMode />;
     case "interaction":
-    case "welcome-message":
+    case "welcome-message": {
+      const welcome = id === "welcome-message";
+      const iconUrl = readEngagementStyleProperty(
+        componentStyles[id] || "",
+        welcome ? ".engagement-welcome-message" : ".engagement-interaction-card",
+        welcome ? "--engagement-welcome-icon-url" : "--engagement-interaction-icon-url",
+        ""
+      );
       return <article className={`engagement-component ${id === "welcome-message" ? "engagement-welcome-message" : "engagement-interaction-card"} w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3.5`}>
         <div className="mb-2 flex items-center gap-2">
-          <span className="engagement-welcome-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-md"><Bot className="h-4 w-4" /></span>
-          <h3 className={`${id === "welcome-message" ? "engagement-welcome-title" : "engagement-interaction-title"} font-semibold`}>{id === "welcome-message" ? "Selamat datang!" : "Pilih salah satu opsi"}</h3>
+          <span className={`${welcome ? "engagement-welcome-icon" : "engagement-interaction-icon"} flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md`}>
+            {iconUrl ? <Image src={getImageProxyUrl(iconUrl)} alt="" width={28} height={28} unoptimized className="h-full w-full object-cover" /> : <Bot className="h-4 w-4" />}
+          </span>
+          <h3 className={`${welcome ? "engagement-welcome-title" : "engagement-interaction-title"} font-semibold`}>{welcome ? "Selamat datang!" : "Pilih salah satu opsi"}</h3>
         </div>
-        <p className={`${id === "welcome-message" ? "engagement-welcome-subtitle" : "engagement-interaction-subtitle"} whitespace-pre-wrap leading-5`}>Silakan pilih topik yang ingin Anda tanyakan.</p>
+        <p className={`${welcome ? "engagement-welcome-subtitle" : "engagement-interaction-subtitle"} whitespace-pre-wrap leading-5`}>Silakan pilih topik yang ingin Anda tanyakan.</p>
         <div className="mt-3 flex flex-wrap gap-2"><button type="button" className="engagement-button engagement-reply-button rounded-lg border px-3 py-2 text-xs">Lanjutkan</button></div>
       </article>;
+    }
     case "scrollbar":
       return <div className="engagement-message-list max-h-24 space-y-3 overflow-y-auto p-2 text-xs"><p>Halo, ada yang bisa dibantu?</p><p>Saya ingin bertanya tentang layanan.</p><p>Silakan pilih salah satu pilihan di bawah.</p></div>;
     case "input":

@@ -415,6 +415,7 @@ export default function EngagementChatWidget({
               onReply={(value) => void sendMessage(value)}
               disabled={sending || conversationUnavailable || isWaitingForAgent}
               imageProxyToken={config.token}
+              componentStyles={componentStyles}
             />
           </div>
         ))}

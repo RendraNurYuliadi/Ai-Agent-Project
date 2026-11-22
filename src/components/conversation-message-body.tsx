@@ -4,6 +4,7 @@ import { type CSSProperties, useEffect, useState } from "react";
 import Image from "next/image";
 import { Bot, ChevronLeft, ChevronRight, CircleHelp, ExternalLink, MessageSquare, Sparkles } from "lucide-react";
 import { getImageProxyUrl } from "@/lib/image-proxy-url";
+import { readEngagementStyleProperty } from "@/lib/engagement-theme";
 import { FormattedMessage } from "@/components/formatted-message";
 import { ResponseMeta } from "@/components/response-meta";
 
@@ -154,14 +155,27 @@ function RotatingComponents({ components, onReply, disabled, imageProxyToken }: 
   return <div key={component.id} className="engagement-component chat-component-enter w-full min-w-0 pl-1"><AssistantComponentView component={component} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} /></div>;
 }
 
-function BotInteractionView({ data, onReply, disabled, imageProxyToken }: { data: NonNullable<ConversationMessageData["botInteraction"]>; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string }) {
+function BotInteractionView({ data, onReply, disabled, imageProxyToken, componentStyles }: { data: NonNullable<ConversationMessageData["botInteraction"]>; onReply?: (value: string) => void; disabled: boolean; imageProxyToken?: string; componentStyles?: Record<string, string> }) {
   const buttons = data.buttons || data.quickButtons || [];
   const Icon = data.icon === "bot" ? Bot : data.icon === "message" ? MessageSquare : data.icon === "help" ? CircleHelp : Sparkles;
   const iconLabel = data.icon === "custom" ? "Custom" : data.icon || "Sparkles";
   const isWelcomeMessage = data.type === "welcome_message";
+  const globalIconUrl = readEngagementStyleProperty(
+    componentStyles?.[isWelcomeMessage ? "welcome-message" : "interaction"] || "",
+    isWelcomeMessage ? ".engagement-welcome-message" : ".engagement-interaction-card",
+    isWelcomeMessage ? "--engagement-welcome-icon-url" : "--engagement-interaction-icon-url",
+    ""
+  );
+  const iconUrl = (data.icon === "custom" ? data.iconUrl : "") || globalIconUrl;
   return <article className={`engagement-component ${isWelcomeMessage ? "engagement-welcome-message" : "engagement-interaction-card"} w-full min-w-0 max-w-full overflow-hidden rounded-xl border p-3.5 sm:max-w-[360px]`}>
-    {isWelcomeMessage && data.title && <div className="mb-2 flex items-center gap-2"><span className="engagement-welcome-icon flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md">{data.icon === "custom" && data.iconUrl ? <Image src={getImageProxyUrl(data.iconUrl, imageProxyToken)} alt="" width={28} height={28} unoptimized className="h-7 w-7 object-cover" /> : <Icon className="h-4 w-4" />}</span><h3 className="engagement-welcome-title font-semibold">{data.title}</h3></div>}
-    {!isWelcomeMessage && data.title && <h3 className="engagement-interaction-title mb-2 font-semibold">{data.title}</h3>}
+    {data.title && <div className="mb-2 flex items-center gap-2">
+      <span className={`${isWelcomeMessage ? "engagement-welcome-icon" : "engagement-interaction-icon"} flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-md`}>
+        {iconUrl
+          ? <Image src={getImageProxyUrl(iconUrl, imageProxyToken)} alt="" width={28} height={28} unoptimized className="h-7 w-7 object-cover" />
+          : <Icon className="h-4 w-4" />}
+      </span>
+      <h3 className={`${isWelcomeMessage ? "engagement-welcome-title" : "engagement-interaction-title"} font-semibold`}>{data.title}</h3>
+    </div>}
     {data.subtitle && <p className={`${isWelcomeMessage ? "engagement-welcome-subtitle" : "engagement-interaction-subtitle"} whitespace-pre-wrap leading-5`}>{data.subtitle}</p>}
     {buttons.length > 0 && <div className="mt-3"><MessageButtons buttons={buttons} onReply={onReply} disabled={disabled} /></div>}
     {data.footerText && <p className="mt-3 border-t border-neutral-800 pt-2 text-[10px] text-neutral-600">{data.footerText}</p>}
@@ -176,6 +190,7 @@ export function ConversationMessageBody({
   disabled = false,
   contentOverride,
   imageProxyToken,
+  componentStyles,
 }: {
   message: ConversationMessageData;
   isUser: boolean;
@@ -183,6 +198,7 @@ export function ConversationMessageBody({
   disabled?: boolean;
   contentOverride?: React.ReactNode;
   imageProxyToken?: string;
+  componentStyles?: Record<string, string>;
 }) {
   const topArticles = message.topArticles || [];
   const uiComponents = message.uiComponents || [];
@@ -196,7 +212,7 @@ export function ConversationMessageBody({
     {(message.content || contentOverride) && <div className={`w-fit min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-2xl px-4 py-3 text-sm leading-relaxed ${isUser ? "engagement-user-bubble rounded-tr-sm bg-white font-medium text-black shadow-lg" : "engagement-bot-bubble rounded-tl-sm border border-neutral-800 bg-[#111111] text-neutral-300 shadow-md"}`}>
       {contentOverride || <FormattedMessage content={message.content} isUser={isUser} />}
     </div>}
-    {!isUser && message.botInteraction && <BotInteractionView data={message.botInteraction} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} />}
+    {!isUser && message.botInteraction && <BotInteractionView data={message.botInteraction} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} componentStyles={componentStyles} />}
     {!isUser && uiComponents.length > 0 && <RotatingComponents components={uiComponents} onReply={onReply} disabled={disabled} imageProxyToken={imageProxyToken} />}
     <ResponseMeta
       timestamp={message.timestamp}

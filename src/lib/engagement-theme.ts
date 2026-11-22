@@ -610,6 +610,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
     description: "Tampilan prompt interaksi dan pilihan bot selain welcome message.",
     className: "engagement-interaction-card",
     defaultCss: `.engagement-interaction-card {
+      --engagement-interaction-icon-url: "";
   width: 100%;
   max-width: 360px;
   min-height: 120px;
@@ -625,11 +626,16 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   color: #18181b;
   font-size: 14px;
 }
+.engagement-interaction-icon {
+  background: #f4f4f5;
+  color: #18181b;
+}
 .engagement-interaction-subtitle {
   color: #52525b;
   font-size: 12px;
 }`,
     parameters: [
+      text("URL icon custom", ".engagement-interaction-card", "--engagement-interaction-icon-url", ""),
       color("Warna judul", ".engagement-interaction-title", "color", "#18181b"),
       color("Warna subjudul", ".engagement-interaction-subtitle", "color", "#52525b"),
       color("Background", ".engagement-interaction-card", "background", "#ffffff"),
@@ -649,6 +655,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
     description: "Desain kartu sambutan, judul, ikon, subtitle, dan tombol welcome.",
     className: "engagement-welcome-message",
     defaultCss: `.engagement-welcome-message {
+      --engagement-welcome-icon-url: "";
   width: 100%;
   max-width: 360px;
   min-height: 120px;
@@ -679,6 +686,7 @@ export const ENGAGEMENT_COMPONENT_STYLES: EngagementComponentStyleDefinition[] =
   color: #18181b;
 }`,
     parameters: [
+      text("URL icon custom", ".engagement-welcome-message", "--engagement-welcome-icon-url", ""),
       color("Warna judul", ".engagement-welcome-message .engagement-welcome-title", "color", "#18181b"),
       color("Warna subjudul", ".engagement-welcome-message .engagement-welcome-subtitle", "color", "#52525b"),
       color("Warna teks tombol", ".engagement-welcome-message .engagement-button.engagement-reply-button", "color", "#18181b"),
